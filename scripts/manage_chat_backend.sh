@@ -177,7 +177,7 @@ case "${1:-}" in
 Usage: bash scripts/manage_chat_backend.sh {start|stop|restart|status|logs|preview}
 
 Commands:
-    start    启动 chat backend（默认 0.0.0.0:18200，供 phase 4 影子验证）
+        start    启动 chat backend（默认 0.0.0.0:8200）
   stop     停止 chat backend
   restart  重启 chat backend
   status   查看运行状态 + 健康检查

@@ -50,3 +50,18 @@ PostgreSQL DDL：
 
 1. 本仓已承接正式 `8200` 运行，旧 shadow `18200` 不再作为当前主路径说明。
 2. 旧仓路径目前仅保留兼容 symlink，正式运行应以 shared runtime 路径为准。
+
+当前新增能力：
+
+1. 新增 `GET /v1/me/account-overview`，用于统一查看用户余额、最近账本、usage 汇总、订单、订阅、会话与运行记录。
+2. 新增 `POST /internal/identity/exchange-webui-user`，供 Open WebUI / Pipelines 以内部服务身份交换用户上下文，不再依赖公开接口返回 raw key。
+3. 新增内置后台页面 `GET /admin/backoffice`，配套 `GET /admin/api/*` 与 `POST /admin/api/users/{user_id}/grant-points`。
+4. 支持 guest 日配额：通过 `CHAT_BACKEND_GUEST_DAILY_USERNAMES` 和 `CHAT_BACKEND_GUEST_DAILY_POINTS` 控制，默认对 `guest` 账号每日重置到 `500` 积分。
+
+建议新增环境变量：
+
+1. `CHAT_BACKEND_ADMIN_TOKEN`：后台 Bearer token，没有这个值时后台 API 不可用。
+2. `CHAT_BACKEND_GUEST_DAILY_USERNAMES`：按逗号分隔的 guest 账号别名，默认 `guest`。
+3. `CHAT_BACKEND_GUEST_DAILY_POINTS`：guest 每日积分上限，默认 `500`。
+4. `CHAT_BACKEND_DAILY_RESET_TIMEZONE`：日配额重置时区，默认 `Asia/Shanghai`。
+5. `CHAT_BACKEND_DISABLE_DEMO_FALLBACK`：设为 `true` 后，public API 不再接受 demo fallback 用户。

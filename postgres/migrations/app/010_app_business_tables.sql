@@ -185,3 +185,26 @@ CREATE TABLE IF NOT EXISTS app.usage_event (
     meta_json      JSONB NOT NULL DEFAULT '{}'::JSONB,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS app.daily_credit_quota_state (
+    user_id               TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    quota_date            DATE NOT NULL,
+    quota_points          INTEGER NOT NULL,
+    applied_delta_points  INTEGER NOT NULL,
+    consumed_points       INTEGER NOT NULL DEFAULT 0,
+    reset_reference_id    TEXT NOT NULL,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, quota_date)
+);
+
+CREATE TABLE IF NOT EXISTS app.admin_audit_log (
+    audit_id      TEXT PRIMARY KEY,
+    operator_id   TEXT NOT NULL,
+    action        TEXT NOT NULL,
+    target_type   TEXT NOT NULL,
+    target_id     TEXT,
+    request_json  JSONB NOT NULL DEFAULT '{}'::JSONB,
+    result_json   JSONB NOT NULL DEFAULT '{}'::JSONB,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

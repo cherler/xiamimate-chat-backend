@@ -198,6 +198,39 @@ CREATE TABLE IF NOT EXISTS app.usage_event (
     meta_json      JSONB NOT NULL DEFAULT '{}'::JSONB,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS app.daily_credit_quota_state (
+    user_id               TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    quota_date            DATE NOT NULL,
+    quota_points          INTEGER NOT NULL,
+    applied_delta_points  INTEGER NOT NULL,
+    consumed_points       INTEGER NOT NULL DEFAULT 0,
+    reset_reference_id    TEXT NOT NULL,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, quota_date)
+);
+
+CREATE TABLE IF NOT EXISTS app.billing_event_pricing (
+    event_type     TEXT PRIMARY KEY,
+    display_name   TEXT NOT NULL,
+    points_per_unit INTEGER NOT NULL DEFAULT 1,
+    status         TEXT NOT NULL DEFAULT 'active',
+    display_order  INTEGER NOT NULL DEFAULT 0,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.admin_audit_log (
+    audit_id      TEXT PRIMARY KEY,
+    operator_id   TEXT NOT NULL,
+    action        TEXT NOT NULL,
+    target_type   TEXT NOT NULL,
+    target_id     TEXT,
+    request_json  JSONB NOT NULL DEFAULT '{}'::JSONB,
+    result_json   JSONB NOT NULL DEFAULT '{}'::JSONB,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 -- <<< END migrations/app/010_app_business_tables.sql
 
 -- >>> BEGIN migrations/app/020_app_indexes.sql
@@ -219,6 +252,10 @@ CREATE INDEX IF NOT EXISTS idx_analysis_artifact_run ON app.analysis_artifact(ru
 CREATE INDEX IF NOT EXISTS idx_usage_event_user_created ON app.usage_event(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_created ON app.credit_ledger_entry(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_reference ON app.credit_ledger_entry(user_id, entry_type, reference_id);
+CREATE INDEX IF NOT EXISTS idx_daily_credit_quota_state_quota_date ON app.daily_credit_quota_state(quota_date DESC, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_billing_event_pricing_status ON app.billing_event_pricing(status, display_order ASC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_operator_created ON app.admin_audit_log(operator_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_target_created ON app.admin_audit_log(target_type, target_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_idempotency_request_created ON app.idempotency_request(created_at DESC);
 -- <<< END migrations/app/020_app_indexes.sql
 
