@@ -7,8 +7,10 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
+import smtplib
 import string
 from datetime import date, datetime, timezone
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -20,6 +22,9 @@ from data_platform.llm_client import ROOT_ENV_FILE, load_env_file_if_present
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 INIT_APP_TABLES_SQL = PROJECT_ROOT / "postgres" / "init_app_tables.sql"
+
+# Load .env before reading any env-backed settings constants.
+load_env_file_if_present(ROOT_ENV_FILE)
 
 # ---------------------------------------------------------------------------
 # API response schema
@@ -37,6 +42,7 @@ INTERNAL_SERVICE_SECRET_HEADER_NAME = "X-Internal-Service-Secret"
 INTERNAL_SERVICE_NAME_HEADER_NAME = "X-Internal-Service-Name"
 IDEMPOTENCY_KEY_HEADER_NAME = "Idempotency-Key"
 ADMIN_OPERATOR_HEADER_NAME = "X-Admin-Operator"
+TRUSTED_ADMIN_SESSION_HEADER_NAME = "X-OpenWebUI-Admin-Verified"
 
 # ---------------------------------------------------------------------------
 # Defaults from env
@@ -45,12 +51,13 @@ DEFAULT_USER_ID = os.environ.get("CHAT_BACKEND_DEFAULT_USER_ID", "demo-user")
 DEFAULT_USER_EMAIL = os.environ.get("CHAT_BACKEND_DEFAULT_USER_EMAIL", "demo-user@local")
 DEFAULT_USER_NAME = os.environ.get("CHAT_BACKEND_DEFAULT_USER_NAME", "Demo User")
 DEFAULT_PLAN_TIER = os.environ.get("CHAT_BACKEND_DEFAULT_PLAN_TIER", "free")
-SIGNUP_GIFT_POINTS = max(0, int(os.environ.get("CHAT_BACKEND_SIGNUP_GIFT_POINTS", "50")))
+SIGNUP_GIFT_POINTS = max(0, int(os.environ.get("CHAT_BACKEND_SIGNUP_GIFT_POINTS", "500")))
 USER_API_KEY_PREFIX = os.environ.get("CHAT_BACKEND_USER_API_KEY_PREFIX", "xia_user_")
 USER_API_KEY_LENGTH = max(24, int(os.environ.get("CHAT_BACKEND_USER_API_KEY_LENGTH", "40")))
 DEFAULT_PAYMENT_PROVIDER = os.environ.get("CHAT_BACKEND_PAYMENT_PROVIDER", "manual").strip() or "manual"
 INTERNAL_SERVICE_SECRET = os.environ.get("CHAT_BACKEND_SERVICE_SECRET", "").strip()
 ADMIN_BACKOFFICE_TOKEN = os.environ.get("CHAT_BACKEND_ADMIN_TOKEN", "").strip()
+TRUSTED_ADMIN_SERVICE_NAME = os.environ.get("CHAT_BACKEND_TRUSTED_ADMIN_SERVICE_NAME", "openwebui-bridge-admin").strip() or "openwebui-bridge-admin"
 INTERNAL_RATE_LIMIT_MAX_REQUESTS = max(1, int(os.environ.get("CHAT_BACKEND_INTERNAL_RATE_LIMIT_MAX_REQUESTS", "300")))
 INTERNAL_RATE_LIMIT_WINDOW_SECONDS = max(1, int(os.environ.get("CHAT_BACKEND_INTERNAL_RATE_LIMIT_WINDOW_SECONDS", "60")))
 AGENT_OPENAI_TIMEOUT = max(1, int(os.environ.get("AGENT_OPENAI_TIMEOUT", os.environ.get("DIFY_REQUEST_TIMEOUT", "180"))))
@@ -67,11 +74,22 @@ GUEST_DAILY_USER_ALIASES = tuple(
     if alias.strip()
 )
 DAILY_RESET_TIMEZONE = os.environ.get("CHAT_BACKEND_DAILY_RESET_TIMEZONE", "Asia/Shanghai").strip() or "Asia/Shanghai"
+SMTP_HOST = os.environ.get("CHAT_BACKEND_SMTP_HOST", "").strip()
+SMTP_PORT = max(1, int(os.environ.get("CHAT_BACKEND_SMTP_PORT", "465")))
+SMTP_USERNAME = os.environ.get("CHAT_BACKEND_SMTP_USERNAME", "").strip()
+SMTP_PASSWORD = os.environ.get("CHAT_BACKEND_SMTP_PASSWORD", "").strip()
+SMTP_FROM_EMAIL = os.environ.get("CHAT_BACKEND_SMTP_FROM_EMAIL", SMTP_USERNAME).strip()
+SMTP_FROM_NAME = os.environ.get("CHAT_BACKEND_SMTP_FROM_NAME", "虾密小助手").strip() or "虾密小助手"
+SMTP_USE_SSL = os.environ.get("CHAT_BACKEND_SMTP_USE_SSL", "true").strip().lower() not in {"0", "false", "no", "off"}
+EMAIL_VERIFICATION_CODE_TTL_SECONDS = max(60, int(os.environ.get("CHAT_BACKEND_EMAIL_VERIFICATION_CODE_TTL", "600")))
+EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS = max(30, int(os.environ.get("CHAT_BACKEND_EMAIL_VERIFICATION_RESEND_INTERVAL", "60")))
+REFERRAL_INVITER_REWARD_POINTS = max(0, int(os.environ.get("CHAT_BACKEND_REFERRAL_INVITER_REWARD_POINTS", "500")))
+PORTAL_REQUIRE_EMAIL_VERIFICATION = os.environ.get("CHAT_BACKEND_PORTAL_REQUIRE_EMAIL_VERIFICATION", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 # ---------------------------------------------------------------------------
 # Pricing
 # ---------------------------------------------------------------------------
-POINTS_PRICE_VERSION = "v2_db_pricing"
+POINTS_PRICE_VERSION = "v3_zone_pricing_promotions"
 
 DEFAULT_EVENT_PRICING: list[dict[str, Any]] = [
     {"event_type": "llm_request",      "display_name": "LLM请求",      "points_per_unit": 1, "display_order": 10},
@@ -86,6 +104,17 @@ DEFAULT_EVENT_PRICING: list[dict[str, Any]] = [
 # ---------------------------------------------------------------------------
 PORTAL_TOKEN_TTL_SECONDS = int(os.environ.get("CHAT_BACKEND_PORTAL_TOKEN_TTL", "1800"))
 PORTAL_BASE_URL = os.environ.get("CHAT_BACKEND_PORTAL_BASE_URL", "").strip()
+PORTAL_USER_ID_HEADER_NAME = "X-Portal-User-Id"
+PORTAL_USER_EMAIL_HEADER_NAME = "X-Portal-User-Email"
+PORTAL_USER_NAME_HEADER_NAME = "X-Portal-User-Name"
+_portal_mock_payment_env = os.environ.get("CHAT_BACKEND_PORTAL_MOCK_PAYMENT_ENABLED", "").strip().lower()
+if _portal_mock_payment_env in {"1", "true", "yes", "on"}:
+    PORTAL_MOCK_PAYMENT_ENABLED = True
+elif _portal_mock_payment_env in {"0", "false", "no", "off"}:
+    PORTAL_MOCK_PAYMENT_ENABLED = False
+else:
+    _portal_base_url_lower = PORTAL_BASE_URL.lower()
+    PORTAL_MOCK_PAYMENT_ENABLED = "127.0.0.1" in _portal_base_url_lower or "localhost" in _portal_base_url_lower
 
 # ---------------------------------------------------------------------------
 # Billing bundles & packages
@@ -108,44 +137,295 @@ THEME_API_OPERATION_PATHS: dict[str, str] = {
 
 DEFAULT_BILLING_PACKAGES: list[dict[str, Any]] = [
     {
-        "package_code": "credit_pack_s",
-        "package_name": "Points Pack S",
-        "product_type": "credit_pack",
-        "price_cents": 2900,
-        "points_amount": 300,
-        "period_days": 0,
+        "package_code": "monthly_standard",
+        "package_name": "Standard 标准版",
+        "product_type": "monthly_subscription",
+        "price_cents": 3900,
+        "points_amount": 5000,
+        "period_days": 30,
         "display_order": 10,
-        "meta_json": {"display_price": "29 RMB", "display_points": "300 points"},
+        "meta_json": {
+            "zone_code": "monthly_zone",
+            "tier_key": "standard",
+            "display_price": "39 RMB / month",
+            "display_points": "5000 points / month",
+            "display_name": "Standard 标准版",
+            "display_tagline": "适合轻量稳定使用",
+            "renewal_price_cents": 3900,
+            "renewal_price_label": "39元/月",
+            "seed_catalog": "2026-04-launch",
+        },
     },
     {
-        "package_code": "credit_pack_m",
-        "package_name": "Points Pack M",
-        "product_type": "credit_pack",
-        "price_cents": 7900,
-        "points_amount": 900,
-        "period_days": 0,
-        "display_order": 20,
-        "meta_json": {"display_price": "79 RMB", "display_points": "900 points"},
-    },
-    {
-        "package_code": "credit_pack_l",
-        "package_name": "Points Pack L",
-        "product_type": "credit_pack",
-        "price_cents": 19900,
-        "points_amount": 2500,
-        "period_days": 0,
-        "display_order": 30,
-        "meta_json": {"display_price": "199 RMB", "display_points": "2500 points"},
-    },
-    {
-        "package_code": "monthly_basic",
-        "package_name": "Monthly Basic",
+        "package_code": "monthly_pro",
+        "package_name": "Pro 专业版",
         "product_type": "monthly_subscription",
         "price_cents": 9900,
-        "points_amount": 1200,
+        "points_amount": 16000,
         "period_days": 30,
-        "display_order": 40,
-        "meta_json": {"display_price": "99 RMB / month", "display_points": "1200 points / month"},
+        "display_order": 20,
+        "meta_json": {
+            "zone_code": "monthly_zone",
+            "tier_key": "pro",
+            "display_price": "99 RMB / month",
+            "display_points": "16000 points / month",
+            "display_name": "Pro 专业版",
+            "display_tagline": "适合高频日常使用",
+            "renewal_price_cents": 9900,
+            "renewal_price_label": "99元/月",
+            "seed_catalog": "2026-04-launch",
+        },
+    },
+    {
+        "package_code": "monthly_ultra",
+        "package_name": "Ultra 旗舰版",
+        "product_type": "monthly_subscription",
+        "price_cents": 29900,
+        "points_amount": 60000,
+        "period_days": 30,
+        "display_order": 30,
+        "meta_json": {
+            "zone_code": "monthly_zone",
+            "tier_key": "ultra",
+            "display_price": "299 RMB / month",
+            "display_points": "60000 points / month",
+            "display_name": "Ultra 旗舰版",
+            "display_tagline": "适合团队与重度使用",
+            "renewal_price_cents": 29900,
+            "renewal_price_label": "299元/月",
+            "seed_catalog": "2026-04-launch",
+        },
+    },
+    {
+        "package_code": "recharge_1000",
+        "package_name": "充值包 1000",
+        "product_type": "credit_pack",
+        "price_cents": 1000,
+        "points_amount": 1000,
+        "period_days": 0,
+        "display_order": 110,
+        "meta_json": {
+            "zone_code": "recharge_zone",
+            "display_price": "10 RMB",
+            "display_points": "1000 points",
+            "display_name": "充值包 1000",
+            "display_tagline": "100 积分 = 1 元",
+            "seed_catalog": "2026-04-launch",
+        },
+    },
+    {
+        "package_code": "recharge_3000",
+        "package_name": "充值包 3000",
+        "product_type": "credit_pack",
+        "price_cents": 3000,
+        "points_amount": 3000,
+        "period_days": 0,
+        "display_order": 120,
+        "meta_json": {
+            "zone_code": "recharge_zone",
+            "display_price": "30 RMB",
+            "display_points": "3000 points",
+            "display_name": "充值包 3000",
+            "display_tagline": "100 积分 = 1 元",
+            "seed_catalog": "2026-04-launch",
+        },
+    },
+    {
+        "package_code": "recharge_10000",
+        "package_name": "充值包 10000",
+        "product_type": "credit_pack",
+        "price_cents": 10000,
+        "points_amount": 10000,
+        "period_days": 0,
+        "display_order": 130,
+        "meta_json": {
+            "zone_code": "recharge_zone",
+            "display_price": "100 RMB",
+            "display_points": "10000 points",
+            "display_name": "充值包 10000",
+            "display_tagline": "100 积分 = 1 元",
+            "seed_catalog": "2026-04-launch",
+        },
+    },
+    {
+        "package_code": "recharge_50000",
+        "package_name": "充值包 50000",
+        "product_type": "credit_pack",
+        "price_cents": 50000,
+        "points_amount": 50000,
+        "period_days": 0,
+        "display_order": 140,
+        "meta_json": {
+            "zone_code": "recharge_zone",
+            "display_price": "500 RMB",
+            "display_points": "50000 points",
+            "display_name": "充值包 50000",
+            "display_tagline": "100 积分 = 1 元",
+            "seed_catalog": "2026-04-launch",
+        },
+    },
+]
+
+DEFAULT_PROMOTION_RULES: list[dict[str, Any]] = [
+    {
+        "rule_code": "signup_bonus_500",
+        "rule_name": "新用户邮箱验证成功赠送 500 积分",
+        "rule_type": "signup_reward",
+        "target_product_type": None,
+        "target_package_codes": [],
+        "benefit_type": "points_bonus",
+        "benefit_value": 500,
+        "criteria_json": {"claim_once_per_user": True},
+        "meta_json": {
+            "zone_code": "newcomer_zone",
+            "display_text": "邮箱验证成功后赠送 500 积分",
+            "seed_catalog": "2026-04-launch",
+        },
+        "display_order": 10,
+    },
+    {
+        "rule_code": "referral_inviter_bonus_500",
+        "rule_name": "邀请新用户注册成功赠送 500 积分",
+        "rule_type": "referral_inviter_reward",
+        "target_product_type": None,
+        "target_package_codes": [],
+        "benefit_type": "points_bonus",
+        "benefit_value": REFERRAL_INVITER_REWARD_POINTS,
+        "criteria_json": {"claim_once_per_invited_user": True},
+        "meta_json": {
+            "zone_code": "newcomer_zone",
+            "display_text": "被邀请新用户完成邮箱验证后，邀请人赠送 500 积分",
+            "seed_catalog": "2026-04-launch",
+        },
+        "display_order": 15,
+    },
+    {
+        "rule_code": "first_subscription_monthly_90_off",
+        "rule_name": "首次订阅月包首月 1 折",
+        "rule_type": "first_subscription_discount",
+        "target_product_type": "monthly_subscription",
+        "target_package_codes": ["monthly_standard", "monthly_pro", "monthly_ultra"],
+        "benefit_type": "discount_basis_points",
+        "benefit_value": 9000,
+        "criteria_json": {"claim_once_per_user": True},
+        "meta_json": {
+            "zone_code": "newcomer_zone",
+            "display_text": "首次订阅月包，首月享 1 折优惠",
+            "seed_catalog": "2026-04-launch",
+        },
+        "display_order": 20,
+    },
+    {
+        "rule_code": "recharge_single_bonus_1000",
+        "rule_name": "充值包 1000 单笔赠送",
+        "rule_type": "recharge_bonus_single",
+        "target_product_type": "credit_pack",
+        "target_package_codes": ["recharge_1000"],
+        "benefit_type": "points_bonus",
+        "benefit_value": 100,
+        "criteria_json": {},
+        "meta_json": {
+            "zone_code": "recharge_zone",
+            "display_text": "充 10 元送 100 积分",
+            "seed_catalog": "2026-04-launch",
+        },
+        "display_order": 110,
+    },
+    {
+        "rule_code": "recharge_single_bonus_3000",
+        "rule_name": "充值包 3000 单笔赠送",
+        "rule_type": "recharge_bonus_single",
+        "target_product_type": "credit_pack",
+        "target_package_codes": ["recharge_3000"],
+        "benefit_type": "points_bonus",
+        "benefit_value": 600,
+        "criteria_json": {},
+        "meta_json": {
+            "zone_code": "recharge_zone",
+            "display_text": "充 30 元送 600 积分",
+            "seed_catalog": "2026-04-launch",
+        },
+        "display_order": 120,
+    },
+    {
+        "rule_code": "recharge_single_bonus_10000",
+        "rule_name": "充值包 10000 单笔赠送",
+        "rule_type": "recharge_bonus_single",
+        "target_product_type": "credit_pack",
+        "target_package_codes": ["recharge_10000"],
+        "benefit_type": "points_bonus",
+        "benefit_value": 3000,
+        "criteria_json": {},
+        "meta_json": {
+            "zone_code": "recharge_zone",
+            "display_text": "充 100 元送 3000 积分",
+            "seed_catalog": "2026-04-launch",
+        },
+        "display_order": 130,
+    },
+    {
+        "rule_code": "recharge_single_bonus_50000",
+        "rule_name": "充值包 50000 单笔赠送",
+        "rule_type": "recharge_bonus_single",
+        "target_product_type": "credit_pack",
+        "target_package_codes": ["recharge_50000"],
+        "benefit_type": "points_bonus",
+        "benefit_value": 20000,
+        "criteria_json": {},
+        "meta_json": {
+            "zone_code": "recharge_zone",
+            "display_text": "充 500 元送 20000 积分",
+            "seed_catalog": "2026-04-launch",
+        },
+        "display_order": 140,
+    },
+    {
+        "rule_code": "recharge_cumulative_bonus_100",
+        "rule_name": "累计充值满 100 元赠送",
+        "rule_type": "recharge_bonus_cumulative",
+        "target_product_type": "credit_pack",
+        "target_package_codes": [],
+        "benefit_type": "points_bonus",
+        "benefit_value": 1000,
+        "criteria_json": {"threshold_paid_amount_cents": 10000},
+        "meta_json": {
+            "zone_code": "recharge_zone",
+            "display_text": "累计充值满 100 元，额外送 1000 积分",
+            "seed_catalog": "2026-04-launch",
+        },
+        "display_order": 210,
+    },
+    {
+        "rule_code": "recharge_cumulative_bonus_500",
+        "rule_name": "累计充值满 500 元赠送",
+        "rule_type": "recharge_bonus_cumulative",
+        "target_product_type": "credit_pack",
+        "target_package_codes": [],
+        "benefit_type": "points_bonus",
+        "benefit_value": 8000,
+        "criteria_json": {"threshold_paid_amount_cents": 50000},
+        "meta_json": {
+            "zone_code": "recharge_zone",
+            "display_text": "累计充值满 500 元，额外送 8000 积分",
+            "seed_catalog": "2026-04-launch",
+        },
+        "display_order": 220,
+    },
+    {
+        "rule_code": "recharge_cumulative_bonus_1000",
+        "rule_name": "累计充值满 1000 元赠送",
+        "rule_type": "recharge_bonus_cumulative",
+        "target_product_type": "credit_pack",
+        "target_package_codes": [],
+        "benefit_type": "points_bonus",
+        "benefit_value": 20000,
+        "criteria_json": {"threshold_paid_amount_cents": 100000},
+        "meta_json": {
+            "zone_code": "recharge_zone",
+            "display_text": "累计充值满 1000 元，额外送 20000 积分",
+            "seed_catalog": "2026-04-launch",
+        },
+        "display_order": 230,
     },
 ]
 
@@ -157,6 +437,7 @@ PLAN_LIMITS: dict[str, dict[str, Any]] = {
     "guest": {"daily_theme_runs": 20, "history_retention_days": 7, "daily_points": GUEST_DAILY_POINTS},
     "standard": {"daily_theme_runs": 100, "history_retention_days": 30},
     "pro": {"daily_theme_runs": 1000, "history_retention_days": 365},
+    "ultra": {"daily_theme_runs": 5000, "history_retention_days": 3650},
     "admin": {"daily_theme_runs": None, "history_retention_days": None},
 }
 
@@ -167,12 +448,6 @@ TERMINAL_RUN_STATUSES = {"completed", "failed", "canceled"}
 ALLOWED_RUN_STATUSES = {"queued", "running", "completed", "failed", "canceled"}
 ALLOWED_SESSION_STATUSES = {"active", "closed", "archived"}
 ALLOWED_MESSAGE_ROLES = {"user", "assistant", "system"}
-
-# ---------------------------------------------------------------------------
-# Load .env
-# ---------------------------------------------------------------------------
-load_env_file_if_present(ROOT_ENV_FILE)
-
 
 # ---------------------------------------------------------------------------
 # Pure utility functions
@@ -190,6 +465,16 @@ def _generate_id(prefix: str) -> str:
     return f"{prefix}_{secrets.token_hex(8)}"
 
 
+def _generate_invite_code(length: int = 8) -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(max(6, length)))
+
+
+def _generate_numeric_code(length: int = 6) -> str:
+    alphabet = string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(max(4, length)))
+
+
 def _build_api_key(prefix: str = USER_API_KEY_PREFIX, length: int = USER_API_KEY_LENGTH) -> str:
     alphabet = string.ascii_letters + string.digits
     token = "".join(secrets.choice(alphabet) for _ in range(length))
@@ -198,6 +483,42 @@ def _build_api_key(prefix: str = USER_API_KEY_PREFIX, length: int = USER_API_KEY
 
 def _hash_api_key(api_key: str) -> str:
     return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+
+def _hash_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _smtp_configured() -> bool:
+    return bool(SMTP_HOST and SMTP_FROM_EMAIL)
+
+
+def _portal_email_verification_gate_enabled() -> bool:
+    return PORTAL_REQUIRE_EMAIL_VERIFICATION and _smtp_configured()
+
+
+def _send_email_message(to_email: str, subject: str, text_body: str) -> None:
+    if not _smtp_configured():
+        raise RuntimeError("CHAT_BACKEND_SMTP_HOST / CHAT_BACKEND_SMTP_FROM_EMAIL 未配置，无法发送邮箱验证码")
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+    message["To"] = to_email
+    message.set_content(text_body)
+
+    if SMTP_USE_SSL:
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
+            if SMTP_USERNAME:
+                smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
+            smtp.send_message(message)
+        return
+
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:
+        smtp.starttls()
+        if SMTP_USERNAME:
+            smtp.login(SMTP_USERNAME, SMTP_PASSWORD)
+        smtp.send_message(message)
 
 
 def _email_local_part(email: str) -> str:

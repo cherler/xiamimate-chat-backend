@@ -1,13 +1,23 @@
 -- app.* indexes owned by chat-backend.
 
 CREATE INDEX IF NOT EXISTS idx_app_user_plan_tier ON app.app_user(plan_tier);
+CREATE INDEX IF NOT EXISTS idx_app_user_email_verified ON app.app_user(email_verified_at DESC);
+CREATE INDEX IF NOT EXISTS idx_app_user_invite_code ON app.app_user(invite_code);
 CREATE INDEX IF NOT EXISTS idx_user_api_key_status ON app.user_api_key(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_account_balance ON app.user_credit_account(balance_points DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_package_status_order ON app.billing_package(status, display_order ASC, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_promotion_rule_status_order ON app.promotion_rule(status, display_order ASC, start_at ASC, end_at ASC);
 CREATE INDEX IF NOT EXISTS idx_payment_order_user_created ON app.payment_order(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payment_order_status_created ON app.payment_order(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_order_user_product_status ON app.payment_order(user_id, product_type, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_subscription_user_status ON app.billing_subscription(user_id, status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_subscription_grant_subscription_created ON app.subscription_grant(subscription_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_promotion_claim_user_created ON app.promotion_claim(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_promotion_claim_order_created ON app.promotion_claim(order_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_verification_challenge_user_created ON app.email_verification_challenge(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_verification_challenge_email_created ON app.email_verification_challenge(email, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_referral_binding_inviter_created ON app.user_referral_binding(inviter_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_referral_binding_status_updated ON app.user_referral_binding(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_session_user_updated ON app.chat_session(user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_message_session_created ON app.chat_message(session_id, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_analysis_run_session_started ON app.analysis_run(session_id, started_at DESC);
@@ -17,6 +27,7 @@ CREATE INDEX IF NOT EXISTS idx_usage_event_user_created ON app.usage_event(user_
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_created ON app.credit_ledger_entry(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_reference ON app.credit_ledger_entry(user_id, entry_type, reference_id);
 CREATE INDEX IF NOT EXISTS idx_daily_credit_quota_state_quota_date ON app.daily_credit_quota_state(quota_date DESC, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_billing_event_pricing_status ON app.billing_event_pricing(status, display_order ASC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_operator_created ON app.admin_audit_log(operator_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_target_created ON app.admin_audit_log(target_type, target_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_idempotency_request_created ON app.idempotency_request(created_at DESC);

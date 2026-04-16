@@ -16,6 +16,7 @@ from data_platform.chat_backend.domains.billing.service import (
     _get_event_pricing,
     _seed_billing_event_pricing,
     _seed_billing_packages,
+    _seed_promotion_rules,
 )
 
 # Routers
@@ -32,6 +33,7 @@ def initialize_chat_backend() -> None:
     with _postgres_conn() as conn:
         _ensure_app_schema(conn)
         _seed_billing_packages(conn)
+        _seed_promotion_rules(conn)
         _seed_billing_event_pricing(conn)
         _get_event_pricing(conn)
 

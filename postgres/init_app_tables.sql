@@ -19,9 +19,26 @@ CREATE TABLE IF NOT EXISTS app.app_user (
     display_name  TEXT NOT NULL,
     status        TEXT NOT NULL DEFAULT 'active',
     plan_tier     TEXT NOT NULL DEFAULT 'free',
+    invite_code   TEXT UNIQUE,
+    email_verified_at TIMESTAMPTZ,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS invite_code TEXT;
+ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'app_user_invite_code_key'
+    ) THEN
+        ALTER TABLE app.app_user
+        ADD CONSTRAINT app_user_invite_code_key UNIQUE (invite_code);
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS app.user_api_key (
     user_id        TEXT PRIMARY KEY REFERENCES app.app_user(user_id) ON DELETE CASCADE,
@@ -61,6 +78,24 @@ CREATE TABLE IF NOT EXISTS app.billing_package (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS app.promotion_rule (
+    rule_code             TEXT PRIMARY KEY,
+    rule_name             TEXT NOT NULL,
+    rule_type             TEXT NOT NULL,
+    status                TEXT NOT NULL DEFAULT 'active',
+    target_product_type   TEXT,
+    target_package_codes  JSONB NOT NULL DEFAULT '[]'::JSONB,
+    benefit_type          TEXT NOT NULL,
+    benefit_value         INTEGER NOT NULL DEFAULT 0,
+    criteria_json         JSONB NOT NULL DEFAULT '{}'::JSONB,
+    meta_json             JSONB NOT NULL DEFAULT '{}'::JSONB,
+    display_order         INTEGER NOT NULL DEFAULT 0,
+    start_at              TIMESTAMPTZ,
+    end_at                TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS app.credit_ledger_entry (
     entry_id             TEXT PRIMARY KEY,
     user_id              TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
@@ -82,11 +117,14 @@ CREATE TABLE IF NOT EXISTS app.payment_order (
     package_code            TEXT NOT NULL REFERENCES app.billing_package(package_code),
     product_type            TEXT NOT NULL,
     provider                TEXT NOT NULL,
+    list_amount_cents       INTEGER,
+    discount_amount_cents   INTEGER,
     amount_cents            INTEGER NOT NULL,
     points_amount           INTEGER NOT NULL,
     status                  TEXT NOT NULL,
     provider_order_id       TEXT,
     provider_trade_no       TEXT,
+    promotion_snapshot_json JSONB NOT NULL DEFAULT '{}'::JSONB,
     callback_payload_json   JSONB NOT NULL DEFAULT '{}'::JSONB,
     paid_at                 TIMESTAMPTZ,
     created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -94,6 +132,18 @@ CREATE TABLE IF NOT EXISTS app.payment_order (
     UNIQUE (provider, provider_order_id),
     UNIQUE (provider, provider_trade_no)
 );
+
+ALTER TABLE app.payment_order ADD COLUMN IF NOT EXISTS list_amount_cents INTEGER;
+ALTER TABLE app.payment_order ADD COLUMN IF NOT EXISTS discount_amount_cents INTEGER;
+ALTER TABLE app.payment_order ADD COLUMN IF NOT EXISTS promotion_snapshot_json JSONB NOT NULL DEFAULT '{}'::JSONB;
+
+UPDATE app.payment_order
+SET list_amount_cents = COALESCE(list_amount_cents, amount_cents),
+    discount_amount_cents = COALESCE(discount_amount_cents, 0),
+    promotion_snapshot_json = COALESCE(promotion_snapshot_json, '{}'::JSONB)
+WHERE list_amount_cents IS NULL
+   OR discount_amount_cents IS NULL
+   OR promotion_snapshot_json IS NULL;
 
 CREATE TABLE IF NOT EXISTS app.billing_subscription (
     subscription_id           TEXT PRIMARY KEY,
@@ -126,6 +176,45 @@ CREATE TABLE IF NOT EXISTS app.subscription_grant (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (subscription_id, period_start, period_end),
     UNIQUE (reference_id)
+);
+
+CREATE TABLE IF NOT EXISTS app.promotion_claim (
+    claim_id                TEXT PRIMARY KEY,
+    rule_code               TEXT NOT NULL REFERENCES app.promotion_rule(rule_code) ON DELETE CASCADE,
+    user_id                 TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    order_id                TEXT REFERENCES app.payment_order(order_id) ON DELETE SET NULL,
+    claim_key               TEXT NOT NULL,
+    status                  TEXT NOT NULL DEFAULT 'applied',
+    benefit_snapshot_json   JSONB NOT NULL DEFAULT '{}'::JSONB,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (rule_code, claim_key)
+);
+
+CREATE TABLE IF NOT EXISTS app.email_verification_challenge (
+    challenge_id      TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    email             TEXT NOT NULL,
+    purpose           TEXT NOT NULL DEFAULT 'signup_email_verify',
+    code_hash         TEXT NOT NULL,
+    expires_at        TIMESTAMPTZ NOT NULL,
+    consumed_at       TIMESTAMPTZ,
+    last_sent_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.user_referral_binding (
+    binding_id          TEXT PRIMARY KEY,
+    inviter_user_id     TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    invited_user_id     TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    invite_code         TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'bound',
+    activated_at        TIMESTAMPTZ,
+    rewarded_at         TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (invited_user_id)
 );
 
 CREATE TABLE IF NOT EXISTS app.idempotency_request (
@@ -212,13 +301,13 @@ CREATE TABLE IF NOT EXISTS app.daily_credit_quota_state (
 );
 
 CREATE TABLE IF NOT EXISTS app.billing_event_pricing (
-    event_type     TEXT PRIMARY KEY,
-    display_name   TEXT NOT NULL,
+    event_type      TEXT PRIMARY KEY,
+    display_name    TEXT NOT NULL,
     points_per_unit INTEGER NOT NULL DEFAULT 1,
-    status         TEXT NOT NULL DEFAULT 'active',
-    display_order  INTEGER NOT NULL DEFAULT 0,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    status          TEXT NOT NULL DEFAULT 'active',
+    display_order   INTEGER NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS app.admin_audit_log (
@@ -237,13 +326,23 @@ CREATE TABLE IF NOT EXISTS app.admin_audit_log (
 -- app.* indexes owned by chat-backend.
 
 CREATE INDEX IF NOT EXISTS idx_app_user_plan_tier ON app.app_user(plan_tier);
+CREATE INDEX IF NOT EXISTS idx_app_user_email_verified ON app.app_user(email_verified_at DESC);
+CREATE INDEX IF NOT EXISTS idx_app_user_invite_code ON app.app_user(invite_code);
 CREATE INDEX IF NOT EXISTS idx_user_api_key_status ON app.user_api_key(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_account_balance ON app.user_credit_account(balance_points DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_package_status_order ON app.billing_package(status, display_order ASC, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_promotion_rule_status_order ON app.promotion_rule(status, display_order ASC, start_at ASC, end_at ASC);
 CREATE INDEX IF NOT EXISTS idx_payment_order_user_created ON app.payment_order(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payment_order_status_created ON app.payment_order(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_order_user_product_status ON app.payment_order(user_id, product_type, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_subscription_user_status ON app.billing_subscription(user_id, status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_subscription_grant_subscription_created ON app.subscription_grant(subscription_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_promotion_claim_user_created ON app.promotion_claim(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_promotion_claim_order_created ON app.promotion_claim(order_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_verification_challenge_user_created ON app.email_verification_challenge(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_verification_challenge_email_created ON app.email_verification_challenge(email, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_referral_binding_inviter_created ON app.user_referral_binding(inviter_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_referral_binding_status_updated ON app.user_referral_binding(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_session_user_updated ON app.chat_session(user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_message_session_created ON app.chat_message(session_id, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_analysis_run_session_started ON app.analysis_run(session_id, started_at DESC);

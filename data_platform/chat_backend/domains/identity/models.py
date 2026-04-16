@@ -14,3 +14,5 @@ class RequestUser:
     plan_tier: str
     created_at: Any
     updated_at: Any
+    invite_code: str | None = None
+    email_verified_at: Any | None = None

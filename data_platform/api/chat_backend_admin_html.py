@@ -7,7 +7,7 @@ def render_admin_backoffice_html() -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>XiaMimate Admin Backoffice</title>
+  <title>XiaMimate 管理后台</title>
   <style>
     :root {
       --bg: #f5efe4;
@@ -204,8 +204,7 @@ def render_admin_backoffice_html() -> str:
     .metric .label {
       color: var(--muted);
       font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.04em;
     }
 
     .metric .value {
@@ -248,6 +247,26 @@ def render_admin_backoffice_html() -> str:
       font-size: 13px;
     }
 
+    .scroll-window {
+      max-height: 320px;
+      overflow: auto;
+      overscroll-behavior: contain;
+      border: 1px solid rgba(17, 75, 95, 0.08);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.58);
+    }
+
+    .scroll-window.tall {
+      max-height: 420px;
+    }
+
+    .scroll-stack {
+      max-height: 420px;
+      overflow: auto;
+      overscroll-behavior: contain;
+      padding-right: 4px;
+    }
+
     th,
     td {
       text-align: left;
@@ -259,8 +278,11 @@ def render_admin_backoffice_html() -> str:
     th {
       color: var(--muted);
       font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.04em;
+      position: sticky;
+      top: 0;
+      background: rgba(255, 251, 245, 0.98);
+      z-index: 1;
     }
 
     pre {
@@ -311,19 +333,20 @@ def render_admin_backoffice_html() -> str:
   <div class="shell">
     <section class="hero">
       <div class="card hero-main">
-        <div class="eyebrow">Admin Backoffice</div>
+        <div class="eyebrow">后台管理</div>
         <h1>XiaMimate Chat Backend</h1>
         <p>这是一版内置在 chat_backend 里的最小后台。它先解决三件事：看清用户账务、看清订单/订阅、带审计地人工加积分。</p>
       </div>
       <div class="card hero-side">
-        <div>
-          <label for="admin-token">Admin Token</label>
-          <input id="admin-token" type="password" placeholder="Bearer token" />
+        <div id="admin-token-group">
+          <label for="admin-token">后台令牌</label>
+          <input id="admin-token" type="password" placeholder="请输入 Bearer Token" />
         </div>
         <div>
-          <label for="admin-operator">Operator</label>
+          <label for="admin-operator">操作人</label>
           <input id="admin-operator" type="text" placeholder="例如 ops-liu" />
         </div>
+        <p id="admin-auth-hint" class="hint">当前仍是固定后台令牌模式。页面只在当前浏览器会话内缓存令牌，不再写入长期本地存储。</p>
         <div class="button-row">
           <button id="load-overview">刷新总览</button>
           <button id="load-audit" class="secondary">刷新审计</button>
@@ -337,29 +360,31 @@ def render_admin_backoffice_html() -> str:
         <h2>用户检索</h2>
         <div class="field-grid">
           <div>
-            <label for="user-query">User ID / Email / Display Name</label>
-            <input id="user-query" type="text" placeholder="guest 或邮箱或用户 ID" />
+            <label for="user-query">用户 ID / 邮箱 / 显示名</label>
+            <input id="user-query" type="text" placeholder="guest、邮箱或用户 ID" />
           </div>
           <div class="button-row">
             <button id="search-users">搜索用户</button>
             <button id="search-all" class="secondary">最近用户</button>
           </div>
         </div>
-        <div id="user-results" class="user-list" style="margin-top: 14px;"></div>
+        <div class="scroll-stack" style="margin-top: 14px;">
+          <div id="user-results" class="user-list"></div>
+        </div>
 
         <div style="margin-top: 18px;">
           <h3>人工加积分</h3>
           <div class="field-grid">
             <div>
-              <label for="grant-user-id">Target User ID</label>
+                <label for="grant-user-id">目标用户 ID</label>
               <input id="grant-user-id" type="text" placeholder="先从右侧详情或搜索结果填充" />
             </div>
             <div>
-              <label for="grant-points">Points</label>
+                <label for="grant-points">积分数</label>
               <input id="grant-points" type="number" min="1" value="100" />
             </div>
             <div>
-              <label for="grant-description">Description</label>
+                <label for="grant-description">说明</label>
               <textarea id="grant-description" placeholder="例如：手工补单 / 客诉补偿 / 灰度测试加额"></textarea>
             </div>
             <button id="grant-submit" class="warn">执行加积分</button>
@@ -411,6 +436,7 @@ def render_admin_backoffice_html() -> str:
   <script>
     const state = {
       selectedUserId: null,
+      authMode: 'fixed-token',
     };
 
     const getToken = () => document.getElementById('admin-token').value.trim();
@@ -428,17 +454,49 @@ def render_admin_backoffice_html() -> str:
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;');
 
+    const applyTrustedAdminMode = () => {
+      state.authMode = 'trusted-openwebui-admin';
+      const tokenGroup = document.getElementById('admin-token-group');
+      const tokenInput = document.getElementById('admin-token');
+      const authHint = document.getElementById('admin-auth-hint');
+      tokenGroup.style.display = 'none';
+      tokenInput.value = '';
+      tokenInput.disabled = true;
+      authHint.textContent = '当前通过 Open WebUI 管理员会话访问，无需填写后台令牌。仍建议填写操作人，便于后台审计。';
+      if (!getOperator()) {
+        document.getElementById('admin-operator').value = localStorage.getItem('xiamimate_admin_operator') || 'openwebui-admin';
+      }
+    };
+
+    const detectAuthMode = async () => {
+      try {
+        const response = await fetch('/api/v1/users/user/settings', {
+          credentials: 'same-origin',
+          redirect: 'manual',
+        });
+        if (response.ok) {
+          applyTrustedAdminMode();
+        }
+      } catch (error) {
+      }
+    };
+
     const authHeaders = () => {
-      const token = getToken();
       const operator = getOperator();
-      if (!token) {
-        throw new Error('请先填写 Admin Token');
-      }
       if (!operator) {
-        throw new Error('请先填写 Operator');
+        throw new Error('请先填写操作人');
       }
-      localStorage.setItem('xiamimate_admin_token', token);
       localStorage.setItem('xiamimate_admin_operator', operator);
+      if (state.authMode === 'trusted-openwebui-admin') {
+        return {
+          'X-Admin-Operator': operator,
+        };
+      }
+      const token = getToken();
+      if (!token) {
+        throw new Error('请先填写后台令牌');
+      }
+      sessionStorage.setItem('xiamimate_admin_token', token);
       return {
         'Authorization': `Bearer ${token}`,
         'X-Admin-Operator': operator,
@@ -457,6 +515,14 @@ def render_admin_backoffice_html() -> str:
         ...options,
         headers,
       });
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const rawText = await response.text();
+        if (response.status === 401 || response.status === 403 || response.status === 302) {
+          throw new Error('当前管理员登录态已失效，请返回 Open WebUI 重新登录后再试');
+        }
+        throw new Error(rawText.slice(0, 120) || `HTTP ${response.status}`);
+      }
       const payload = await response.json();
       if (!response.ok || payload.success !== true) {
         throw new Error(payload.message || `HTTP ${response.status}`);
@@ -477,34 +543,36 @@ def render_admin_backoffice_html() -> str:
       </table>
     `;
 
-    const renderTable = (columns, rows) => {
+    const renderTable = (columns, rows, options = {}) => {
       if (!rows || rows.length === 0) {
         return '<div class="empty">暂无数据</div>';
       }
       return `
-        <table>
-          <thead>
-            <tr>${columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join('')}</tr>
-          </thead>
-          <tbody>
-            ${rows.map((row) => `
-              <tr>
-                ${columns.map((column) => `<td>${escapeHtml(column.render(row))}</td>`).join('')}
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+        <div class="scroll-window ${escapeHtml(options.className || '')}">
+          <table>
+            <thead>
+              <tr>${columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join('')}</tr>
+            </thead>
+            <tbody>
+              ${rows.map((row) => `
+                <tr>
+                  ${columns.map((column) => `<td>${escapeHtml(column.render(row))}</td>`).join('')}
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
       `;
     };
 
     const renderMetrics = (metrics) => {
       const entries = [
-        ['Total Users', metrics.total_users],
-        ['Active API Keys', metrics.active_api_keys],
-        ['Paid Orders', metrics.paid_orders],
-        ['Active Subs', metrics.active_subscriptions],
-        ['Running Runs', metrics.running_analysis_runs],
-        ['Balance Points', metrics.total_balance_points],
+        ['总用户数', metrics.total_users],
+        ['活跃 API Key', metrics.active_api_keys],
+        ['已支付订单', metrics.paid_orders],
+        ['生效订阅', metrics.active_subscriptions],
+        ['运行中分析', metrics.running_analysis_runs],
+        ['账户总积分', metrics.total_balance_points],
       ];
       document.getElementById('metric-grid').innerHTML = entries.map(([label, value]) => `
         <div class="metric">
@@ -525,7 +593,7 @@ def render_admin_backoffice_html() -> str:
           <strong>${escapeHtml(user.display_name || user.user_id)}</strong>
           <div class="hint">${escapeHtml(user.user_id)}</div>
           <div class="hint">${escapeHtml(user.email || '')}</div>
-          <div class="hint">plan=${escapeHtml(user.plan_tier)} · balance=${escapeHtml(user.balance_points)}</div>
+          <div class="hint">套餐=${escapeHtml(user.plan_tier)} · 积分=${escapeHtml(user.balance_points)}</div>
           <button data-user-id="${escapeHtml(user.user_id)}">查看详情</button>
         </div>
       `).join('');
@@ -537,19 +605,19 @@ def render_admin_backoffice_html() -> str:
 
     const renderOverviewTables = (data) => {
       document.getElementById('recent-ledger').innerHTML = renderTable([
-        { label: 'Time', render: (row) => row.created_at },
-        { label: 'User', render: (row) => `${row.display_name} (${row.user_id})` },
-        { label: 'Type', render: (row) => row.entry_type },
-        { label: 'Delta', render: (row) => row.points_delta },
-        { label: 'Balance', render: (row) => row.balance_after_points },
+        { label: '时间', render: (row) => row.created_at },
+        { label: '用户', render: (row) => `${row.display_name} (${row.user_id})` },
+        { label: '类型', render: (row) => row.entry_type },
+        { label: '变动', render: (row) => row.points_delta },
+        { label: '变动后余额', render: (row) => row.balance_after_points },
       ], data.recent_ledger || []);
 
       document.getElementById('recent-orders').innerHTML = renderTable([
-        { label: 'Time', render: (row) => row.created_at },
-        { label: 'User', render: (row) => `${row.display_name} (${row.user_id})` },
-        { label: 'Package', render: (row) => row.package_code },
-        { label: 'Status', render: (row) => row.status },
-        { label: 'Points', render: (row) => row.points_amount },
+        { label: '时间', render: (row) => row.created_at },
+        { label: '用户', render: (row) => `${row.display_name} (${row.user_id})` },
+        { label: '套餐', render: (row) => row.package_code },
+        { label: '状态', render: (row) => row.status },
+        { label: '积分', render: (row) => row.points_amount },
       ], data.recent_orders || []);
     };
 
@@ -565,41 +633,41 @@ def render_admin_backoffice_html() -> str:
           <div class="mini-card">
             <h3>用户主档</h3>
             ${renderKv([
-              ['User ID', user.user_id],
-              ['Display Name', user.display_name],
+              ['用户 ID', user.user_id],
+              ['显示名', user.display_name],
               ['Email', user.email],
-              ['Status', user.status],
-              ['Plan Tier', data.plan_tier],
+              ['状态', user.status],
+              ['套餐层级', data.plan_tier],
             ])}
           </div>
           <div class="mini-card">
             <h3>积分账户</h3>
             ${renderKv([
-              ['Balance', pointsAccount.balance_points],
-              ['Lifetime Granted', pointsAccount.lifetime_granted_points],
-              ['Lifetime Purchased', pointsAccount.lifetime_purchased_points],
-              ['Lifetime Spent', pointsAccount.lifetime_spent_points],
-              ['Updated At', pointsAccount.updated_at],
+              ['当前余额', pointsAccount.balance_points],
+              ['累计发放', pointsAccount.lifetime_granted_points],
+              ['累计购买', pointsAccount.lifetime_purchased_points],
+              ['累计消耗', pointsAccount.lifetime_spent_points],
+              ['更新时间', pointsAccount.updated_at],
             ])}
           </div>
           <div class="mini-card">
             <h3>Guest 日配额</h3>
             ${Object.keys(dailyQuota).length ? renderKv([
-              ['Quota Date', dailyQuota.quota_date],
-              ['Quota Points', dailyQuota.quota_points],
-              ['Applied Delta', dailyQuota.applied_delta_points],
-              ['Consumed', dailyQuota.consumed_points],
-              ['Reference', dailyQuota.reset_reference_id],
+              ['配额日期', dailyQuota.quota_date],
+              ['配额积分', dailyQuota.quota_points],
+              ['已补差额', dailyQuota.applied_delta_points],
+              ['已消耗', dailyQuota.consumed_points],
+              ['重置参考', dailyQuota.reset_reference_id],
             ]) : '<div class="empty">当前用户没有 daily quota 状态</div>'}
           </div>
           <div class="mini-card">
             <h3>API Keys</h3>
             ${renderTable([
               { label: 'API Key ID', render: (row) => row.api_key_id },
-              { label: 'Prefix', render: (row) => row.api_key_prefix },
-              { label: 'Last4', render: (row) => row.api_key_last4 },
-              { label: 'Status', render: (row) => row.status },
-              { label: 'Last Used', render: (row) => row.last_used_at },
+              { label: '前缀', render: (row) => row.api_key_prefix },
+              { label: '末四位', render: (row) => row.api_key_last4 },
+              { label: '状态', render: (row) => row.status },
+              { label: '最后使用时间', render: (row) => row.last_used_at },
             ], data.api_keys || [])}
           </div>
         </div>
@@ -607,26 +675,26 @@ def render_admin_backoffice_html() -> str:
           <div class="mini-card">
             <h3>最近账本</h3>
             ${renderTable([
-              { label: 'Time', render: (row) => row.created_at },
-              { label: 'Entry Type', render: (row) => row.entry_type },
-              { label: 'Event', render: (row) => row.event_type },
-              { label: 'Delta', render: (row) => row.points_delta },
-              { label: 'Balance', render: (row) => row.balance_after_points },
-              { label: 'Desc', render: (row) => row.description },
+              { label: '时间', render: (row) => row.created_at },
+              { label: '账本类型', render: (row) => row.entry_type },
+              { label: '事件', render: (row) => row.event_type },
+              { label: '变动', render: (row) => row.points_delta },
+              { label: '变动后余额', render: (row) => row.balance_after_points },
+              { label: '说明', render: (row) => row.description },
             ], data.recent_ledger || [])}
           </div>
           <div class="mini-card">
-            <h3>Usage 摘要</h3>
+            <h3>使用摘要</h3>
             ${renderKv([
-              ['1d Units', data.usage_summary?.units_1d],
-              ['7d Units', data.usage_summary?.units_7d],
-              ['30d Units', data.usage_summary?.units_30d],
-              ['30d Events', data.usage_summary?.event_count_30d],
+              ['近 1 天调用量', data.usage_summary?.units_1d],
+              ['近 7 天调用量', data.usage_summary?.units_7d],
+              ['近 30 天调用量', data.usage_summary?.units_30d],
+              ['近 30 天事件数', data.usage_summary?.event_count_30d],
             ])}
             <div style="margin-top: 12px;">
               ${renderTable([
-                { label: 'Event Type', render: (row) => row.event_type },
-                { label: 'Total Units (30d)', render: (row) => row.total_units },
+                { label: '事件类型', render: (row) => row.event_type },
+                { label: '近 30 天总调用量', render: (row) => row.total_units },
               ], data.usage_by_type_30d || [])}
             </div>
           </div>
@@ -636,34 +704,34 @@ def render_admin_backoffice_html() -> str:
             <h3>订单 / 订阅</h3>
             <div style="margin-bottom: 12px;">
               ${renderTable([
-                { label: 'Order', render: (row) => row.order_id },
-                { label: 'Package', render: (row) => row.package_code },
-                { label: 'Status', render: (row) => row.status },
-                { label: 'Points', render: (row) => row.points_amount },
+                { label: '订单 ID', render: (row) => row.order_id },
+                { label: '套餐', render: (row) => row.package_code },
+                { label: '状态', render: (row) => row.status },
+                { label: '积分', render: (row) => row.points_amount },
               ], data.recent_orders || [])}
             </div>
             ${renderTable([
-              { label: 'Subscription', render: (row) => row.subscription_id },
-              { label: 'Package', render: (row) => row.package_code },
-              { label: 'Status', render: (row) => row.status },
-              { label: 'Monthly Points', render: (row) => row.monthly_points },
+              { label: '订阅 ID', render: (row) => row.subscription_id },
+              { label: '套餐', render: (row) => row.package_code },
+              { label: '状态', render: (row) => row.status },
+              { label: '月度积分', render: (row) => row.monthly_points },
             ], data.subscriptions || [])}
           </div>
           <div class="mini-card">
             <h3>会话 / 运行</h3>
             <div style="margin-bottom: 12px;">
               ${renderTable([
-                { label: 'Session', render: (row) => row.session_id },
-                { label: 'Title', render: (row) => row.title },
-                { label: 'Status', render: (row) => row.status },
-                { label: 'Updated', render: (row) => row.updated_at },
+                { label: '会话 ID', render: (row) => row.session_id },
+                { label: '标题', render: (row) => row.title },
+                { label: '状态', render: (row) => row.status },
+                { label: '更新时间', render: (row) => row.updated_at },
               ], data.recent_sessions || [])}
             </div>
             ${renderTable([
-              { label: 'Run', render: (row) => row.run_id },
-              { label: 'Query', render: (row) => row.product_query },
-              { label: 'Status', render: (row) => row.status },
-              { label: 'Updated', render: (row) => row.updated_at },
+              { label: '运行 ID', render: (row) => row.run_id },
+              { label: '查询词', render: (row) => row.product_query },
+              { label: '状态', render: (row) => row.status },
+              { label: '更新时间', render: (row) => row.updated_at },
             ], data.recent_runs || [])}
           </div>
         </div>
@@ -672,12 +740,12 @@ def render_admin_backoffice_html() -> str:
 
     const renderAuditLogs = (data) => {
       document.getElementById('audit-logs').innerHTML = renderTable([
-        { label: 'Time', render: (row) => row.created_at },
-        { label: 'Operator', render: (row) => row.operator_id },
-        { label: 'Action', render: (row) => row.action },
-        { label: 'Target', render: (row) => `${row.target_type}:${row.target_id || ''}` },
-        { label: 'Request', render: (row) => JSON.stringify(row.request_json || {}) },
-      ], data.audit_logs || []);
+        { label: '时间', render: (row) => row.created_at },
+        { label: '操作人', render: (row) => row.operator_id },
+        { label: '动作', render: (row) => row.action },
+        { label: '目标', render: (row) => `${row.target_type}:${row.target_id || ''}` },
+        { label: '请求体', render: (row) => JSON.stringify(row.request_json || {}) },
+      ], data.audit_logs || [], { className: 'tall' });
     };
 
     const loadOverview = async () => {
@@ -764,7 +832,7 @@ def render_admin_backoffice_html() -> str:
     document.getElementById('search-all').addEventListener('click', () => searchUsers(''));
     document.getElementById('grant-submit').addEventListener('click', grantPoints);
 
-    const savedToken = localStorage.getItem('xiamimate_admin_token');
+    const savedToken = sessionStorage.getItem('xiamimate_admin_token');
     const savedOperator = localStorage.getItem('xiamimate_admin_operator');
     if (savedToken) {
       document.getElementById('admin-token').value = savedToken;
@@ -773,9 +841,11 @@ def render_admin_backoffice_html() -> str:
       document.getElementById('admin-operator').value = savedOperator;
     }
 
-    loadOverview().catch(() => {});
-    searchUsers('').catch(() => {});
-    loadAuditLogs().catch(() => {});
+    detectAuthMode().finally(() => {
+      loadOverview().catch(() => {});
+      searchUsers('').catch(() => {});
+      loadAuditLogs().catch(() => {});
+    });
   </script>
 </body>
 </html>

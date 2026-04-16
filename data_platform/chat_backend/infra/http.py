@@ -30,6 +30,8 @@ from data_platform.chat_backend.infra.settings import (
     INTERNAL_SERVICE_SECRET,
     INTERNAL_SERVICE_SECRET_HEADER_NAME,
     INTERNAL_SERVICE_NAME_HEADER_NAME,
+    TRUSTED_ADMIN_SERVICE_NAME,
+    TRUSTED_ADMIN_SESSION_HEADER_NAME,
     _utc_now_iso,
 )
 from data_platform.chat_backend.infra.postgres import (
@@ -184,6 +186,22 @@ def _require_internal_service(request: Request, scope: str) -> str:
 
 
 def _require_admin_operator(request: Request) -> str:
+    operator_id = (request.headers.get(ADMIN_OPERATOR_HEADER_NAME) or "").strip()
+    if INTERNAL_SERVICE_SECRET:
+        provided_secret = (request.headers.get(INTERNAL_SERVICE_SECRET_HEADER_NAME) or "").strip()
+        service_name = (request.headers.get(INTERNAL_SERVICE_NAME_HEADER_NAME) or "").strip()
+        trusted_admin_verified = (request.headers.get(TRUSTED_ADMIN_SESSION_HEADER_NAME) or "").strip()
+        if (
+            provided_secret
+            and secrets.compare_digest(provided_secret, INTERNAL_SERVICE_SECRET)
+            and service_name == TRUSTED_ADMIN_SERVICE_NAME
+            and trusted_admin_verified == "1"
+        ):
+            if not operator_id:
+                raise HTTPException(status_code=400, detail=f"missing header: {ADMIN_OPERATOR_HEADER_NAME}")
+            _enforce_internal_rate_limit(scope=request.url.path, service_name=service_name)
+            return operator_id
+
     if not ADMIN_BACKOFFICE_TOKEN:
         raise HTTPException(status_code=503, detail="CHAT_BACKEND_ADMIN_TOKEN is not configured")
     authorization = (request.headers.get("Authorization") or "").strip()
@@ -192,7 +210,6 @@ def _require_admin_operator(request: Request) -> str:
     provided_token = authorization.split(" ", 1)[1].strip()
     if not provided_token or not secrets.compare_digest(provided_token, ADMIN_BACKOFFICE_TOKEN):
         raise HTTPException(status_code=403, detail="invalid admin token")
-    operator_id = (request.headers.get(ADMIN_OPERATOR_HEADER_NAME) or "").strip()
     if not operator_id:
         raise HTTPException(status_code=400, detail=f"missing header: {ADMIN_OPERATOR_HEADER_NAME}")
     return operator_id

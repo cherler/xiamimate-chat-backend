@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
+
 try:
     import psycopg2.extras
 except ImportError:
@@ -15,10 +17,14 @@ from data_platform.chat_backend.infra.settings import (
     _is_guest_identity,
 )
 from data_platform.chat_backend.infra.postgres import _run_pg_dict_query
-from data_platform.chat_backend.domains.identity.service import _fetch_user
+from data_platform.chat_backend.domains.identity.service import (
+    _build_identity_verification_summary,
+    _fetch_user,
+)
 from data_platform.chat_backend.domains.api_keys.service import _list_api_keys_for_user
 from data_platform.chat_backend.domains.billing.service import (
     _apply_guest_daily_quota_if_needed,
+    _build_credit_balance_breakdown,
     _ensure_credit_account,
     _fetch_latest_daily_credit_quota_state,
     _fetch_subscriptions_for_user,
@@ -52,8 +58,8 @@ def _audit_admin_action(
             action,
             target_type,
             target_id,
-            psycopg2.extras.Json(request_json),
-            psycopg2.extras.Json(result_json),
+            psycopg2.extras.Json(jsonable_encoder(request_json)),
+            psycopg2.extras.Json(jsonable_encoder(result_json)),
         ],
     )[0]
 
@@ -78,6 +84,8 @@ def _build_user_account_overview(
     ):
         _apply_guest_daily_quota_if_needed(conn, user)
     points_account = _get_credit_account(conn, user_id, for_update=False)
+    balance_breakdown = _build_credit_balance_breakdown(conn, user_id)
+    user = _fetch_user(conn, user_id)
     api_keys = _list_api_keys_for_user(conn, user_id)
     recent_ledger = _run_pg_dict_query(
         conn,
@@ -168,10 +176,12 @@ def _build_user_account_overview(
     daily_quota_state = _fetch_latest_daily_credit_quota_state(conn, user_id)
     return {
         "user": user.__dict__,
+        "identity_verification": _build_identity_verification_summary(conn, user_id),
         "plan_tier": user.plan_tier,
         "entitlements": PLAN_LIMITS.get(user.plan_tier, {}),
         "api_keys": api_keys,
         "points_account": points_account,
+        "balance_breakdown": balance_breakdown,
         "daily_quota_state": daily_quota_state,
         "recent_ledger": recent_ledger,
         "usage_summary": usage_summary,

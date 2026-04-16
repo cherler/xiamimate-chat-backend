@@ -24,11 +24,14 @@ from data_platform.chat_backend.infra.http import _success_response
 from data_platform.chat_backend.domains.identity.service import _provision_user_identity
 from data_platform.chat_backend.domains.api_keys.service import _build_public_api_key_payload
 from data_platform.chat_backend.domains.billing.service import (
+    _build_billing_catalog,
+    _build_payment_order_snapshot,
     _fetch_billing_package,
     _get_point_cost_by_event,
     _list_billing_packages,
     _seed_billing_event_pricing,
     _seed_billing_packages,
+    _seed_promotion_rules,
     _fetch_subscriptions_for_user,
 )
 from data_platform.chat_backend.domains.payments.service import _fetch_payment_order_for_user
@@ -53,6 +56,7 @@ def health() -> dict[str, Any]:
     with _postgres_conn() as conn:
         _ensure_app_schema(conn)
         _seed_billing_packages(conn)
+        _seed_promotion_rules(conn)
         _seed_billing_event_pricing(conn)
         _run_pg_dict_query(conn, "SELECT 1 AS ok")
     return _success_response(
@@ -222,11 +226,13 @@ def list_billing_packages(request: Request) -> dict[str, Any]:
     with _postgres_conn() as conn:
         user, _, _ = _provision_user_identity(conn, request)
         packages = _list_billing_packages(conn)
+        catalog = _build_billing_catalog(conn, user.user_id)
     return _success_response(
         "/v1/billing/packages",
         {
             "user_id": user.user_id,
             "packages": packages,
+            "catalog": catalog,
         },
         "billing packages loaded",
     )
@@ -238,15 +244,24 @@ def create_payment_order(request: Request, payload: CreatePaymentOrderRequest) -
         user, _, _ = _provision_user_identity(conn, request)
         package = _fetch_billing_package(conn, payload.package_code)
         order_id = _generate_id("order")
+        pricing_snapshot = _build_payment_order_snapshot(
+            conn,
+            user_id=user.user_id,
+            package=package,
+            order_id=order_id,
+        )
+        pricing = pricing_snapshot["pricing"]
         order_row = _run_pg_dict_query(
             conn,
             """
             INSERT INTO app.payment_order (
-                order_id, user_id, package_code, product_type, provider, amount_cents,
-                points_amount, status, callback_payload_json, created_at, updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending', %s, NOW(), NOW())
-            RETURNING order_id, user_id, package_code, product_type, provider, amount_cents,
-                      points_amount, status, provider_order_id, provider_trade_no,
+                order_id, user_id, package_code, product_type, provider, list_amount_cents,
+                discount_amount_cents, amount_cents, points_amount, status,
+                promotion_snapshot_json, callback_payload_json, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending', %s, %s, NOW(), NOW())
+            RETURNING order_id, user_id, package_code, product_type, provider, list_amount_cents,
+                      discount_amount_cents, amount_cents, points_amount, status,
+                      provider_order_id, provider_trade_no, promotion_snapshot_json,
                       callback_payload_json, paid_at, created_at, updated_at
             """,
             [
@@ -255,12 +270,16 @@ def create_payment_order(request: Request, payload: CreatePaymentOrderRequest) -
                 package["package_code"],
                 package["product_type"],
                 payload.provider,
-                package["price_cents"],
+                pricing["list_amount_cents"],
+                pricing["discount_amount_cents"],
+                pricing["payable_amount_cents"],
                 package["points_amount"],
+                psycopg2.extras.Json(pricing_snapshot),
                 psycopg2.extras.Json(
                     {
                         "package_name": package["package_name"],
                         "package_meta": package.get("meta_json") or {},
+                        "pricing_snapshot": pricing_snapshot,
                         "created_via": "/v1/payments/orders",
                     }
                 ),
@@ -271,6 +290,7 @@ def create_payment_order(request: Request, payload: CreatePaymentOrderRequest) -
         {
             "order": order_row,
             "package": package,
+            "pricing_snapshot": pricing_snapshot,
         },
         "payment order created",
     )

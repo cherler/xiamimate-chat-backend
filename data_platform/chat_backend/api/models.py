@@ -79,6 +79,14 @@ class IdentityExchangeRequest(BaseModel):
     display_name: str | None = None
 
 
+class ConfirmEmailVerificationRequest(BaseModel):
+    code: str = Field(..., min_length=4, max_length=8)
+
+
+class BindReferralCodeRequest(BaseModel):
+    invite_code: str = Field(..., min_length=4, max_length=32)
+
+
 class ChargePointsEvent(BaseModel):
     event_type: str = Field(..., min_length=1)
     units: int = Field(default=1, ge=1)

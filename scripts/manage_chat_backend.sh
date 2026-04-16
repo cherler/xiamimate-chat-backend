@@ -18,6 +18,30 @@ cleanup_metadata() {
     rm -f "$PID_FILE"
 }
 
+collect_backend_pids() {
+    local pid
+    local pids=()
+
+    if [[ -f "$PID_FILE" ]]; then
+        pid="$(cat "$PID_FILE")"
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            pids+=("$pid")
+        fi
+    fi
+
+    while IFS= read -r pid; do
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            pids+=("$pid")
+        fi
+    done < <(lsof -ti:"$PORT" 2>/dev/null || true)
+
+    if (( ${#pids[@]} == 0 )); then
+        return 1
+    fi
+
+    printf '%s\n' "${pids[@]}" | awk '!seen[$0]++'
+}
+
 wait_for_shutdown() {
     local pid="$1"
     local attempts="${2:-50}"
@@ -38,22 +62,14 @@ wait_for_shutdown() {
 resolve_pid() {
     local pid
 
-    if [[ -f "$PID_FILE" ]]; then
-        pid="$(cat "$PID_FILE")"
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-            echo "$pid"
-            return 0
-        fi
+    pid="$(collect_backend_pids 2>/dev/null | head -n 1 || true)"
+    if [[ -z "$pid" ]]; then
+        return 1
     fi
 
-    pid="$(lsof -ti:"$PORT" 2>/dev/null | head -n 1 || true)"
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-        echo "$pid" > "$PID_FILE"
-        echo "$pid"
-        return 0
-    fi
-
-    return 1
+    echo "$pid" > "$PID_FILE"
+    echo "$pid"
+    return 0
 }
 
 is_running() {
@@ -87,6 +103,7 @@ start_backend() {
     local attempt=0
     while (( attempt < 30 )); do
         if curl -sf "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+            resolve_pid >/dev/null 2>&1 || true
             echo "chat backend started: PID $(cat "$PID_FILE")  http://${HOST}:${PORT}"
             echo "log file: $LOG_FILE"
             return 0
@@ -106,20 +123,35 @@ stop_backend() {
         return 0
     fi
 
+    local -a pids=()
     local pid
-    pid="$(resolve_pid)"
-    kill "$pid" 2>/dev/null || true
-    if ! wait_for_shutdown "$pid"; then
-        echo "chat backend did not stop gracefully; forcing kill: PID $pid"
-        kill -9 "$pid" 2>/dev/null || true
-        if ! wait_for_shutdown "$pid" 25 0.2; then
-            echo "failed to stop chat backend: PID $pid"
-            return 1
-        fi
+    while IFS= read -r pid; do
+        [[ -n "$pid" ]] && pids+=("$pid")
+    done < <(collect_backend_pids || true)
+
+    if (( ${#pids[@]} == 0 )); then
+        cleanup_metadata
+        echo "chat backend is not running"
+        return 0
     fi
 
+    for pid in "${pids[@]}"; do
+        kill "$pid" 2>/dev/null || true
+    done
+
+    for pid in "${pids[@]}"; do
+        if ! wait_for_shutdown "$pid"; then
+            echo "chat backend did not stop gracefully; forcing kill: PID $pid"
+            kill -9 "$pid" 2>/dev/null || true
+            if ! wait_for_shutdown "$pid" 25 0.2; then
+                echo "failed to stop chat backend: PID $pid"
+                return 1
+            fi
+        fi
+    done
+
     cleanup_metadata
-    echo "chat backend stopped: PID $pid"
+    echo "chat backend stopped: PID(s) ${pids[*]}"
 }
 
 status_backend() {

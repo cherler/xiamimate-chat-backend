@@ -45,7 +45,10 @@ from data_platform.chat_backend.domains.api_keys.service import (
 )
 from data_platform.chat_backend.domains.billing.service import (
     _adjust_daily_credit_quota_consumed,
+    _apply_order_promotions_after_payment,
+    _apply_user_plan_tier_from_package,
     _apply_guest_daily_quota_if_needed,
+    _build_credit_balance_breakdown,
     _calculate_points_for_event,
     _create_ledger_entry,
     _ensure_user_credit_account_state,
@@ -57,7 +60,9 @@ from data_platform.chat_backend.domains.billing.service import (
     _grant_subscription_period,
     _is_guest_daily_quota_user,
     _normalize_period_window,
+    _preview_credit_consumption_allocations,
     _record_usage_event,
+    _resolve_refund_source_allocations,
 )
 from data_platform.chat_backend.domains.payments.service import _fetch_payment_order
 from data_platform.chat_backend.domains.portal.service import (
@@ -211,6 +216,11 @@ def charge_points(request: Request, payload: ChargePointsRequest) -> dict[str, A
         balance_after = int(account["balance_points"])
         for event in payload.events:
             charged_points = _calculate_points_for_event(event.event_type, event.units)
+            source_allocations = _preview_credit_consumption_allocations(
+                conn,
+                api_key_row["user_id"],
+                charged_points,
+            )
             balance_after -= charged_points
             updated_account = _run_pg_dict_query(
                 conn,
@@ -254,6 +264,7 @@ def charge_points(request: Request, payload: ChargePointsRequest) -> dict[str, A
                     **event.meta,
                     "points_price_version": POINTS_PRICE_VERSION,
                     "points_charged": charged_points,
+                    "balance_source_allocations": source_allocations,
                 },
             )
             charges.append(
@@ -261,6 +272,7 @@ def charge_points(request: Request, payload: ChargePointsRequest) -> dict[str, A
                     "event_type": event.event_type,
                     "units": event.units,
                     "points_charged": charged_points,
+                    "balance_source_allocations": source_allocations,
                     "usage_event": usage_event,
                     "ledger_entry": ledger_entry,
                     "points_account": updated_account,
@@ -301,6 +313,13 @@ def refund_points(request: Request, payload: RefundPointsRequest) -> dict[str, A
         user = _fetch_user(conn, api_key_row["user_id"])
         account = _get_credit_account(conn, api_key_row["user_id"], for_update=True)
         balance_after = int(account["balance_points"]) + payload.points
+        refund_allocations = _resolve_refund_source_allocations(
+            conn,
+            user_id=api_key_row["user_id"],
+            reference_id=payload.reference_id,
+            event_type=payload.event_type,
+            points=payload.points,
+        )
         updated_account = _run_pg_dict_query(
             conn,
             """
@@ -329,6 +348,7 @@ def refund_points(request: Request, payload: RefundPointsRequest) -> dict[str, A
                 **payload.meta,
                 "points_price_version": POINTS_PRICE_VERSION,
                 "points_refunded": payload.points,
+                "refund_allocations": refund_allocations,
             },
         )
         _touch_user_api_key(conn, api_key_row["api_key_id"])
@@ -340,6 +360,7 @@ def refund_points(request: Request, payload: RefundPointsRequest) -> dict[str, A
                 "api_key_id": api_key_row["api_key_id"],
                 "pricing_version": POINTS_PRICE_VERSION,
                 "points_account": updated_account,
+                "balance_breakdown": _build_credit_balance_breakdown(conn, api_key_row["user_id"]),
                 "ledger_entry": ledger_entry,
             },
             "points refunded",
@@ -587,6 +608,7 @@ def internal_payment_provider_callback(provider: str, request: Request, payload:
         if order_row["status"] == "paid":
             updated_account = _get_credit_account(conn, order_row["user_id"], for_update=False)
             subscription_row = None
+            promotion_results: list[dict[str, Any]] = []
             if order_row["product_type"] == "monthly_subscription":
                 subscriptions = _run_pg_dict_query(
                     conn,
@@ -612,6 +634,7 @@ def internal_payment_provider_callback(provider: str, request: Request, payload:
                     "subscription": subscription_row,
                     "ledger_entry": None,
                     "subscription_grant": None,
+                    "promotion_results": promotion_results,
                 },
                 "payment callback already applied",
             )
@@ -629,8 +652,9 @@ def internal_payment_provider_callback(provider: str, request: Request, payload:
                 paid_at = COALESCE(paid_at, NOW()),
                 updated_at = NOW()
             WHERE order_id = %s
-            RETURNING order_id, user_id, package_code, product_type, provider, amount_cents,
-                      points_amount, status, provider_order_id, provider_trade_no,
+            RETURNING order_id, user_id, package_code, product_type, provider, list_amount_cents,
+                      discount_amount_cents, amount_cents, points_amount, status,
+                      provider_order_id, provider_trade_no, promotion_snapshot_json,
                       callback_payload_json, paid_at, created_at, updated_at
             """,
             [
@@ -643,6 +667,7 @@ def internal_payment_provider_callback(provider: str, request: Request, payload:
 
         subscription_row = None
         subscription_grant_row = None
+        promotion_results: list[dict[str, Any]] = []
         if package["product_type"] == "credit_pack":
             updated_account, ledger_entry = _grant_points_with_ledger(
                 conn=conn,
@@ -659,6 +684,14 @@ def internal_payment_provider_callback(provider: str, request: Request, payload:
                     "provider_trade_no": payload.provider_trade_no,
                 },
                 purchased_points=int(package["points_amount"]),
+            )
+            updated_account, promotion_results = _apply_order_promotions_after_payment(
+                conn,
+                order_row=updated_order,
+                package=package,
+                provider=provider,
+                provider_trade_no=payload.provider_trade_no,
+                updated_account=updated_account,
             )
         else:
             period_start, period_end = _normalize_period_window(
@@ -728,6 +761,15 @@ def internal_payment_provider_callback(provider: str, request: Request, payload:
                     "provider_subscription_id": payload.provider_subscription_id,
                 },
             )
+            _apply_user_plan_tier_from_package(conn, updated_order["user_id"], package)
+            updated_account, promotion_results = _apply_order_promotions_after_payment(
+                conn,
+                order_row=updated_order,
+                package=package,
+                provider=provider,
+                provider_trade_no=payload.provider_trade_no,
+                updated_account=updated_account,
+            )
 
         response_json = _success_response(
             f"/internal/payments/provider-callback/{provider}",
@@ -738,6 +780,7 @@ def internal_payment_provider_callback(provider: str, request: Request, payload:
                 "subscription": subscription_row,
                 "ledger_entry": ledger_entry,
                 "subscription_grant": subscription_grant_row,
+                "promotion_results": promotion_results,
             },
             "payment callback applied",
         )
