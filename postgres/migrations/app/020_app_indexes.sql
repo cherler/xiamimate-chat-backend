@@ -27,6 +27,10 @@ CREATE INDEX IF NOT EXISTS idx_usage_event_user_created ON app.usage_event(user_
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_created ON app.credit_ledger_entry(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_reference ON app.credit_ledger_entry(user_id, entry_type, reference_id);
 CREATE INDEX IF NOT EXISTS idx_daily_credit_quota_state_quota_date ON app.daily_credit_quota_state(quota_date DESC, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_notification_user_occurred ON app.user_notification(user_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_notification_user_category_read ON app.user_notification(user_id, category, read_at, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_system_notification_broadcast_created ON app.system_notification_broadcast(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_system_notification_broadcast_operator_created ON app.system_notification_broadcast(operator_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_event_pricing_status ON app.billing_event_pricing(status, display_order ASC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_operator_created ON app.admin_audit_log(operator_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_target_created ON app.admin_audit_log(target_type, target_id, created_at DESC);

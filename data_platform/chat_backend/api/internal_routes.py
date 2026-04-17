@@ -70,6 +70,8 @@ from data_platform.chat_backend.domains.portal.service import (
     _portal_base_url,
 )
 from data_platform.chat_backend.domains.provider_proxy.service import (
+    _proxy_dify_web_search_blocking,
+    _proxy_dify_web_search_stream,
     _proxy_dify_workflow_blocking,
     _proxy_dify_workflow_stream,
     _proxy_knowledge_retrieve,
@@ -390,6 +392,37 @@ def internal_run_dify_workflow(request: Request, payload: InternalWorkflowRunReq
 def internal_run_dify_workflow_stream(request: Request, payload: InternalWorkflowRunRequest) -> StreamingResponse:
     _require_internal_service(request, request.url.path)
     upstream_response = _proxy_dify_workflow_stream(query=payload.query, user=payload.user)
+
+    def iterate_stream() -> Any:
+        try:
+            for chunk in upstream_response.iter_content(chunk_size=4096):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream_response.close()
+
+    return StreamingResponse(
+        iterate_stream(),
+        media_type=upstream_response.headers.get("content-type") or "text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.post("/internal/provider/dify-web-search/run")
+def internal_run_dify_web_search(request: Request, payload: InternalWorkflowRunRequest) -> dict[str, Any]:
+    _require_internal_service(request, request.url.path)
+    provider_response = _proxy_dify_web_search_blocking(query=payload.query, user=payload.user)
+    return _success_response(
+        "/internal/provider/dify-web-search/run",
+        provider_response,
+        "dify web search proxied",
+    )
+
+
+@router.post("/internal/provider/dify-web-search/run-stream")
+def internal_run_dify_web_search_stream(request: Request, payload: InternalWorkflowRunRequest) -> StreamingResponse:
+    _require_internal_service(request, request.url.path)
+    upstream_response = _proxy_dify_web_search_stream(query=payload.query, user=payload.user)
 
     def iterate_stream() -> Any:
         try:

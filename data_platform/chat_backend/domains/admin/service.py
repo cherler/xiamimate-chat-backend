@@ -21,6 +21,10 @@ from data_platform.chat_backend.domains.identity.service import (
     _build_identity_verification_summary,
     _fetch_user,
 )
+from data_platform.chat_backend.domains.notifications.service import (
+    _list_notifications_for_user,
+    _sync_portal_notifications,
+)
 from data_platform.chat_backend.domains.api_keys.service import _list_api_keys_for_user
 from data_platform.chat_backend.domains.billing.service import (
     _apply_guest_daily_quota_if_needed,
@@ -147,6 +151,15 @@ def _build_user_account_overview(
         """,
         [user_id, order_limit],
     )
+    subscriptions = _fetch_subscriptions_for_user(conn, user_id)
+    _sync_portal_notifications(
+        conn,
+        user_id,
+        points_account=points_account,
+        recent_ledger=recent_ledger,
+        recent_orders=recent_orders,
+        subscriptions=subscriptions,
+    )
     recent_sessions = _run_pg_dict_query(
         conn,
         """
@@ -188,7 +201,8 @@ def _build_user_account_overview(
         "usage_by_type_30d": usage_by_type_30d,
         "recent_usage_events": recent_usage_events,
         "recent_orders": recent_orders,
-        "subscriptions": _fetch_subscriptions_for_user(conn, user_id),
+        "subscriptions": subscriptions,
+        "notifications": _list_notifications_for_user(conn, user_id, limit=100),
         "recent_sessions": recent_sessions,
         "recent_runs": recent_runs,
         "pricing_version": POINTS_PRICE_VERSION,

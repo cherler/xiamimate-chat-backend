@@ -29,8 +29,14 @@ from data_platform.chat_backend.domains.admin.service import (
     _build_admin_overview,
     _build_user_account_overview,
 )
+from data_platform.chat_backend.domains.notifications.service import (
+    _create_system_notification_broadcast,
+    _fanout_system_notification_broadcast,
+    _list_system_notification_broadcasts,
+)
 from data_platform.chat_backend.api.models import (
     AdminGrantPointsRequest,
+    CreateSystemNotificationBroadcastRequest,
     UpdateEventPricingRequest,
 )
 
@@ -213,6 +219,57 @@ def admin_backoffice_audit_logs(request: Request) -> dict[str, Any]:
         "/admin/api/audit-logs",
         {"target_id": target_id or None, "audit_logs": rows},
         "admin audit logs loaded",
+    )
+
+
+@router.get("/admin/api/system-notifications")
+def admin_list_system_notifications(request: Request) -> dict[str, Any]:
+    _require_admin_operator(request)
+    raw_limit = (request.query_params.get("limit") or "50").strip()
+    try:
+        limit = max(1, min(int(raw_limit), 100))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="limit must be an integer")
+
+    with _postgres_conn() as conn:
+        rows = _list_system_notification_broadcasts(conn, limit=limit)
+    return _success_response(
+        "/admin/api/system-notifications",
+        {"system_notifications": rows},
+        "system notifications loaded",
+    )
+
+
+@router.post("/admin/api/system-notifications")
+def admin_create_system_notification(
+    request: Request,
+    payload: CreateSystemNotificationBroadcastRequest,
+) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    with _postgres_conn() as conn:
+        broadcast = _create_system_notification_broadcast(
+            conn,
+            operator_id=operator_id,
+            title=payload.title,
+            body=payload.body,
+            tag=payload.tag,
+            level=payload.level,
+            action_url=payload.action_url,
+        )
+        broadcast = _fanout_system_notification_broadcast(conn, broadcast)
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="broadcast_system_notification",
+            target_type="system_notification_broadcast",
+            target_id=str(broadcast.get("broadcast_id") or "") or None,
+            request_json=jsonable_encoder(payload),
+            result_json=broadcast,
+        )
+    return _success_response(
+        "/admin/api/system-notifications",
+        {"broadcast": broadcast, "audit_log": audit_log},
+        "system notification broadcast created",
     )
 
 

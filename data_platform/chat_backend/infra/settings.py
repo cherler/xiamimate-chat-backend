@@ -52,6 +52,7 @@ DEFAULT_USER_EMAIL = os.environ.get("CHAT_BACKEND_DEFAULT_USER_EMAIL", "demo-use
 DEFAULT_USER_NAME = os.environ.get("CHAT_BACKEND_DEFAULT_USER_NAME", "Demo User")
 DEFAULT_PLAN_TIER = os.environ.get("CHAT_BACKEND_DEFAULT_PLAN_TIER", "free")
 SIGNUP_GIFT_POINTS = max(0, int(os.environ.get("CHAT_BACKEND_SIGNUP_GIFT_POINTS", "500")))
+REFERRAL_INVITED_REWARD_POINTS = max(0, int(os.environ.get("CHAT_BACKEND_REFERRAL_INVITED_REWARD_POINTS", "500")))
 USER_API_KEY_PREFIX = os.environ.get("CHAT_BACKEND_USER_API_KEY_PREFIX", "xia_user_")
 USER_API_KEY_LENGTH = max(24, int(os.environ.get("CHAT_BACKEND_USER_API_KEY_LENGTH", "40")))
 DEFAULT_PAYMENT_PROVIDER = os.environ.get("CHAT_BACKEND_PAYMENT_PROVIDER", "manual").strip() or "manual"
@@ -89,14 +90,14 @@ PORTAL_REQUIRE_EMAIL_VERIFICATION = os.environ.get("CHAT_BACKEND_PORTAL_REQUIRE_
 # ---------------------------------------------------------------------------
 # Pricing
 # ---------------------------------------------------------------------------
-POINTS_PRICE_VERSION = "v3_zone_pricing_promotions"
+POINTS_PRICE_VERSION = "v4_web_search_admin_pricing"
 
 DEFAULT_EVENT_PRICING: list[dict[str, Any]] = [
     {"event_type": "llm_request",      "display_name": "LLM请求",      "points_per_unit": 1, "display_order": 10},
     {"event_type": "workflow_run",     "display_name": "workflow请求", "points_per_unit": 8, "display_order": 20},
-    {"event_type": "kb_retrieve",      "display_name": "知识库检索",    "points_per_unit": 1, "display_order": 30},
-    {"event_type": "product_api_call", "display_name": "商品API检索",  "points_per_unit": 1, "display_order": 40},
-    {"event_type": "web_search",       "display_name": "网络搜索",      "points_per_unit": 1, "display_order": 50},
+    {"event_type": "kb_retrieve",      "display_name": "知识库检索",    "points_per_unit": 2, "display_order": 30},
+    {"event_type": "product_api_call", "display_name": "商品API检索",  "points_per_unit": 2, "display_order": 40},
+    {"event_type": "web_search",       "display_name": "网络搜索",      "points_per_unit": 2, "display_order": 50},
 ]
 
 # ---------------------------------------------------------------------------
@@ -282,6 +283,22 @@ DEFAULT_PROMOTION_RULES: list[dict[str, Any]] = [
             "seed_catalog": "2026-04-launch",
         },
         "display_order": 10,
+    },
+    {
+        "rule_code": "referral_invited_bind_bonus_500",
+        "rule_name": "新用户绑定邀请码额外赠送 500 积分",
+        "rule_type": "referral_invited_reward",
+        "target_product_type": None,
+        "target_package_codes": [],
+        "benefit_type": "points_bonus",
+        "benefit_value": REFERRAL_INVITED_REWARD_POINTS,
+        "criteria_json": {"claim_once_per_user": True},
+        "meta_json": {
+            "zone_code": "newcomer_zone",
+            "display_text": "新用户绑定邀请码，新老用户均额外赠送500积分",
+            "seed_catalog": "2026-04-launch",
+        },
+        "display_order": 12,
     },
     {
         "rule_code": "referral_inviter_bonus_500",

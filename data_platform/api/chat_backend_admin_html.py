@@ -50,6 +50,11 @@ def render_admin_backoffice_html() -> str:
       margin-bottom: 20px;
     }
 
+    .hero > *,
+    .layout > * {
+      min-width: 0;
+    }
+
     .card {
       background: var(--paper);
       border: 1px solid var(--line);
@@ -101,6 +106,7 @@ def render_admin_backoffice_html() -> str:
 
     .panel {
       padding: 18px;
+      min-width: 0;
     }
 
     .panel h2,
@@ -235,6 +241,7 @@ def render_admin_backoffice_html() -> str:
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
+      min-width: 0;
     }
 
     .detail-grid.full {
@@ -245,9 +252,12 @@ def render_admin_backoffice_html() -> str:
       width: 100%;
       border-collapse: collapse;
       font-size: 13px;
+      table-layout: fixed;
     }
 
     .scroll-window {
+      width: 100%;
+      min-width: 0;
       max-height: 320px;
       overflow: auto;
       overscroll-behavior: contain;
@@ -273,6 +283,8 @@ def render_admin_backoffice_html() -> str:
       padding: 10px 8px;
       border-bottom: 1px solid rgba(17, 75, 95, 0.08);
       vertical-align: top;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     th {
@@ -300,6 +312,11 @@ def render_admin_backoffice_html() -> str:
       color: var(--muted);
       font-size: 13px;
       padding: 12px 0;
+    }
+
+    .section-list,
+    .mini-card {
+      min-width: 0;
     }
 
     @media (max-width: 1100px) {
@@ -335,7 +352,7 @@ def render_admin_backoffice_html() -> str:
       <div class="card hero-main">
         <div class="eyebrow">后台管理</div>
         <h1>XiaMimate Chat Backend</h1>
-        <p>这是一版内置在 chat_backend 里的最小后台。它先解决三件事：看清用户账务、看清订单/订阅、带审计地人工加积分。</p>
+        <p>这是一版内置在 chat_backend 里的最小后台。它覆盖四件事：看清用户账务、看清订单/订阅、带审计地人工加积分，以及主动广播系统通知。</p>
       </div>
       <div class="card hero-side">
         <div id="admin-token-group">
@@ -393,6 +410,34 @@ def render_admin_backoffice_html() -> str:
         </div>
 
         <div style="margin-top: 18px;">
+          <h3>系统通知广播</h3>
+          <div class="field-grid">
+            <div>
+              <label for="broadcast-title">通知标题</label>
+              <input id="broadcast-title" type="text" placeholder="例如：五一期间客服响应时间调整" />
+            </div>
+            <div>
+              <label for="broadcast-tag">标签</label>
+              <input id="broadcast-tag" type="text" value="系统通知" />
+            </div>
+            <div>
+              <label for="broadcast-level">级别</label>
+              <input id="broadcast-level" type="text" value="info" placeholder="info / success / warning / error" />
+            </div>
+            <div>
+              <label for="broadcast-action-url">跳转链接（可选）</label>
+              <input id="broadcast-action-url" type="text" placeholder="例如：/portal/guide" />
+            </div>
+            <div>
+              <label for="broadcast-body">通知正文</label>
+              <textarea id="broadcast-body" placeholder="请输入要推送到通知中心系统通知中的内容"></textarea>
+            </div>
+            <button id="broadcast-submit" class="warn">发送系统通知</button>
+            <div id="broadcast-status" class="status"></div>
+          </div>
+        </div>
+
+        <div style="margin-top: 18px;">
           <h3>计价管理</h3>
           <div id="pricing-list" class="field-grid" style="margin-bottom: 10px;"></div>
           <div class="button-row">
@@ -429,6 +474,11 @@ def render_admin_backoffice_html() -> str:
           <h2>后台审计</h2>
           <div id="audit-logs"></div>
         </section>
+
+        <section class="card panel">
+          <h2>系统广播记录</h2>
+          <div id="broadcast-history"></div>
+        </section>
       </main>
     </section>
   </div>
@@ -453,6 +503,50 @@ def render_admin_backoffice_html() -> str:
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;');
+
+    const ledgerEntryTypeLabels = {
+      consume: '消费',
+      refund: '退款',
+      grant: '赠送',
+      recharge: '充值到账',
+      signup_gift: '注册赠送',
+      admin_grant: '后台加积分',
+      subscription_grant: '订阅发放',
+      promotion_reward: '活动奖励',
+      subscription_expire: '套餐到期清零',
+      daily_quota_reset: '每日额度重置',
+    };
+
+    const ledgerEventTypeLabels = {
+      llm_request: 'LLM 请求',
+      workflow_run: 'Workflow 请求',
+      kb_retrieve: '知识库检索',
+      dify_knowledge_retrieve: '知识库检索',
+      product_api_call: '商品 API 检索',
+      web_search: '网络搜索',
+      recharge: '充值到账',
+      signup_gift: '新用户注册赠送',
+      referral_invited_reward: '绑定邀请码奖励',
+      referral_inviter_reward: '邀请新用户注册奖励',
+      subscription_grant: '订阅积分发放',
+      subscription_expire: '套餐到期清零',
+      daily_quota_reset: '每日额度重置',
+      admin_grant: '后台加积分',
+      promotion_reward: '活动奖励',
+    };
+
+    const localizeLedgerEntryType = (entryType, eventType = '') => {
+      const normalized = String(entryType || '').trim().toLowerCase();
+      if (normalized && ledgerEntryTypeLabels[normalized]) {
+        return ledgerEntryTypeLabels[normalized];
+      }
+      return localizeLedgerEventType(eventType) || String(entryType || '');
+    };
+
+    const localizeLedgerEventType = (eventType) => {
+      const normalized = String(eventType || '').trim().toLowerCase();
+      return ledgerEventTypeLabels[normalized] || String(eventType || '');
+    };
 
     const applyTrustedAdminMode = () => {
       state.authMode = 'trusted-openwebui-admin';
@@ -607,7 +701,8 @@ def render_admin_backoffice_html() -> str:
       document.getElementById('recent-ledger').innerHTML = renderTable([
         { label: '时间', render: (row) => row.created_at },
         { label: '用户', render: (row) => `${row.display_name} (${row.user_id})` },
-        { label: '类型', render: (row) => row.entry_type },
+        { label: '类型', render: (row) => localizeLedgerEntryType(row.entry_type, row.event_type) },
+        { label: '事件', render: (row) => localizeLedgerEventType(row.event_type) },
         { label: '变动', render: (row) => row.points_delta },
         { label: '变动后余额', render: (row) => row.balance_after_points },
       ], data.recent_ledger || []);
@@ -676,8 +771,8 @@ def render_admin_backoffice_html() -> str:
             <h3>最近账本</h3>
             ${renderTable([
               { label: '时间', render: (row) => row.created_at },
-              { label: '账本类型', render: (row) => row.entry_type },
-              { label: '事件', render: (row) => row.event_type },
+                { label: '账本类型', render: (row) => localizeLedgerEntryType(row.entry_type, row.event_type) },
+                { label: '事件', render: (row) => localizeLedgerEventType(row.event_type) },
               { label: '变动', render: (row) => row.points_delta },
               { label: '变动后余额', render: (row) => row.balance_after_points },
               { label: '说明', render: (row) => row.description },
@@ -693,7 +788,7 @@ def render_admin_backoffice_html() -> str:
             ])}
             <div style="margin-top: 12px;">
               ${renderTable([
-                { label: '事件类型', render: (row) => row.event_type },
+                { label: '事件类型', render: (row) => localizeLedgerEventType(row.event_type) },
                 { label: '近 30 天总调用量', render: (row) => row.total_units },
               ], data.usage_by_type_30d || [])}
             </div>
@@ -748,6 +843,18 @@ def render_admin_backoffice_html() -> str:
       ], data.audit_logs || [], { className: 'tall' });
     };
 
+    const renderBroadcastHistory = (data) => {
+      document.getElementById('broadcast-history').innerHTML = renderTable([
+        { label: '发送时间', render: (row) => row.created_at },
+        { label: '操作人', render: (row) => row.operator_id },
+        { label: '标签', render: (row) => row.tag },
+        { label: '级别', render: (row) => row.level },
+        { label: '标题', render: (row) => row.title },
+        { label: '覆盖用户数', render: (row) => row.delivered_user_count },
+        { label: '跳转链接', render: (row) => row.action_url || '-' },
+      ], data.system_notifications || [], { className: 'tall' });
+    };
+
     const loadOverview = async () => {
       setStatus('global-status', '正在加载总览...');
       try {
@@ -795,6 +902,15 @@ def render_admin_backoffice_html() -> str:
       }
     };
 
+    const loadBroadcasts = async () => {
+      try {
+        const data = await fetchJson('/admin/api/system-notifications?limit=20');
+        renderBroadcastHistory(data);
+      } catch (error) {
+        setStatus('global-status', error.message, 'error');
+      }
+    };
+
     const grantPoints = async () => {
       const userId = document.getElementById('grant-user-id').value.trim();
       const points = Number(document.getElementById('grant-points').value || 0);
@@ -826,11 +942,150 @@ def render_admin_backoffice_html() -> str:
       }
     };
 
+    const sendBroadcast = async () => {
+      const title = document.getElementById('broadcast-title').value.trim();
+      const tag = document.getElementById('broadcast-tag').value.trim() || '系统通知';
+      const level = document.getElementById('broadcast-level').value.trim() || 'info';
+      const actionUrl = document.getElementById('broadcast-action-url').value.trim();
+      const body = document.getElementById('broadcast-body').value.trim();
+      if (!title) {
+        setStatus('broadcast-status', '请先填写通知标题', 'error');
+        return;
+      }
+      if (!body) {
+        setStatus('broadcast-status', '请先填写通知正文', 'error');
+        return;
+      }
+
+      setStatus('broadcast-status', '正在发送系统通知...');
+      try {
+        const data = await fetchJson('/admin/api/system-notifications', {
+          method: 'POST',
+          body: JSON.stringify({
+            title,
+            tag,
+            level,
+            action_url: actionUrl || null,
+            body,
+          }),
+        });
+        document.getElementById('broadcast-title').value = '';
+        document.getElementById('broadcast-action-url').value = '';
+        document.getElementById('broadcast-body').value = '';
+        setStatus('broadcast-status', `发送成功，已覆盖 ${data.broadcast?.delivered_user_count || 0} 个用户`, 'ok');
+        await loadBroadcasts();
+      } catch (error) {
+        setStatus('broadcast-status', error.message, 'error');
+      }
+    };
+
+    const renderPricingList = (rows) => {
+      const target = document.getElementById('pricing-list');
+      if (!rows || rows.length === 0) {
+        target.innerHTML = '<div class="empty">暂无计价配置</div>';
+        return;
+      }
+
+      target.innerHTML = rows.map((row) => `
+        <div class="mini-card" data-pricing-card="${escapeHtml(row.event_type)}">
+          <div style="display:grid; gap:10px;">
+            <div>
+              <strong>${escapeHtml(row.display_name || row.event_type)}</strong>
+              <div class="hint">event_type = ${escapeHtml(row.event_type)}</div>
+            </div>
+            <div class="detail-grid">
+              <div>
+                <label for="pricing-name-${escapeHtml(row.event_type)}">显示名称</label>
+                <input id="pricing-name-${escapeHtml(row.event_type)}" type="text" value="${escapeHtml(row.display_name || '')}" />
+              </div>
+              <div>
+                <label for="pricing-points-${escapeHtml(row.event_type)}">积分/次</label>
+                <input id="pricing-points-${escapeHtml(row.event_type)}" type="number" min="0" value="${escapeHtml(row.points_per_unit)}" />
+              </div>
+              <div>
+                <label for="pricing-order-${escapeHtml(row.event_type)}">排序</label>
+                <input id="pricing-order-${escapeHtml(row.event_type)}" type="number" value="${escapeHtml(row.display_order)}" />
+              </div>
+              <div>
+                <label for="pricing-status-${escapeHtml(row.event_type)}">状态</label>
+                <select id="pricing-status-${escapeHtml(row.event_type)}" style="width:100%; border:1px solid rgba(17, 75, 95, 0.18); border-radius:14px; background:rgba(255,255,255,0.92); padding:12px 14px; color:var(--ink);">
+                  <option value="active" ${row.status === 'active' ? 'selected' : ''}>active</option>
+                  <option value="disabled" ${row.status === 'disabled' ? 'selected' : ''}>disabled</option>
+                </select>
+              </div>
+            </div>
+            <div class="button-row">
+              <button class="secondary" data-save-pricing="${escapeHtml(row.event_type)}">保存计价</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      target.querySelectorAll('button[data-save-pricing]').forEach((button) => {
+        button.addEventListener('click', () => savePricing(button.dataset.savePricing));
+      });
+    };
+
+    const loadPricing = async () => {
+      setStatus('pricing-status', '正在加载计价配置...');
+      try {
+        const data = await fetchJson('/admin/api/pricing');
+        renderPricingList(data.event_pricing || []);
+        setStatus('pricing-status', `计价已刷新，版本 ${data.pricing_version || '-'}`, 'ok');
+      } catch (error) {
+        setStatus('pricing-status', error.message, 'error');
+      }
+    };
+
+    const savePricing = async (eventType) => {
+      if (!eventType) {
+        setStatus('pricing-status', '缺少 event_type', 'error');
+        return;
+      }
+
+      const displayName = document.getElementById(`pricing-name-${eventType}`)?.value.trim() || eventType;
+      const rawPoints = Number(document.getElementById(`pricing-points-${eventType}`)?.value || 0);
+      const rawOrder = Number(document.getElementById(`pricing-order-${eventType}`)?.value || 0);
+      const status = document.getElementById(`pricing-status-${eventType}`)?.value || 'active';
+
+      if (!Number.isFinite(rawPoints) || rawPoints < 0) {
+        setStatus('pricing-status', '积分单价必须是大于等于 0 的整数', 'error');
+        return;
+      }
+      if (!Number.isFinite(rawOrder)) {
+        setStatus('pricing-status', '排序必须是整数', 'error');
+        return;
+      }
+
+      setStatus('pricing-status', `正在保存 ${displayName}...`);
+      try {
+        await fetchJson(`/admin/api/pricing/${encodeURIComponent(eventType)}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            display_name: displayName,
+            points_per_unit: Math.trunc(rawPoints),
+            display_order: Math.trunc(rawOrder),
+            status,
+          }),
+        });
+        setStatus('pricing-status', `${displayName} 已更新`, 'ok');
+        await loadPricing();
+        await loadOverview();
+        if (state.selectedUserId) {
+          await loadUserDetail(state.selectedUserId);
+        }
+      } catch (error) {
+        setStatus('pricing-status', error.message, 'error');
+      }
+    };
+
     document.getElementById('load-overview').addEventListener('click', loadOverview);
     document.getElementById('load-audit').addEventListener('click', loadAuditLogs);
+    document.getElementById('load-pricing').addEventListener('click', loadPricing);
     document.getElementById('search-users').addEventListener('click', () => searchUsers(document.getElementById('user-query').value.trim()));
     document.getElementById('search-all').addEventListener('click', () => searchUsers(''));
     document.getElementById('grant-submit').addEventListener('click', grantPoints);
+    document.getElementById('broadcast-submit').addEventListener('click', sendBroadcast);
 
     const savedToken = sessionStorage.getItem('xiamimate_admin_token');
     const savedOperator = localStorage.getItem('xiamimate_admin_operator');
@@ -843,8 +1098,10 @@ def render_admin_backoffice_html() -> str:
 
     detectAuthMode().finally(() => {
       loadOverview().catch(() => {});
+      loadPricing().catch(() => {});
       searchUsers('').catch(() => {});
       loadAuditLogs().catch(() => {});
+      loadBroadcasts().catch(() => {});
     });
   </script>
 </body>

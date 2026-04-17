@@ -1,12 +1,13 @@
 """Portal API routes — /portal/*."""
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import uuid4
 from typing import Any
 
 import requests as http_requests
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
 try:
     import psycopg2.extras
@@ -39,6 +40,7 @@ from data_platform.chat_backend.domains.billing.service import (
     _build_payment_order_snapshot,
     _ensure_user_credit_account_state,
     _fetch_billing_package,
+    _grant_referral_invited_reward_if_needed,
 )
 from data_platform.chat_backend.domains.identity.service import (
     _bind_user_referral,
@@ -47,12 +49,17 @@ from data_platform.chat_backend.domains.identity.service import (
     _fetch_user,
     _request_email_verification,
 )
+from data_platform.chat_backend.domains.notifications.service import (
+    _list_notifications_for_user,
+    _set_notification_read_state,
+)
 from data_platform.chat_backend.domains.payments.service import _fetch_payment_order_for_user
 
 from data_platform.chat_backend.api.models import (
     BindReferralCodeRequest,
     ConfirmEmailVerificationRequest,
     CreatePaymentOrderRequest,
+    UpdateNotificationReadStateRequest,
 )
 from data_platform.api.chat_backend_portal_html import render_portal_html
 from data_platform.api.chat_backend_portal_public_html import (
@@ -62,6 +69,7 @@ from data_platform.api.chat_backend_portal_public_html import (
 )
 
 router = APIRouter()
+_WECHAT_QR_IMAGE_PATH = Path(__file__).resolve().parents[3] / "微信二维码.jpg"
 
 
 _PORTAL_PROVIDER_LABELS = {
@@ -69,6 +77,46 @@ _PORTAL_PROVIDER_LABELS = {
     "wechat": "微信支付",
     "manual": "线下/手工",
 }
+
+
+def _resolve_openwebui_session_user(request: Request) -> tuple[str, str, str] | None:
+    cookie = (request.headers.get("cookie") or "").strip()
+    if not cookie:
+        return None
+
+    token_value = ""
+    for part in cookie.split(";"):
+        k_v = part.strip().split("=", 1)
+        if len(k_v) == 2 and k_v[0].strip() == "token":
+            token_value = k_v[1].strip()
+            break
+    if not token_value:
+        return None
+
+    owui_base = _portal_base_url()
+    try:
+        resp = http_requests.get(
+            "%s/api/v1/auths/" % owui_base,
+            headers={"Authorization": "Bearer %s" % token_value},
+            timeout=5,
+        )
+    except Exception:
+        return None
+
+    if resp.status_code != 200:
+        return None
+
+    try:
+        user_data = resp.json()
+    except Exception:
+        return None
+
+    user_id = str(user_data.get("id") or "").strip()
+    if not user_id:
+        return None
+    email = str(user_data.get("email") or "").strip()
+    name = str(user_data.get("name") or "").strip()
+    return user_id, email, name
 
 
 def _portal_user_requires_email_verification(conn, user_id: str) -> bool:
@@ -109,43 +157,10 @@ def _build_portal_payment_response(conn, order_row: dict[str, Any]) -> dict[str,
 @router.get("/_internal/portal/validate-session")
 def portal_validate_session(request: Request) -> Response:
     """Nginx auth_request subrequest: validate OpenWebUI cookie and return user identity headers."""
-    cookie = (request.headers.get("cookie") or "").strip()
-    if not cookie:
+    resolved_user = _resolve_openwebui_session_user(request)
+    if resolved_user is None:
         return Response(status_code=401)
-
-    token_value = ""
-    for part in cookie.split(";"):
-        k_v = part.strip().split("=", 1)
-        if len(k_v) == 2 and k_v[0].strip() == "token":
-            token_value = k_v[1].strip()
-            break
-    if not token_value:
-        return Response(status_code=401)
-
-    owui_base = _portal_base_url()
-    try:
-        resp = http_requests.get(
-            "%s/api/v1/auths/" % owui_base,
-            headers={"Authorization": "Bearer %s" % token_value},
-            timeout=5,
-        )
-    except Exception:
-        return Response(status_code=401)
-
-    if resp.status_code != 200:
-        return Response(status_code=401)
-
-    try:
-        user_data = resp.json()
-    except Exception:
-        return Response(status_code=401)
-
-    user_id = str(user_data.get("id") or "").strip()
-    if not user_id:
-        return Response(status_code=401)
-
-    email = str(user_data.get("email") or "").strip()
-    name = str(user_data.get("name") or "").strip()
+    user_id, email, name = resolved_user
     try:
         with _postgres_conn() as conn:
             _ensure_user_record(conn, user_id=user_id, email=email, display_name=name)
@@ -160,6 +175,29 @@ def portal_validate_session(request: Request) -> Response:
             "X-Portal-User-Name": name,
         },
     )
+
+
+@router.get("/_internal/openwebui/verified-user-check")
+def openwebui_verified_user_check(request: Request) -> Response:
+    """Nginx auth_request for Open WebUI root traffic.
+
+    - anonymous user: 401, let nginx pass through to Open WebUI login page
+    - logged-in but unverified user: 403, let nginx redirect to /portal/account
+    - logged-in and verified user: 200
+    """
+    resolved_user = _resolve_openwebui_session_user(request)
+    if resolved_user is None:
+        return Response(status_code=401)
+
+    user_id, email, name = resolved_user
+    try:
+        with _postgres_conn() as conn:
+            _ensure_user_record(conn, user_id=user_id, email=email, display_name=name)
+            if _portal_user_requires_email_verification(conn, user_id):
+                return Response(status_code=403)
+    except Exception:
+        return Response(status_code=401)
+    return Response(status_code=200)
 
 
 @router.get("/portal")
@@ -180,6 +218,17 @@ def portal_products_page() -> HTMLResponse:
 @router.get("/portal/guide")
 def portal_guide_page() -> HTMLResponse:
     return HTMLResponse(render_portal_guide_html())
+
+
+@router.get("/portal/contact/wechat-qr")
+def portal_wechat_qr_image() -> FileResponse:
+    if not _WECHAT_QR_IMAGE_PATH.exists():
+        raise HTTPException(status_code=404, detail="wechat qr image not found")
+    return FileResponse(
+        path=str(_WECHAT_QR_IMAGE_PATH),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/portal/checkout")
@@ -252,6 +301,7 @@ def portal_bind_referral_code(request: Request, payload: BindReferralCodeRequest
     user_id = _require_portal_user(request)
     with _postgres_conn() as conn:
         _bind_user_referral(conn, user_id, payload.invite_code)
+        _grant_referral_invited_reward_if_needed(conn, user_id)
         verified_user = _fetch_user(conn, user_id)
         _ensure_user_credit_account_state(conn, verified_user)
         overview = _build_user_account_overview(conn, user_id, ledger_limit=50, usage_limit=50)
@@ -259,6 +309,28 @@ def portal_bind_referral_code(request: Request, payload: BindReferralCodeRequest
         "/portal/api/account/referral/bind",
         overview,
         "invite code bound",
+    )
+
+
+@router.post("/portal/api/notifications/read-state")
+def portal_update_notification_read_state(
+    request: Request,
+    payload: UpdateNotificationReadStateRequest,
+) -> dict[str, Any]:
+    user_id = _require_portal_user(request)
+    with _postgres_conn() as conn:
+        updated_rows = _set_notification_read_state(
+            conn,
+            user_id,
+            read=payload.read,
+            notification_ids=payload.notification_ids,
+            category=payload.category,
+        )
+        notifications = _list_notifications_for_user(conn, user_id, limit=100)
+    return _success_response(
+        "/portal/api/notifications/read-state",
+        {"updated_count": len(updated_rows), "notifications": notifications},
+        "notification read state updated",
     )
 
 

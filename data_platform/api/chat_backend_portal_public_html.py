@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 from html import escape
+from pathlib import Path
 from typing import Any
 
 from data_platform.chat_backend.domains.portal.service import _portal_base_url
@@ -146,6 +148,12 @@ _BASE_CSS = """
     flex-wrap: wrap;
     justify-content: flex-end;
   }
+  .top-utility-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
   .top-route-nav {
     display: flex;
     align-items: center;
@@ -190,6 +198,160 @@ _BASE_CSS = """
   .top-home-link:hover {
     background: #0f3f50;
     border-color: #0f3f50;
+  }
+  .top-action-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: rgba(255, 251, 245, 0.78);
+    color: var(--ink);
+    text-decoration: none;
+    cursor: pointer;
+    padding: 0;
+  }
+  .top-action-link:hover {
+    background: var(--accent-soft);
+    border-color: rgba(17, 75, 95, 0.18);
+    color: var(--accent);
+  }
+  .top-action-link.mail-link {
+    color: var(--accent);
+  }
+  .top-action-link.wechat-link {
+    color: #0f766e;
+  }
+  .top-action-link.feedback-link {
+    color: var(--accent-2);
+  }
+  .top-action-link svg {
+    width: 19px;
+    height: 19px;
+  }
+  .contact-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(30, 42, 47, 0.38);
+    backdrop-filter: blur(8px);
+  }
+  .contact-modal[hidden] {
+    display: none;
+  }
+  .contact-modal-card {
+    width: min(420px, calc(100vw - 32px));
+    background: rgba(255, 251, 245, 0.98);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: var(--shadow);
+    padding: 22px;
+    display: grid;
+    gap: 14px;
+  }
+  .contact-modal-top {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .contact-modal-title {
+    font-size: 1.08rem;
+    font-weight: 700;
+    margin: 0;
+  }
+  .contact-modal-close {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: rgba(255, 251, 245, 0.92);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .contact-modal-close:hover {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .contact-modal-note {
+    color: var(--muted);
+    font-size: 0.84rem;
+    line-height: 1.7;
+  }
+  .wechat-id-box {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(244, 236, 223, 0.9));
+    padding: 16px 18px;
+  }
+  .wechat-id-label {
+    color: var(--muted);
+    font-size: 0.78rem;
+    margin-bottom: 6px;
+  }
+  .wechat-id-value {
+    font-size: 1.24rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .wechat-qr-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 4px 0 2px;
+  }
+  .wechat-qr-image {
+    width: min(100%, 320px);
+    border-radius: 18px;
+    border: 1px solid rgba(17, 75, 95, 0.12);
+    background: #fff;
+    box-shadow: 0 14px 34px rgba(30, 42, 47, 0.1);
+  }
+  .contact-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .contact-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0 16px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: rgba(255, 251, 245, 0.82);
+    color: var(--accent);
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 0.84rem;
+    font-weight: 600;
+  }
+  .contact-action-btn:hover {
+    background: var(--accent-soft);
+    border-color: rgba(17, 75, 95, 0.18);
+  }
+  .contact-inline-status {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  .contact-inline-status:empty {
+    display: none;
+  }
+  #dify-chatbot-bubble-button {
+    background-color: #1C64F2 !important;
+  }
+  #dify-chatbot-bubble-window {
+    width: 24rem !important;
+    height: 40rem !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: calc(100vh - 24px) !important;
   }
   .main {
     width: min(var(--content-w), calc(100% - 48px));
@@ -540,6 +702,57 @@ _BASE_CSS = """
   }
 """
 
+_PORTAL_CONTACT_ACTIONS_HTML = """
+<a class="top-action-link mail-link" href="mailto:xiamijun88@qq.com" aria-label="邮件联系" title="邮件联系">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M3.75 6.75h16.5v10.5H3.75z" />
+    <path d="m4.5 7.5 7.5 6 7.5-6" />
+  </svg>
+</a>
+<button type="button" class="top-action-link wechat-link" id="wechat-contact-trigger" aria-label="微信联系" title="微信联系">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M9.2 5.5c-3.5 0-6.2 2.2-6.2 5.1 0 1.6.8 3 2.2 4l-.6 2.4 2.6-1.3c.6.1 1.3.2 2 .2 3.5 0 6.2-2.2 6.2-5.1S12.7 5.5 9.2 5.5Z" />
+    <path d="M15.5 10.2c3 0 5.5 1.9 5.5 4.5 0 1.3-.7 2.5-1.8 3.3l.5 2-2.2-1.1c-.6.1-1.2.2-1.9.2-3 0-5.5-1.9-5.5-4.5s2.5-4.4 5.4-4.4Z" />
+    <circle cx="7.2" cy="10.5" r=".8" fill="currentColor" stroke="none" />
+    <circle cx="11.2" cy="10.5" r=".8" fill="currentColor" stroke="none" />
+    <circle cx="13.8" cy="14.6" r=".8" fill="currentColor" stroke="none" />
+    <circle cx="17.2" cy="14.6" r=".8" fill="currentColor" stroke="none" />
+  </svg>
+</button>
+<a class="top-action-link feedback-link" href="https://my.feishu.cn/share/base/form/shrcnQVnRPvEuOGjz9ojf05tD1d" target="_blank" rel="noreferrer" aria-label="意见反馈" title="意见反馈">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 3.75 4.75 8v8L12 20.25 19.25 16V8L12 3.75Z" />
+    <path d="M12 7.75v5.25" />
+    <circle cx="12" cy="15.8" r=".9" fill="currentColor" stroke="none" />
+  </svg>
+</a>
+"""
+
+_PORTAL_CHATBOT_SNIPPET = """
+<script>
+ window.difyChatbotConfig = {
+  token: 'QmSaZ6H42s0ZdaxM',
+  baseUrl: 'http://localhost',
+  inputs: {},
+  systemVariables: {},
+  userVariables: {},
+ }
+</script>
+<script
+ src="http://localhost/embed.min.js"
+ id="QmSaZ6H42s0ZdaxM"
+ defer>
+</script>
+"""
+
+
+def _wechat_qr_data_url() -> str:
+  qr_path = Path(__file__).resolve().parents[2] / "微信二维码.jpg"
+  if not qr_path.exists():
+    return ""
+  encoded = base64.b64encode(qr_path.read_bytes()).decode("ascii")
+  return f"data:image/jpeg;base64,{encoded}"
+
 
 def _cny(cents: int) -> str:
     amount = cents / 100
@@ -601,6 +814,12 @@ def _sidebar(groups: list[tuple[str, list[tuple[str, str]]]]) -> str:
 
 def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html: str, body_html: str) -> str:
     openwebui_home_url = escape(_portal_base_url())
+    wechat_qr_data_url = _wechat_qr_data_url()
+    wechat_qr_html = (
+        f'<div class="wechat-qr-wrap"><img class="wechat-qr-image" src="{wechat_qr_data_url}" alt="微信二维码" /></div>'
+        if wechat_qr_data_url
+        else '<div class="contact-modal-note">当前未找到微信二维码图片，先使用下方微信号添加。</div>'
+    )
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -619,13 +838,15 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
     <div class="workspace-topbar">
       <div class="workspace-topbar-inner">
         <div>
-          <div class="page-kicker">{escape(kicker)}</div>
           <div class="page-title-row"><h1>{escape(title)}</h1></div>
           <div class="subtitle">{escape(subtitle)}</div>
         </div>
         <div class="topbar-actions">
           <div class="top-route-nav">{_top_nav(active)}</div>
-          <a class="top-home-link" id="open-webui-home-link" href="{openwebui_home_url}">回到首要</a>
+          <div class="top-utility-actions">
+            <a class="top-home-link" id="open-webui-home-link" href="{openwebui_home_url}">回到首要</a>
+            {_PORTAL_CONTACT_ACTIONS_HTML}
+          </div>
         </div>
       </div>
     </div>
@@ -634,10 +855,36 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
     </div>
   </div>
 </div>
+<div class="contact-modal" id="wechat-contact-modal" hidden>
+  <div class="contact-modal-card" role="dialog" aria-modal="true" aria-labelledby="wechat-contact-title">
+    <div class="contact-modal-top">
+      <div>
+        <div class="contact-modal-title" id="wechat-contact-title">微信联系</div>
+        <div class="contact-modal-note">扫码即可添加微信，也可以直接复制微信号 xiamimate。</div>
+      </div>
+      <button type="button" class="contact-modal-close" id="wechat-contact-close" aria-label="关闭">×</button>
+    </div>
+    {wechat_qr_html}
+    <div class="wechat-id-box">
+      <div class="wechat-id-label">微信号</div>
+      <div class="wechat-id-value" id="wechat-contact-id">xiamimate</div>
+    </div>
+    <div class="contact-modal-actions">
+      <button type="button" class="contact-action-btn" id="wechat-contact-copy">复制微信号</button>
+      <span class="contact-inline-status" id="wechat-contact-status"></span>
+    </div>
+  </div>
+</div>
 <script>
 (function() {{
   var token = new URLSearchParams(location.search).get("t") || "";
   var sectionLinks = document.querySelectorAll(".sidebar .nav-item[href^='#']");
+  var wechatTrigger = document.getElementById("wechat-contact-trigger");
+  var wechatModal = document.getElementById("wechat-contact-modal");
+  var wechatClose = document.getElementById("wechat-contact-close");
+  var wechatCopy = document.getElementById("wechat-contact-copy");
+  var wechatStatus = document.getElementById("wechat-contact-status");
+  var wechatId = "xiamimate";
   function withPortalToken(href) {{
     if (!token || !href || href.indexOf("/portal/") !== 0 || /[?&]t=/.test(href)) {{
       return href;
@@ -660,9 +907,54 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
       setTimeout(markActiveSection, 0);
     }});
   }});
+  function openWechatModal() {{
+    if (!wechatModal) return;
+    wechatModal.hidden = false;
+    document.body.style.overflow = "hidden";
+  }}
+  function closeWechatModal() {{
+    if (!wechatModal) return;
+    wechatModal.hidden = true;
+    document.body.style.overflow = "";
+  }}
+  if (wechatTrigger) {{
+    wechatTrigger.addEventListener("click", openWechatModal);
+  }}
+  if (wechatClose) {{
+    wechatClose.addEventListener("click", closeWechatModal);
+  }}
+  if (wechatModal) {{
+    wechatModal.addEventListener("click", function(event) {{
+      if (event.target === wechatModal) {{
+        closeWechatModal();
+      }}
+    }});
+  }}
+  document.addEventListener("keydown", function(event) {{
+    if (event.key === "Escape" && wechatModal && !wechatModal.hidden) {{
+      closeWechatModal();
+    }}
+  }});
+  if (wechatCopy) {{
+    wechatCopy.addEventListener("click", function() {{
+      var done = function(message) {{
+        if (wechatStatus) wechatStatus.textContent = message;
+      }};
+      if (navigator.clipboard && navigator.clipboard.writeText) {{
+        navigator.clipboard.writeText(wechatId).then(function() {{
+          done("微信号已复制，可以直接到微信里粘贴添加。");
+        }}).catch(function() {{
+          done("复制失败，请手动添加微信号：" + wechatId);
+        }});
+        return;
+      }}
+      done("当前浏览器不支持自动复制，请手动添加微信号：" + wechatId);
+    }});
+  }}
   markActiveSection();
 }})();
 </script>
+{_PORTAL_CHATBOT_SNIPPET}
 </body>
 </html>"""
 

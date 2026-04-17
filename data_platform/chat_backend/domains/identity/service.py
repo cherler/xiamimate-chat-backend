@@ -359,6 +359,8 @@ def _bind_user_referral(conn, user_id: str, invite_code: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="missing invite code")
 
     user = _fetch_user(conn, user_id)
+    if user.email_verified_at is not None:
+        raise HTTPException(status_code=409, detail="邮箱已验证，当前账号不能再绑定邀请码")
     inviter = _fetch_optional_one(
         conn,
         _APP_USER_SELECT + " WHERE invite_code = %s LIMIT 1",
@@ -395,14 +397,15 @@ def _bind_user_referral(conn, user_id: str, invite_code: str) -> dict[str, Any]:
 def _build_identity_verification_summary(conn, user_id: str) -> dict[str, Any]:
     user = _fetch_user(conn, user_id)
     binding = _fetch_user_referral_binding(conn, user_id)
+    email_verified = user.email_verified_at is not None
     return {
         "email": user.email,
-        "email_verified": user.email_verified_at is not None,
+        "email_verified": email_verified,
         "email_verified_at": user.email_verified_at,
         "email_verification_required_before_portal_use": _portal_email_verification_gate_enabled(),
         "invite_code": user.invite_code,
         "invited_by": binding,
-        "can_bind_invite_code": binding is None,
+        "can_bind_invite_code": binding is None and not email_verified,
     }
 
 

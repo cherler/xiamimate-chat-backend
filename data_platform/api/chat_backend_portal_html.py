@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from html import escape
 
+from data_platform.api.chat_backend_portal_public_html import _wechat_qr_data_url
 from data_platform.chat_backend.domains.portal.service import _portal_base_url
 
 
 def render_portal_html() -> str:
     openwebui_home_url = escape(_portal_base_url())
+    wechat_qr_data_url = _wechat_qr_data_url()
+    wechat_qr_html = (
+        f'<div class="wechat-qr-wrap"><img class="wechat-qr-image" src="{wechat_qr_data_url}" alt="微信二维码" /></div>'
+        if wechat_qr_data_url
+        else '<div class="contact-modal-note">当前未找到微信二维码图片，先使用下方微信号添加。</div>'
+    )
     return """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -201,11 +208,38 @@ def render_portal_html() -> str:
       color: var(--accent);
       border-color: rgba(17, 75, 95, 0.24);
     }
+      .top-secondary-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 0 16px;
+        border-radius: 12px;
+        border: 1px solid rgba(17, 75, 95, 0.18);
+        background: rgba(255, 251, 245, 0.82);
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 0.84rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+      }
+      .top-secondary-link:hover {
+        background: rgba(17, 75, 95, 0.08);
+        border-color: rgba(17, 75, 95, 0.3);
+        color: #0f3f50;
+      }
     .top-route-link.active {
       background: var(--accent-soft);
       color: var(--accent);
       border-color: rgba(17, 75, 95, 0.18);
     }
+      .gate-banner-actions {
+        margin-top: 12px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
     .top-icon-link {
       position: relative;
       display: inline-flex;
@@ -226,6 +260,19 @@ def render_portal_html() -> str:
       background: var(--accent-soft);
       color: var(--accent);
       border-color: rgba(17, 75, 95, 0.18);
+    }
+    .top-icon-link svg {
+      width: 19px;
+      height: 19px;
+    }
+    .top-icon-link.mail-link {
+      color: var(--accent);
+    }
+    .top-icon-link.wechat-link {
+      color: #0f766e;
+    }
+    .top-icon-link.feedback-link {
+      color: var(--accent-2);
     }
     .notif-badge {
       position: absolute;
@@ -262,6 +309,128 @@ def render_portal_html() -> str:
     .top-home-link:hover {
       background: #0f3f50;
       border-color: #0f3f50;
+    }
+    .contact-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(30, 42, 47, 0.38);
+      backdrop-filter: blur(8px);
+    }
+    .contact-modal[hidden] {
+      display: none;
+    }
+    .contact-modal-card {
+      width: min(420px, calc(100vw - 32px));
+      background: rgba(255, 251, 245, 0.98);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+      display: grid;
+      gap: 14px;
+    }
+    .contact-modal-top {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .contact-modal-title {
+      font-size: 1.08rem;
+      font-weight: 700;
+      margin: 0;
+    }
+    .contact-modal-close {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(255, 251, 245, 0.92);
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .contact-modal-close:hover {
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .contact-modal-note {
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.7;
+    }
+    .wechat-id-box {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(244, 236, 223, 0.9));
+      padding: 16px 18px;
+    }
+    .wechat-id-label {
+      color: var(--muted);
+      font-size: 0.78rem;
+      margin-bottom: 6px;
+    }
+    .wechat-id-value {
+      font-size: 1.24rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .wechat-qr-wrap {
+      display: flex;
+      justify-content: center;
+      padding: 4px 0 2px;
+    }
+    .wechat-qr-image {
+      width: min(100%, 320px);
+      border-radius: 18px;
+      border: 1px solid rgba(17, 75, 95, 0.12);
+      background: #fff;
+      box-shadow: 0 14px 34px rgba(30, 42, 47, 0.1);
+    }
+    .contact-modal-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .contact-action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 16px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 251, 245, 0.82);
+      color: var(--accent);
+      text-decoration: none;
+      cursor: pointer;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+    .contact-action-btn:hover {
+      background: var(--accent-soft);
+      border-color: rgba(17, 75, 95, 0.18);
+    }
+    .contact-inline-status {
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+    .contact-inline-status:empty {
+      display: none;
+    }
+    #dify-chatbot-bubble-button {
+      background-color: #1C64F2 !important;
+    }
+    #dify-chatbot-bubble-window {
+      width: 24rem !important;
+      height: 40rem !important;
+      max-width: calc(100vw - 24px) !important;
+      max-height: calc(100vh - 24px) !important;
     }
     .page-kicker {
       font-size: 0.78rem;
@@ -805,6 +974,30 @@ def render_portal_html() -> str:
         </div>
         <div class="top-utility-actions">
           <a class="top-home-link" id="open-webui-home-link" href="__OPENWEBUI_HOME_URL__">首页</a>
+          <button type="button" class="top-secondary-link" id="portal-logout-button">退出登录</button>
+          <a class="top-icon-link mail-link" href="mailto:xiamijun88@qq.com" aria-label="邮件联系" title="邮件联系">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3.75 6.75h16.5v10.5H3.75z" />
+              <path d="m4.5 7.5 7.5 6 7.5-6" />
+            </svg>
+          </a>
+          <button type="button" class="top-icon-link wechat-link" id="wechat-contact-trigger" aria-label="微信联系" title="微信联系">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9.2 5.5c-3.5 0-6.2 2.2-6.2 5.1 0 1.6.8 3 2.2 4l-.6 2.4 2.6-1.3c.6.1 1.3.2 2 .2 3.5 0 6.2-2.2 6.2-5.1S12.7 5.5 9.2 5.5Z" />
+              <path d="M15.5 10.2c3 0 5.5 1.9 5.5 4.5 0 1.3-.7 2.5-1.8 3.3l.5 2-2.2-1.1c-.6.1-1.2.2-1.9.2-3 0-5.5-1.9-5.5-4.5s2.5-4.4 5.4-4.4Z" />
+              <circle cx="7.2" cy="10.5" r=".8" fill="currentColor" stroke="none" />
+              <circle cx="11.2" cy="10.5" r=".8" fill="currentColor" stroke="none" />
+              <circle cx="13.8" cy="14.6" r=".8" fill="currentColor" stroke="none" />
+              <circle cx="17.2" cy="14.6" r=".8" fill="currentColor" stroke="none" />
+            </svg>
+          </button>
+          <a class="top-icon-link feedback-link" href="https://my.feishu.cn/share/base/form/shrcnQVnRPvEuOGjz9ojf05tD1d" target="_blank" rel="noreferrer" aria-label="意见反馈" title="意见反馈">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3.75 4.75 8v8L12 20.25 19.25 16V8L12 3.75Z" />
+              <path d="M12 7.75v5.25" />
+              <circle cx="12" cy="15.8" r=".9" fill="currentColor" stroke="none" />
+            </svg>
+          </a>
         </div>
       </div>
     </div>
@@ -828,9 +1021,26 @@ def render_portal_html() -> str:
             <div id="account-info"></div>
           </div>
           <div class="hero-metric">
-            <div class="hero-metric-label">当前积分余额</div>
-            <div class="hero-metric-value" id="hero-balance">0</div>
-            <div class="hero-metric-subtitle">消费时优先扣减月包积分；充值包积分永久有效。</div>
+            <div id="hero-metric-balance">
+              <div class="hero-metric-label">当前积分余额</div>
+              <div class="hero-metric-value" id="hero-balance">0</div>
+              <div class="hero-metric-subtitle">消费时优先扣减月包积分；充值包积分永久有效。</div>
+            </div>
+            <div id="hero-metric-verify" style="display:none;">
+              <div class="hero-metric-label" style="color:var(--accent-2);font-size:1.05rem;">📧 完成邮箱验证</div>
+              <div class="hero-metric-subtitle" style="margin:8px 0 14px;">验证通过后解锁全部功能，新用户自动到账 <strong>500 积分</strong>。</div>
+              <div class="action-stack">
+                <div class="inline-form">
+                  <button type="button" id="hero-send-code-btn">发送邮箱验证码</button>
+                  <span class="helper-text" id="hero-send-msg"></span>
+                </div>
+                <div class="inline-form">
+                  <input id="hero-code-input" class="text-input" type="text" inputmode="numeric" maxlength="8" placeholder="输入邮箱验证码" />
+                  <button type="button" id="hero-confirm-btn">确认验证</button>
+                </div>
+                <div class="helper-text" id="hero-confirm-msg"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -876,7 +1086,7 @@ def render_portal_html() -> str:
             <div class="info-value" id="invite-binding-status">加载中…</div>
           </div>
           <div class="action-stack">
-            <div class="helper-text">新用户无论是否被邀请，只要邮箱验证成功都会获得 500 积分；如果是被邀请来的，邀请人也会在你验证成功后获得 500 积分。</div>
+              <div class="helper-text">新用户绑定邀请码，新老用户均额外赠送500积分</div>
             <div class="inline-form">
               <input id="invite-code-input" class="text-input" type="text" maxlength="32" placeholder="输入邀请人的邀请码" />
               <button type="button" id="bind-invite-code-button">绑定邀请码</button>
@@ -908,7 +1118,7 @@ def render_portal_html() -> str:
                 <button type="button" class="read-all-link" id="mark-notifications-unread">全部标为未读</button>
               </div>
             </div>
-            <div class="card-note" id="notifications-panel-note">统一查看充值到账、余额提醒、活动提醒和功能更新。当前浏览器会保留你的已读状态，刷新页面不会重置。</div>
+            <div class="card-note" id="notifications-panel-note">统一查看充值到账、邀请奖励、余额提醒和套餐状态，已读状态会随账号保存在数据库。</div>
             <div id="notifications-meta" class="notification-meta">加载中…</div>
             <div style="height: 14px;"></div>
             <div id="notifications-body" class="notifications-list"></div>
@@ -1026,6 +1236,27 @@ def render_portal_html() -> str:
 </div>
 </div>
 
+<div class="contact-modal" id="wechat-contact-modal" hidden>
+  <div class="contact-modal-card" role="dialog" aria-modal="true" aria-labelledby="wechat-contact-title">
+    <div class="contact-modal-top">
+      <div>
+        <div class="contact-modal-title" id="wechat-contact-title">微信联系</div>
+        <div class="contact-modal-note">扫码即可添加微信，也可以直接复制微信号 xiamimate。</div>
+      </div>
+      <button type="button" class="contact-modal-close" id="wechat-contact-close" aria-label="关闭">×</button>
+    </div>
+    __WECHAT_QR_HTML__
+    <div class="wechat-id-box">
+      <div class="wechat-id-label">微信号</div>
+      <div class="wechat-id-value" id="wechat-contact-id">xiamimate</div>
+    </div>
+    <div class="contact-modal-actions">
+      <button type="button" class="contact-action-btn" id="wechat-contact-copy">复制微信号</button>
+      <span class="contact-inline-status" id="wechat-contact-status"></span>
+    </div>
+  </div>
+</div>
+
 <script>
 (function() {
   var portalToken = new URLSearchParams(location.search).get("t") || "";
@@ -1055,11 +1286,18 @@ def render_portal_html() -> str:
   const inviteCodeInput = document.getElementById("invite-code-input");
   const bindInviteCodeButton = document.getElementById("bind-invite-code-button");
   const bindInviteCodeMessage = document.getElementById("bind-invite-code-message");
+  const portalLogoutButton = document.getElementById("portal-logout-button");
+  const wechatContactTrigger = document.getElementById("wechat-contact-trigger");
+  const wechatContactModal = document.getElementById("wechat-contact-modal");
+  const wechatContactClose = document.getElementById("wechat-contact-close");
+  const wechatContactCopy = document.getElementById("wechat-contact-copy");
+  const wechatContactStatus = document.getElementById("wechat-contact-status");
   const topupViewButtons = document.querySelectorAll("[data-topup-view]");
   const notificationsBody = document.getElementById("notifications-body");
-  const notificationState = { category: "system", readMap: {}, storageKey: "" };
+  const notificationState = { category: "system", items: [] };
   var currentAccountData = null;
   var verificationGateState = { enforced: false, verified: false };
+  var wechatContactId = "xiamimate";
 
   navItems.forEach(function(item) {
     item.addEventListener("click", function() {
@@ -1084,15 +1322,21 @@ def render_portal_html() -> str:
 
   if (markNotificationsReadButton) {
     markNotificationsReadButton.addEventListener("click", function() {
-      updateNotificationReadStateForCategory(notificationState.category, true);
-      renderNotifications(currentAccountData || {});
+      updateNotificationReadStateForCategory(notificationState.category, true).then(function() {
+        renderNotifications(currentAccountData || {});
+      }).catch(function(error) {
+        showError("更新通知状态失败：" + error.message);
+      });
     });
   }
 
   if (markNotificationsUnreadButton) {
     markNotificationsUnreadButton.addEventListener("click", function() {
-      updateNotificationReadStateForCategory(notificationState.category, false);
-      renderNotifications(currentAccountData || {});
+      updateNotificationReadStateForCategory(notificationState.category, false).then(function() {
+        renderNotifications(currentAccountData || {});
+      }).catch(function(error) {
+        showError("更新通知状态失败：" + error.message);
+      });
     });
   }
 
@@ -1110,8 +1354,12 @@ def render_portal_html() -> str:
       if (!notificationId) {
         return;
       }
-      toggleNotificationRead(notificationId);
-      renderNotifications(currentAccountData || {});
+      var currentNotification = findNotificationById(notificationId);
+      updateNotificationReadState([notificationId], !currentNotification || !currentNotification.read_at).then(function() {
+        renderNotifications(currentAccountData || {});
+      }).catch(function(error) {
+        showError("更新通知状态失败：" + error.message);
+      });
     });
   }
 
@@ -1154,11 +1402,68 @@ def render_portal_html() -> str:
       bindInviteCodeMessage.textContent = "绑定中…";
       apiPost("/portal/api/account/referral/bind", { invite_code: inviteCode }).then(function(data) {
         if (inviteCodeInput) inviteCodeInput.value = "";
-        bindInviteCodeMessage.textContent = "邀请码绑定成功。若你已完成邮箱验证，邀请奖励也已同步结算。";
+        bindInviteCodeMessage.textContent = "邀请码绑定成功，额外 500 积分已到账。完成邮箱验证后，邀请人也会获得奖励。";
         renderAccount(data);
       }).catch(function(error) {
         bindInviteCodeMessage.textContent = "绑定失败：" + error.message;
       });
+    });
+  }
+
+  if (portalLogoutButton) {
+    portalLogoutButton.addEventListener("click", function() {
+      signOutOpenWebUI();
+    });
+  }
+
+  function openWechatModal() {
+    if (!wechatContactModal) return;
+    wechatContactModal.hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeWechatModal() {
+    if (!wechatContactModal) return;
+    wechatContactModal.hidden = true;
+    document.body.style.overflow = "";
+  }
+
+  if (wechatContactTrigger) {
+    wechatContactTrigger.addEventListener("click", openWechatModal);
+  }
+
+  if (wechatContactClose) {
+    wechatContactClose.addEventListener("click", closeWechatModal);
+  }
+
+  if (wechatContactModal) {
+    wechatContactModal.addEventListener("click", function(event) {
+      if (event.target === wechatContactModal) {
+        closeWechatModal();
+      }
+    });
+  }
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape" && wechatContactModal && !wechatContactModal.hidden) {
+      closeWechatModal();
+    }
+  });
+
+  if (wechatContactCopy) {
+    wechatContactCopy.addEventListener("click", function() {
+      var done = function(message) {
+        if (wechatContactStatus) wechatContactStatus.textContent = message;
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(wechatContactId).then(function() {
+          done("微信号已复制，可以直接到微信里粘贴添加。");
+        }).catch(function() {
+          done("复制失败，请手动添加微信号：" + wechatContactId);
+        });
+        return;
+      }
+      done("当前浏览器不支持自动复制，请手动添加微信号：" + wechatContactId);
     });
   }
 
@@ -1198,18 +1503,97 @@ def render_portal_html() -> str:
       item.setAttribute("aria-disabled", locked ? "true" : "false");
       item.title = locked ? "完成邮箱验证后才能进入此页面" : "";
     });
+
+    // ── Hero metric: show verification form or balance ──
+    var heroBalance = document.getElementById("hero-metric-balance");
+    var heroVerify = document.getElementById("hero-metric-verify");
+    if (heroBalance && heroVerify) {
+      if (enforced && !verified) {
+        heroBalance.style.display = "none";
+        heroVerify.style.display = "";
+        // Wire up hero verification buttons (idempotent)
+        var heroSendBtn = document.getElementById("hero-send-code-btn");
+        var heroConfirmBtn = document.getElementById("hero-confirm-btn");
+        var heroCodeInput = document.getElementById("hero-code-input");
+        var heroSendMsg = document.getElementById("hero-send-msg");
+        var heroConfirmMsg = document.getElementById("hero-confirm-msg");
+        if (heroSendBtn && !heroSendBtn._wired) {
+          heroSendBtn._wired = true;
+          heroSendBtn.addEventListener("click", function() {
+            heroSendMsg.textContent = "发送中…";
+            apiPost("/portal/api/account/email-verification/request").then(function(data) {
+              heroSendMsg.textContent = "验证码已发送到 " + (data.email || "当前邮箱") + "，请查收邮箱。";
+              if (verificationRequestMessage) verificationRequestMessage.textContent = heroSendMsg.textContent;
+            }).catch(function(err) {
+              heroSendMsg.textContent = "发送失败：" + err.message;
+            });
+          });
+        }
+        if (heroConfirmBtn && !heroConfirmBtn._wired) {
+          heroConfirmBtn._wired = true;
+          heroConfirmBtn.addEventListener("click", function() {
+            var code = (heroCodeInput && heroCodeInput.value || "").trim();
+            if (!code) { heroConfirmMsg.textContent = "请先输入邮箱验证码。"; return; }
+            heroConfirmMsg.textContent = "验证中…";
+            apiPost("/portal/api/account/email-verification/confirm", { code: code }).then(function(data) {
+              if (heroCodeInput) heroCodeInput.value = "";
+              heroConfirmMsg.textContent = "邮箱验证成功！注册已完成，新用户奖励已自动结算。";
+              renderAccount(data);
+            }).catch(function(err) {
+              heroConfirmMsg.textContent = "验证失败：" + err.message;
+            });
+          });
+        }
+      } else {
+        heroBalance.style.display = "";
+        heroVerify.style.display = "none";
+      }
+    }
+
     var banner = document.getElementById("verification-gate-banner");
     if (!banner) {
       return;
     }
     if (enforced && !verified) {
       banner.style.display = "block";
-      banner.textContent = "当前已开启首次登录邮箱验证门槛。完成邮箱验证前，你只能停留在账户信息页并使用验证码验证入口，充值、消费、通知和套餐能力会被暂时锁定。";
+      banner.innerHTML = [
+        '<div>当前已开启首次登录邮箱验证门槛。完成邮箱验证前，你只能停留在账户信息页并使用验证码验证入口，充值、消费、通知和套餐能力会被暂时锁定。</div>',
+        '<div class="gate-banner-actions">',
+        '<button type="button" class="top-secondary-link" id="verification-gate-logout-button">退出当前登录</button>',
+        '</div>'
+      ].join('');
+      var gateLogoutButton = document.getElementById("verification-gate-logout-button");
+      if (gateLogoutButton) {
+        gateLogoutButton.addEventListener("click", function() {
+          signOutOpenWebUI();
+        });
+      }
       setActivePage("account", false);
       return;
     }
     banner.style.display = "none";
-    banner.textContent = "";
+    banner.innerHTML = "";
+  }
+
+  function clearOpenWebUICookies() {
+    ["token", "oui-session", "oauth_id_token"].forEach(function(name) {
+      document.cookie = name + '=; Max-Age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax';
+    });
+  }
+
+  function signOutOpenWebUI() {
+    var signoutUrl = "/api/v1/auths/signout";
+    fetch(signoutUrl, {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store"
+    }).catch(function() {
+      return null;
+    }).finally(function() {
+      clearOpenWebUICookies();
+      try { localStorage.removeItem('token'); } catch(e) {}
+      window.location.href = "/";
+    });
   }
 
   // ── API helpers ──
@@ -1249,81 +1633,41 @@ def render_portal_html() -> str:
   document.getElementById("route-guide-link").href = withPortalToken("/portal/guide");
   document.getElementById("open-webui-home-link").href = "__OPENWEBUI_HOME_URL__";
 
-  function buildNotificationStorageKey(userId) {
-    return "xiamimate.portal.notifications:" + String(userId || "anonymous");
-  }
-
-  function loadNotificationState(userId) {
-    notificationState.storageKey = buildNotificationStorageKey(userId);
-    notificationState.readMap = {};
-    try {
-      var raw = window.localStorage.getItem(notificationState.storageKey);
-      if (!raw) {
-        return;
-      }
-      var parsed = JSON.parse(raw);
-      var readIds = Array.isArray(parsed && parsed.readIds) ? parsed.readIds : [];
-      readIds.forEach(function(notificationId) {
-        if (notificationId) {
-          notificationState.readMap[String(notificationId)] = true;
-        }
-      });
-    } catch (error) {
-      notificationState.readMap = {};
+  function syncNotificationItems(items) {
+    notificationState.items = Array.isArray(items) ? items.slice() : [];
+    if (currentAccountData) {
+      currentAccountData.notifications = notificationState.items.slice();
     }
   }
 
-  function persistNotificationState() {
-    if (!notificationState.storageKey) {
-      return;
-    }
-    try {
-      var readIds = Object.keys(notificationState.readMap).filter(function(notificationId) {
-        return notificationState.readMap[notificationId];
-      });
-      window.localStorage.setItem(notificationState.storageKey, JSON.stringify({ readIds: readIds }));
-    } catch (error) {
-      // Ignore storage failures and keep the page usable.
-    }
-  }
-
-  function isNotificationRead(notificationId) {
-    return !!notificationState.readMap[String(notificationId || "")];
-  }
-
-  function setNotificationRead(notificationId, read) {
+  function findNotificationById(notificationId) {
     var normalizedId = String(notificationId || "");
-    if (!normalizedId) {
-      return;
+    for (var i = 0; i < notificationState.items.length; i += 1) {
+      var item = notificationState.items[i] || {};
+      if (String(item.notification_id || item.id || "") === normalizedId) {
+        return item;
+      }
     }
-    if (read) {
-      notificationState.readMap[normalizedId] = true;
-    } else {
-      delete notificationState.readMap[normalizedId];
-    }
-    persistNotificationState();
+    return null;
   }
 
-  function toggleNotificationRead(notificationId) {
-    setNotificationRead(notificationId, !isNotificationRead(notificationId));
-  }
-
-  function applyNotificationReadState(groups) {
-    Object.keys(groups).forEach(function(category) {
-      groups[category] = (groups[category] || []).map(function(item) {
-        return Object.assign({}, item, { unread: !isNotificationRead(item.id) });
-      });
+  function updateNotificationReadState(notificationIds, read) {
+    return apiPost("/portal/api/notifications/read-state", {
+      notification_ids: notificationIds,
+      read: !!read,
+    }).then(function(data) {
+      syncNotificationItems(data.notifications || []);
+      return data;
     });
-    return groups;
   }
 
   function updateNotificationReadStateForCategory(category, read) {
-    if (!currentAccountData) {
-      return;
-    }
-    var groups = applyNotificationReadState(buildNotificationGroups(currentAccountData));
-    (groups[category] || []).forEach(function(item) {
-      setNotificationRead(item.id, read);
+    return apiPost("/portal/api/notifications/read-state", {
+      category: category === "user" ? "user" : "system",
+      read: !!read,
+    }).then(function(data) {
+      syncNotificationItems(data.notifications || []);
+      return data;
     });
   }
 
@@ -1374,7 +1718,7 @@ def render_portal_html() -> str:
     var emailVerified = !!identityVerification.email_verified;
     var invitedBy = identityVerification.invited_by || null;
     applyVerificationGate(identityVerification);
-    loadNotificationState(user.user_id || user.email || "anonymous");
+    syncNotificationItems(data.notifications || []);
     var pa = data.points_account || {};
     var balanceBreakdown = data.balance_breakdown || {};
     var subs = data.subscriptions || [];
@@ -1435,12 +1779,16 @@ def render_portal_html() -> str:
     if (inviteBindingStatusValue) {
       inviteBindingStatusValue.innerHTML = invitedBy
         ? ("已绑定邀请人 <strong>" + esc(invitedBy.inviter_display_name || invitedBy.inviter_user_id || "-") + "</strong>（邀请码 " + esc(invitedBy.invite_code || "-") + "）")
-        : "暂未绑定邀请人，不影响你自己的新用户 500 积分。";
+        : (emailVerified
+          ? "当前账号已完成邮箱验证，不能再绑定邀请人。"
+          : "暂未绑定邀请人；绑定邀请码后可额外获得 500 积分。");
     }
     if (bindInviteCodeMessage) {
       bindInviteCodeMessage.textContent = invitedBy
-        ? "当前账号已绑定邀请关系；若你已完成邮箱验证，邀请人奖励已同步处理。"
-        : "如果你是被邀请来的，请先绑定邀请码，再完成邮箱验证。";
+        ? "当前账号已绑定邀请关系；你已获得绑定奖励，完成邮箱验证后邀请人奖励会继续自动处理。"
+        : (emailVerified
+          ? "当前账号已完成邮箱验证，邀请码绑定入口已关闭。"
+          : "如果你是被邀请来的，请先绑定邀请码，可额外获得 500 积分；完成邮箱验证后邀请人也会得到奖励。");
     }
     if (bindInviteCodeButton) {
       bindInviteCodeButton.disabled = !identityVerification.can_bind_invite_code;
@@ -1521,61 +1869,19 @@ def render_portal_html() -> str:
   }
 
   function buildNotificationGroups(data) {
+    syncNotificationItems((data && data.notifications) || notificationState.items || []);
     var groups = { user: [], system: [] };
-    var pointsAccount = data.points_account || {};
-    var recentOrders = data.recent_orders || [];
-    var activeSubscription = findActiveSubscription(data.subscriptions || []);
-    var user = data.user || {};
-    recentOrders.filter(function(order) {
-      return order.status === "paid";
-    }).slice(0, 4).forEach(function(order) {
-      var isSubscription = order.product_type === "monthly_subscription";
-      groups.system.push({
-        id: (isSubscription ? "system:subscription-paid:" : "system:recharge-paid:") + String(order.order_id || order.provider_trade_no || order.created_at || "order"),
-        tag: isSubscription ? "套餐开通" : "充值到账",
-        level: "success",
-        title: isSubscription ? "订阅已生效" : "充值已到账",
-        desc: isSubscription
-          ? (order.package_code || "当前套餐") + " 已开通，本次到账 " + intVal(order.points_amount) + " 积分。"
-          : (order.package_code || "充值订单") + " 支付成功，本次到账 " + intVal(order.points_amount) + " 积分。",
-        time: order.paid_at || order.created_at || "-",
+    (notificationState.items || []).forEach(function(item) {
+      var category = item.category === "user" ? "user" : "system";
+      groups[category].push({
+        id: String(item.notification_id || item.id || ""),
+        tag: item.tag || "通知",
+        level: item.level || "info",
+        title: item.title || "新通知",
+        desc: item.body || item.desc || "",
+        time: item.occurred_at || item.created_at || item.updated_at || "-",
+        unread: !item.read_at,
       });
-    });
-    if (intVal(pointsAccount.balance_points) > 0 && intVal(pointsAccount.balance_points) <= 500) {
-      groups.user.push({
-        id: "user:low-balance:" + String(pointsAccount.updated_at || user.updated_at || user.user_id || "balance"),
-        tag: "余额提醒",
-        level: "warning",
-        title: "账户余额偏低",
-        desc: "当前可用积分低于 500，建议提前查看订阅与充值页，避免使用中断。",
-        time: pointsAccount.updated_at || user.updated_at || "-",
-      });
-    }
-    if (activeSubscription) {
-      groups.system.push({
-        id: "system:subscription-period:" + String(activeSubscription.subscription_id || activeSubscription.package_code || "subscription") + ":" + String(activeSubscription.current_period_end || ""),
-        tag: "套餐有效期",
-        level: "info",
-        title: "当前套餐有效中",
-        desc: "当前套餐自 " + fmtTimeFull(activeSubscription.current_period_start) + " 生效，至 " + fmtTimeFull(activeSubscription.current_period_end) + " 到期；月包积分将在有效期结束后自动清零。",
-        time: activeSubscription.current_period_start || new Date().toISOString(),
-      });
-    }
-    groups.system.push({
-      id: "system:invoice-entry:2026-04-17",
-      tag: "活动提醒",
-      level: "info",
-      title: "发票管理入口已预留",
-      desc: "充值/赠送记录页已经预留发票管理二级页，后续可直接接企业抬头、邮箱收票、按订单申请开票和开票状态跟踪。",
-      time: "2026-04-17T00:00:00Z",
-    });
-    groups.system.push({
-      id: "system:notifications-persistence:2026-04-17",
-      tag: "功能更新",
-      level: "info",
-      title: "通知中心已支持已读状态保留",
-      desc: "通知中心支持系统通知和用户通知两类消息，并会在当前浏览器保留你的已读状态，刷新页面不会重置。",
-      time: "2026-04-17T00:00:00Z",
     });
     return groups;
   }
@@ -1592,13 +1898,13 @@ def render_portal_html() -> str:
     }
     if (panelNote) {
       panelNote.textContent = notificationState.category === "user"
-        ? "用于查看与你账户直接相关的到账、余额和套餐提醒。"
-        : "用于查看系统活动、功能更新和套餐有效期规则等平台通知，已读状态会在当前浏览器保留。";
+        ? "用于查看与你账户直接相关的邀请奖励、余额提醒等消息，已读状态会随账号保存在数据库。"
+        : "用于查看充值到账、套餐状态等平台通知，已读状态会随账号保存在数据库。";
     }
   }
 
   function renderNotifications(data) {
-    var groups = applyNotificationReadState(buildNotificationGroups(data));
+    var groups = buildNotificationGroups(data);
     var items = groups[notificationState.category] || [];
     var unreadCount = items.filter(function(item) { return item.unread; }).length;
     var totalUnread = Object.keys(groups).reduce(function(sum, key) {
@@ -1626,7 +1932,75 @@ def render_portal_html() -> str:
         '<div class="notification-desc">' + esc(item.desc) + '</div>' +
         '<div class="notification-footer"><div class="notification-meta">更新时间：' + esc(fmtTime(item.time)) + '</div><button type="button" class="notification-toggle-link" data-notification-toggle-id="' + esc(item.id) + '">' + toggleLabel + '</button></div>' +
       '</div>';
-    }).join("") : '<div class="notification-card"><div class="notification-title">暂无通知</div><div class="notification-desc">当前没有需要提醒的充值到账、余额提醒或功能更新。</div></div>';
+    }).join("") : '<div class="notification-card"><div class="notification-title">暂无通知</div><div class="notification-desc">当前没有需要提醒的账户消息。</div></div>';
+  }
+
+  function localizeLedgerDescription(row) {
+    var description = String((row && row.description) || "").trim();
+    var eventType = String((row && row.event_type) || "").trim();
+    var mapping = {
+      "inviter reward points": "邀请新用户注册成功奖励积分",
+      "signup gift points": "新用户注册赠送积分",
+      "promotion reward": "活动赠送积分"
+    };
+    if (mapping[description]) {
+      return mapping[description];
+    }
+    if (description) {
+      return description;
+    }
+    if (eventType === "referral_invited_reward") {
+      return "绑定邀请码额外奖励积分";
+    }
+    if (eventType === "referral_inviter_reward") {
+      return "邀请新用户注册成功奖励积分";
+    }
+    if (eventType === "signup_gift") {
+      return "新用户注册赠送积分";
+    }
+    return "";
+  }
+
+  function localizeLedgerEntryType(entryType, eventType) {
+    var mapping = {
+      consume: "消费",
+      refund: "退款",
+      grant: "赠送",
+      recharge: "充值到账",
+      signup_gift: "注册赠送",
+      admin_grant: "后台加积分",
+      subscription_grant: "订阅发放",
+      promotion_reward: "活动奖励",
+      subscription_expire: "套餐到期清零",
+      daily_quota_reset: "每日额度重置"
+    };
+    var normalized = String(entryType || "").trim().toLowerCase();
+    if (mapping[normalized]) {
+      return mapping[normalized];
+    }
+    return localizeLedgerEventType(eventType);
+  }
+
+  function localizeLedgerEventType(eventType) {
+    var mapping = {
+      llm_request: "LLM 请求",
+      workflow_run: "Workflow 请求",
+      kb_retrieve: "知识库检索",
+      dify_knowledge_retrieve: "知识库检索",
+      product_api_call: "商品 API 检索",
+      web_search: "网络搜索",
+      recharge: "充值到账",
+      signup_gift: "新用户注册赠送",
+      referral_invited_reward: "绑定邀请码奖励",
+      referral_inviter_reward: "邀请新用户注册奖励",
+      subscription_grant: "订阅积分发放",
+      subscription_expire: "套餐到期清零",
+      daily_quota_reset: "每日额度重置",
+      admin_grant: "后台加积分",
+      promotion_reward: "活动奖励"
+    };
+    var normalized = String(eventType || "").trim().toLowerCase();
+    return mapping[normalized] || String(eventType || "");
   }
 
   function renderInvoiceSummary(data) {
@@ -1704,9 +2078,9 @@ def render_portal_html() -> str:
       var delta = intVal(r.points_delta);
       var cls = delta >= 0 ? "positive" : "negative";
       var sign = delta >= 0 ? "+" : "";
-      return '<tr><td>' + fmtTime(r.created_at) + '</td><td>' + esc(r.entry_type || "") +
-        '</td><td>' + esc(r.event_type || "") + '</td><td class="' + cls + '">' + sign + delta +
-        '</td><td>' + intVal(r.balance_after_points) + '</td><td>' + esc(r.description || "") + '</td></tr>';
+      return '<tr><td>' + fmtTime(r.created_at) + '</td><td>' + esc(localizeLedgerEntryType(r.entry_type, r.event_type)) +
+        '</td><td>' + esc(localizeLedgerEventType(r.event_type)) + '</td><td class="' + cls + '">' + sign + delta +
+        '</td><td>' + intVal(r.balance_after_points) + '</td><td>' + esc(localizeLedgerDescription(r)) + '</td></tr>';
     }).join("") : renderEmptyRow(6, "暂无消费记录");
 
     document.getElementById("ledger-pager").innerHTML =
@@ -1738,9 +2112,9 @@ def render_portal_html() -> str:
 
     document.getElementById("topup-body").innerHTML = rows.length ? rows.map(function(r) {
       var delta = intVal(r.points_delta);
-      return '<tr><td>' + fmtTime(r.created_at) + '</td><td>' + esc(r.entry_type || "") +
+      return '<tr><td>' + fmtTime(r.created_at) + '</td><td>' + esc(localizeLedgerEntryType(r.entry_type, r.event_type)) +
         '</td><td class="positive">+' + delta + '</td><td>' + intVal(r.balance_after_points) +
-        '</td><td>' + esc(r.description || "") + '</td></tr>';
+        '</td><td>' + esc(localizeLedgerDescription(r)) + '</td></tr>';
     }).join("") : renderEmptyRow(5, "暂无充值或赠送记录");
 
     document.getElementById("topup-pager").innerHTML =
@@ -1757,5 +2131,19 @@ def render_portal_html() -> str:
   setActivePage(initialPage || "account", false);
 })();
 </script>
+<script>
+ window.difyChatbotConfig = {
+  token: 'QmSaZ6H42s0ZdaxM',
+  baseUrl: 'http://localhost',
+  inputs: {},
+  systemVariables: {},
+  userVariables: {},
+ }
+</script>
+<script
+ src="http://localhost/embed.min.js"
+ id="QmSaZ6H42s0ZdaxM"
+ defer>
+</script>
 </body>
-</html>""".replace("__OPENWEBUI_HOME_URL__", openwebui_home_url)
+</html>""".replace("__OPENWEBUI_HOME_URL__", openwebui_home_url).replace("__WECHAT_QR_HTML__", wechat_qr_html)

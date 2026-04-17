@@ -59,6 +59,20 @@ def _dify_workflow_api_key() -> str:
     return api_key
 
 
+def _dify_web_search_app_id() -> str:
+    app_id = (os.environ.get("DIFY_WEB_SEARCH_APP_ID") or "").strip()
+    if not app_id:
+        raise HTTPException(status_code=500, detail="DIFY_WEB_SEARCH_APP_ID is not configured")
+    return app_id
+
+
+def _dify_web_search_api_key() -> str:
+    api_key = (os.environ.get("DIFY_WEB_SEARCH_APP_API_KEY") or "").strip()
+    if not api_key:
+        raise HTTPException(status_code=500, detail="DIFY_WEB_SEARCH_APP_API_KEY is not configured")
+    return api_key
+
+
 def _dify_dataset_api_key() -> str:
     api_key = (os.environ.get("DIFY_DATASET_API_KEY") or "").strip()
     if not api_key:
@@ -106,7 +120,7 @@ def _request_error_detail(response: http_requests.Response | None, exc: Exceptio
 # Dify proxies
 # ---------------------------------------------------------------------------
 
-def _proxy_dify_workflow_blocking(query: str, user: str) -> dict[str, Any]:
+def _proxy_dify_chat_blocking(query: str, user: str, api_key: str) -> dict[str, Any]:
     response = None
     try:
         response = http_requests.post(
@@ -118,7 +132,7 @@ def _proxy_dify_workflow_blocking(query: str, user: str) -> dict[str, Any]:
                 "user": user,
             },
             headers={
-                "Authorization": f"Bearer {_dify_workflow_api_key()}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
                 "Host": "localhost",
             },
@@ -132,7 +146,7 @@ def _proxy_dify_workflow_blocking(query: str, user: str) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=f"invalid Dify JSON response: {str(exc)}")
 
 
-def _proxy_dify_workflow_stream(query: str, user: str) -> http_requests.Response:
+def _proxy_dify_chat_stream(query: str, user: str, api_key: str) -> http_requests.Response:
     response = None
     try:
         response = http_requests.post(
@@ -144,7 +158,7 @@ def _proxy_dify_workflow_stream(query: str, user: str) -> http_requests.Response
                 "user": user,
             },
             headers={
-                "Authorization": f"Bearer {_dify_workflow_api_key()}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
                 "Host": "localhost",
             },
@@ -157,6 +171,24 @@ def _proxy_dify_workflow_stream(query: str, user: str) -> http_requests.Response
         if response is not None:
             response.close()
         raise HTTPException(status_code=502, detail=_request_error_detail(response, exc)[:4000])
+
+
+def _proxy_dify_workflow_blocking(query: str, user: str) -> dict[str, Any]:
+    return _proxy_dify_chat_blocking(query=query, user=user, api_key=_dify_workflow_api_key())
+
+
+def _proxy_dify_workflow_stream(query: str, user: str) -> http_requests.Response:
+    return _proxy_dify_chat_stream(query=query, user=user, api_key=_dify_workflow_api_key())
+
+
+def _proxy_dify_web_search_blocking(query: str, user: str) -> dict[str, Any]:
+    _dify_web_search_app_id()
+    return _proxy_dify_chat_blocking(query=query, user=user, api_key=_dify_web_search_api_key())
+
+
+def _proxy_dify_web_search_stream(query: str, user: str) -> http_requests.Response:
+    _dify_web_search_app_id()
+    return _proxy_dify_chat_stream(query=query, user=user, api_key=_dify_web_search_api_key())
 
 
 def _proxy_knowledge_retrieve(query: str, top_k: int) -> str:

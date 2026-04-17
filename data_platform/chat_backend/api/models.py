@@ -73,6 +73,21 @@ class AdminGrantPointsRequest(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class CreateSystemNotificationBroadcastRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=120)
+    body: str = Field(..., min_length=1, max_length=2000)
+    tag: str = Field(default="系统通知", min_length=1, max_length=24)
+    level: str = Field(default="info", min_length=1, max_length=16)
+    action_url: str | None = Field(default=None, max_length=255)
+
+    @validator("level")
+    def _validate_level(cls, value: str) -> str:  # noqa: N805
+        normalized = value.strip().lower()
+        if normalized not in {"info", "success", "warning", "error"}:
+            raise ValueError(f"unsupported notification level: {value}")
+        return normalized
+
+
 class IdentityExchangeRequest(BaseModel):
     user_id: str = Field(..., min_length=1)
     email: str | None = None
@@ -85,6 +100,21 @@ class ConfirmEmailVerificationRequest(BaseModel):
 
 class BindReferralCodeRequest(BaseModel):
     invite_code: str = Field(..., min_length=4, max_length=32)
+
+
+class UpdateNotificationReadStateRequest(BaseModel):
+    read: bool = True
+    category: str | None = None
+    notification_ids: list[str] = Field(default_factory=list)
+
+    @validator("category")
+    def _validate_category(cls, value: str | None) -> str | None:  # noqa: N805
+        if value is None:
+            return value
+        normalized = value.strip().lower()
+        if normalized not in {"system", "user"}:
+            raise ValueError(f"unsupported notification category: {value}")
+        return normalized
 
 
 class ChargePointsEvent(BaseModel):

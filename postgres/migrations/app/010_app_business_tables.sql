@@ -287,6 +287,40 @@ CREATE TABLE IF NOT EXISTS app.daily_credit_quota_state (
     PRIMARY KEY (user_id, quota_date)
 );
 
+CREATE TABLE IF NOT EXISTS app.user_notification (
+    notification_id   TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    notification_key  TEXT NOT NULL,
+    category          TEXT NOT NULL,
+    tag               TEXT NOT NULL,
+    level             TEXT NOT NULL DEFAULT 'info',
+    title             TEXT NOT NULL,
+    body              TEXT NOT NULL,
+    event_type        TEXT,
+    resource_type     TEXT,
+    resource_id       TEXT,
+    action_url        TEXT,
+    read_at           TIMESTAMPTZ,
+    occurred_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, notification_key)
+);
+
+CREATE TABLE IF NOT EXISTS app.system_notification_broadcast (
+    broadcast_id           TEXT PRIMARY KEY,
+    operator_id            TEXT NOT NULL,
+    target_scope           TEXT NOT NULL DEFAULT 'all_active',
+    tag                    TEXT NOT NULL,
+    level                  TEXT NOT NULL DEFAULT 'info',
+    title                  TEXT NOT NULL,
+    body                   TEXT NOT NULL,
+    action_url             TEXT,
+    delivered_user_count   INTEGER NOT NULL DEFAULT 0,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS app.billing_event_pricing (
     event_type      TEXT PRIMARY KEY,
     display_name    TEXT NOT NULL,

@@ -25,6 +25,7 @@ from data_platform.chat_backend.infra.settings import (
     DEFAULT_PROMOTION_RULES,
     GUEST_DAILY_POINTS,
     POINTS_PRICE_VERSION,
+    REFERRAL_INVITED_REWARD_POINTS,
     REFERRAL_INVITER_REWARD_POINTS,
     SIGNUP_GIFT_POINTS,
     _current_quota_date,
@@ -39,6 +40,7 @@ from data_platform.chat_backend.infra.postgres import (
 )
 from data_platform.chat_backend.domains.billing.models import UserCreditAccount
 from data_platform.chat_backend.domains.identity.models import RequestUser
+from data_platform.chat_backend.domains.notifications.service import _upsert_user_notification
 
 
 # ---------------------------------------------------------------------------
@@ -857,7 +859,7 @@ def _grant_signup_gift_if_needed(conn, user_id: str) -> UserCreditAccount:
         entry_type="signup_gift",
         event_type="signup_gift",
         reference_id=user_id,
-        description="signup gift points",
+        description="新用户注册赠送积分",
         meta_json={
             "points_price_version": POINTS_PRICE_VERSION,
             "promotion_rule_code": signup_rule["rule_code"] if signup_rule else None,
@@ -875,6 +877,16 @@ def _resolve_referral_inviter_reward_points(conn) -> tuple[int, dict[str, Any] |
     rule = rules[0]
     if rule.get("benefit_type") != "points_bonus":
         return REFERRAL_INVITER_REWARD_POINTS, rule
+    return max(0, int(rule.get("benefit_value") or 0)), rule
+
+
+def _resolve_referral_invited_reward_points(conn) -> tuple[int, dict[str, Any] | None]:
+    rules = _list_active_promotion_rules(conn, ["referral_invited_reward"])
+    if not rules:
+        return REFERRAL_INVITED_REWARD_POINTS, None
+    rule = rules[0]
+    if rule.get("benefit_type") != "points_bonus":
+        return REFERRAL_INVITED_REWARD_POINTS, rule
     return max(0, int(rule.get("benefit_value") or 0)), rule
 
 
@@ -971,7 +983,7 @@ def _grant_referral_inviter_reward_if_needed(conn, invited_user_id: str) -> dict
             entry_type="promotion_reward",
             event_type="referral_inviter_reward",
             reference_id=invited_user_id,
-            description="inviter reward points",
+            description="邀请新用户注册成功奖励积分",
             meta_json={
                 "points_price_version": POINTS_PRICE_VERSION,
                 "invite_code": binding.get("invite_code"),
@@ -980,7 +992,125 @@ def _grant_referral_inviter_reward_if_needed(conn, invited_user_id: str) -> dict
             },
             granted_points=reward_points,
         )
+        invited_display = str(invited_user.get("display_name") or invited_user.get("email") or invited_user_id)
+        _upsert_user_notification(
+            conn,
+            user_id=binding["inviter_user_id"],
+            notification_key=f"referral_inviter_reward:{invited_user_id}",
+            category="user",
+            tag="邀请奖励",
+            level="success",
+            title="邀请新用户注册成功",
+            body=f"你邀请的用户 {invited_display} 已完成注册验证，系统已赠送 {reward_points} 积分。",
+            event_type="referral_inviter_reward",
+            resource_type="user_referral_binding",
+            resource_id=invited_user_id,
+            action_url="/portal/notifications",
+            occurred_at=invited_user.get("email_verified_at"),
+        )
     _mark_referral_binding_rewarded(conn, invited_user_id, rewarded=True)
+    return {
+        "binding": binding,
+        "points_granted": reward_points,
+        "points_account": updated_account,
+        "ledger_entry": ledger_entry,
+    }
+
+
+def _grant_referral_invited_reward_if_needed(conn, invited_user_id: str) -> dict[str, Any] | None:
+    binding = _fetch_optional_one(
+        conn,
+        """
+        SELECT b.binding_id, b.inviter_user_id, b.invited_user_id, b.invite_code,
+               b.status, b.activated_at, b.rewarded_at, b.created_at, b.updated_at,
+               inviter.display_name AS inviter_display_name,
+               inviter.email AS inviter_email
+        FROM app.user_referral_binding b
+        JOIN app.app_user inviter ON inviter.user_id = b.inviter_user_id
+        WHERE b.invited_user_id = %s
+        LIMIT 1
+        """,
+        [invited_user_id],
+    )
+    if binding is None:
+        return None
+
+    reward_points, reward_rule = _resolve_referral_invited_reward_points(conn)
+    existing_reward = _fetch_optional_one(
+        conn,
+        """
+        SELECT entry_id
+        FROM app.credit_ledger_entry
+        WHERE user_id = %s
+          AND event_type = 'referral_invited_reward'
+          AND reference_id = %s
+        LIMIT 1
+        """,
+        [invited_user_id, binding["binding_id"]],
+    )
+    if existing_reward is not None:
+        return None
+
+    if reward_rule is not None:
+        claim_row = _create_promotion_claim(
+            conn,
+            rule_code=str(reward_rule.get("rule_code") or ""),
+            user_id=invited_user_id,
+            claim_key=invited_user_id,
+            order_id=None,
+            status="applied",
+            benefit_snapshot_json={
+                "binding_id": binding.get("binding_id"),
+                "inviter_user_id": binding.get("inviter_user_id"),
+                "inviter_display_name": binding.get("inviter_display_name"),
+                "invite_code": binding.get("invite_code"),
+                "reward_points": reward_points,
+                "rule_code": reward_rule.get("rule_code"),
+            },
+        )
+        if claim_row is None:
+            return None
+
+    ledger_entry = None
+    updated_account = None
+    if reward_points > 0:
+        updated_account, ledger_entry = _grant_points_with_ledger(
+            conn=conn,
+            user_id=invited_user_id,
+            points=reward_points,
+            entry_type="promotion_reward",
+            event_type="referral_invited_reward",
+            reference_id=str(binding.get("binding_id") or invited_user_id),
+            description="绑定邀请码奖励积分",
+            meta_json={
+                "points_price_version": POINTS_PRICE_VERSION,
+                "invite_code": binding.get("invite_code"),
+                "inviter_user_id": binding.get("inviter_user_id"),
+                "promotion_rule_code": reward_rule.get("rule_code") if reward_rule else None,
+            },
+            granted_points=reward_points,
+        )
+        inviter_display = str(
+            binding.get("inviter_display_name")
+            or binding.get("inviter_email")
+            or binding.get("inviter_user_id")
+            or "邀请人"
+        )
+        _upsert_user_notification(
+            conn,
+            user_id=invited_user_id,
+            notification_key=f"referral_invited_reward:{binding['binding_id']}",
+            category="user",
+            tag="邀请奖励",
+            level="success",
+            title="邀请码绑定成功",
+            body=f"你已绑定邀请人 {inviter_display}，系统已额外赠送 {reward_points} 积分。完成邮箱验证后，邀请人也会获得奖励。",
+            event_type="referral_invited_reward",
+            resource_type="user_referral_binding",
+            resource_id=invited_user_id,
+            action_url="/portal/account",
+            occurred_at=_utc_now(),
+        )
     return {
         "binding": binding,
         "points_granted": reward_points,
@@ -1583,6 +1713,26 @@ def _seed_billing_event_pricing(conn) -> None:
             RETURNING event_type
             """,
             [row["event_type"], row["display_name"], row["points_per_unit"], row["display_order"]],
+        )
+
+    # One-time compatible uplift for legacy 1-point single-retrieve pricing.
+    for event_type, legacy_points, target_points in (
+        ("kb_retrieve", 1, 2),
+        ("product_api_call", 1, 2),
+        ("web_search", 1, 2),
+    ):
+        _run_pg_dict_query(
+            conn,
+            """
+            UPDATE app.billing_event_pricing
+            SET points_per_unit = %s,
+                updated_at = NOW()
+            WHERE event_type = %s
+              AND points_per_unit = %s
+                            AND updated_at = created_at
+            RETURNING event_type
+            """,
+            [target_points, event_type, legacy_points],
         )
 
 
