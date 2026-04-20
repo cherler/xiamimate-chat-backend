@@ -9,7 +9,8 @@ import time
 from fastapi import HTTPException, Request
 
 from data_platform.chat_backend.infra.settings import (
-    PORTAL_BASE_URL,
+    PORTAL_INTERNAL_BASE_URL,
+    PORTAL_PUBLIC_BASE_URL,
     PORTAL_TOKEN_TTL_SECONDS,
     PORTAL_USER_ID_HEADER_NAME,
 )
@@ -42,10 +43,22 @@ def _verify_portal_token(token: str) -> str | None:
         return entry["user_id"]
 
 
-def _portal_base_url() -> str:
-    if PORTAL_BASE_URL:
-        return PORTAL_BASE_URL.rstrip("/")
+def _portal_public_base_url() -> str:
+    if PORTAL_PUBLIC_BASE_URL:
+        return PORTAL_PUBLIC_BASE_URL.rstrip("/")
     return _backend_base_url()
+
+
+def _portal_internal_base_url() -> str:
+    if PORTAL_INTERNAL_BASE_URL:
+        return PORTAL_INTERNAL_BASE_URL.rstrip("/")
+    if PORTAL_PUBLIC_BASE_URL:
+        return PORTAL_PUBLIC_BASE_URL.rstrip("/")
+    return _backend_base_url()
+
+
+def _portal_base_url() -> str:
+    return _portal_public_base_url()
 
 
 def _backend_base_url() -> str:

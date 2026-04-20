@@ -67,7 +67,7 @@ from data_platform.chat_backend.domains.billing.service import (
 from data_platform.chat_backend.domains.payments.service import _fetch_payment_order
 from data_platform.chat_backend.domains.portal.service import (
     _generate_portal_token,
-    _portal_base_url,
+    _portal_public_base_url,
 )
 from data_platform.chat_backend.domains.provider_proxy.service import (
     _proxy_dify_web_search_blocking,
@@ -110,7 +110,7 @@ def create_portal_token(request: Request) -> dict[str, Any]:
         _fetch_user(conn, user_id)
     from data_platform.chat_backend.infra.settings import PORTAL_TOKEN_TTL_SECONDS
     token = _generate_portal_token(user_id)
-    portal_url = f"{_portal_base_url()}/portal?t={token}"
+    portal_url = f"{_portal_public_base_url()}/portal?t={token}"
     return _success_response(
         "/internal/portal/create-token",
         {"token": token, "portal_url": portal_url, "ttl_seconds": PORTAL_TOKEN_TTL_SECONDS},

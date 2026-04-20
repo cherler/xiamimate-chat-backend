@@ -104,7 +104,15 @@ DEFAULT_EVENT_PRICING: list[dict[str, Any]] = [
 # Portal tokens
 # ---------------------------------------------------------------------------
 PORTAL_TOKEN_TTL_SECONDS = int(os.environ.get("CHAT_BACKEND_PORTAL_TOKEN_TTL", "1800"))
-PORTAL_BASE_URL = os.environ.get("CHAT_BACKEND_PORTAL_BASE_URL", "").strip()
+LEGACY_PORTAL_BASE_URL = os.environ.get("CHAT_BACKEND_PORTAL_BASE_URL", "").strip()
+PORTAL_PUBLIC_BASE_URL = (
+    os.environ.get("CHAT_BACKEND_PUBLIC_PORTAL_BASE_URL", "").strip()
+    or LEGACY_PORTAL_BASE_URL
+)
+PORTAL_INTERNAL_BASE_URL = (
+    os.environ.get("CHAT_BACKEND_INTERNAL_PORTAL_BASE_URL", "").strip()
+    or LEGACY_PORTAL_BASE_URL
+)
 PORTAL_USER_ID_HEADER_NAME = "X-Portal-User-Id"
 PORTAL_USER_EMAIL_HEADER_NAME = "X-Portal-User-Email"
 PORTAL_USER_NAME_HEADER_NAME = "X-Portal-User-Name"
@@ -114,8 +122,8 @@ if _portal_mock_payment_env in {"1", "true", "yes", "on"}:
 elif _portal_mock_payment_env in {"0", "false", "no", "off"}:
     PORTAL_MOCK_PAYMENT_ENABLED = False
 else:
-    _portal_base_url_lower = PORTAL_BASE_URL.lower()
-    PORTAL_MOCK_PAYMENT_ENABLED = "127.0.0.1" in _portal_base_url_lower or "localhost" in _portal_base_url_lower
+    _portal_public_base_url_lower = PORTAL_PUBLIC_BASE_URL.lower()
+    PORTAL_MOCK_PAYMENT_ENABLED = "127.0.0.1" in _portal_public_base_url_lower or "localhost" in _portal_public_base_url_lower
 
 # ---------------------------------------------------------------------------
 # Billing bundles & packages

@@ -31,8 +31,8 @@ from data_platform.chat_backend.infra.settings import (
 )
 from data_platform.chat_backend.domains.portal.service import (
     _backend_base_url,
+    _portal_internal_base_url,
     _require_portal_user,
-    _portal_base_url,
 )
 from data_platform.chat_backend.domains.admin.service import _build_user_account_overview
 from data_platform.chat_backend.domains.billing.service import (
@@ -146,7 +146,7 @@ def _resolve_openwebui_session_user(request: Request) -> tuple[str, str, str] | 
     if not token_value:
         return None
 
-    owui_base = _portal_base_url()
+    owui_base = _portal_internal_base_url()
     try:
         resp = http_requests.get(
             "%s/api/v1/auths/" % owui_base,

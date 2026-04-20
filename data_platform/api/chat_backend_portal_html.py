@@ -3,11 +3,11 @@ from __future__ import annotations
 from html import escape
 
 from data_platform.api.chat_backend_portal_public_html import _load_contact_config
-from data_platform.chat_backend.domains.portal.service import _portal_base_url
+from data_platform.chat_backend.domains.portal.service import _portal_public_base_url
 
 
 def render_portal_html() -> str:
-  openwebui_home_url = escape(_portal_base_url())
+  openwebui_home_url = escape(_portal_public_base_url())
   contact = _load_contact_config()
   contact_email = escape(contact.get("contact_email") or "")
   feedback_url = escape(contact.get("feedback_url") or "")
