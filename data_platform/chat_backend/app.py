@@ -18,6 +18,9 @@ from data_platform.chat_backend.domains.billing.service import (
     _seed_billing_packages,
     _seed_promotion_rules,
 )
+from data_platform.chat_backend.domains.site_config import (
+    _seed_site_config,
+)
 
 # Routers
 from data_platform.chat_backend.api.public_routes import router as public_router
@@ -35,6 +38,7 @@ def initialize_chat_backend() -> None:
         _seed_billing_packages(conn)
         _seed_promotion_rules(conn)
         _seed_billing_event_pricing(conn)
+        _seed_site_config(conn)
         _get_event_pricing(conn)
 
 

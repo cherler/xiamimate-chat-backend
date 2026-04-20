@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from data_platform.chat_backend.domains.portal.service import _portal_base_url
+from data_platform.chat_backend.domains.site_config import _get_contact_config
+from data_platform.chat_backend.infra.postgres import _postgres_conn
 from data_platform.chat_backend.infra.settings import (
     DEFAULT_BILLING_PACKAGES,
     DEFAULT_PROMOTION_RULES,
@@ -538,6 +540,107 @@ _BASE_CSS = """
     font-weight: 700;
     margin-bottom: 6px;
   }
+  .guide-grid,
+  .example-grid,
+  .demo-grid,
+  .notice-grid {
+    display: grid;
+    gap: 14px;
+  }
+  .guide-grid,
+  .example-grid,
+  .demo-grid,
+  .notice-grid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+  .example-card,
+  .demo-card,
+  .notice-card {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: rgba(255, 251, 245, 0.88);
+    padding: 16px 18px;
+  }
+  .example-card {
+    display: grid;
+    gap: 12px;
+  }
+  .example-card.highlight {
+    background: linear-gradient(180deg, rgba(17, 75, 95, 0.08), rgba(255, 251, 245, 0.92));
+  }
+  .example-kicker {
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .example-title,
+  .notice-title,
+  .demo-title {
+    font-size: 0.96rem;
+    font-weight: 700;
+    margin: 0;
+  }
+  .example-desc,
+  .notice-desc,
+  .demo-desc,
+  .demo-caption {
+    color: var(--muted);
+    font-size: 0.84rem;
+    line-height: 1.7;
+    margin: 0;
+  }
+  .command-block {
+    border-radius: 14px;
+    background: #182126;
+    color: #f8fafc;
+    padding: 14px 16px;
+    font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .example-meta {
+    display: grid;
+    gap: 6px;
+  }
+  .example-meta-item {
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+  .notice-card.accent {
+    background: linear-gradient(180deg, rgba(217, 119, 6, 0.12), rgba(255, 251, 245, 0.94));
+  }
+  .notice-card.service {
+    background: linear-gradient(180deg, rgba(15, 118, 110, 0.12), rgba(255, 251, 245, 0.94));
+  }
+  .demo-media {
+    border: 1px dashed rgba(17, 75, 95, 0.28);
+    border-radius: 16px;
+    min-height: 220px;
+    background:
+      linear-gradient(135deg, rgba(17, 75, 95, 0.08), rgba(255, 251, 245, 0.92)),
+      repeating-linear-gradient(135deg, rgba(17, 75, 95, 0.06) 0, rgba(17, 75, 95, 0.06) 12px, transparent 12px, transparent 24px);
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    text-align: center;
+  }
+  .demo-placeholder-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .demo-placeholder-note {
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.7;
+    max-width: 280px;
+    margin: 0 auto;
+  }
   .guide-desc,
   .timeline-desc,
   .roadmap-card p {
@@ -703,13 +806,13 @@ _BASE_CSS = """
 """
 
 _PORTAL_CONTACT_ACTIONS_HTML = """
-<a class="top-action-link mail-link" href="mailto:xiamijun88@qq.com" aria-label="邮件联系" title="邮件联系">
+<a class="top-action-link mail-link" href="mailto:{contact_email}" aria-label="邮件联系" title="邮件联系">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M3.75 6.75h16.5v10.5H3.75z" />
     <path d="m4.5 7.5 7.5 6 7.5-6" />
   </svg>
 </a>
-<button type="button" class="top-action-link wechat-link" id="wechat-contact-trigger" aria-label="微信联系" title="微信联系">
+<button type="button" class="top-action-link wechat-link" id="wechat-contact-trigger" aria-label="企微联系" title="企微联系">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M9.2 5.5c-3.5 0-6.2 2.2-6.2 5.1 0 1.6.8 3 2.2 4l-.6 2.4 2.6-1.3c.6.1 1.3.2 2 .2 3.5 0 6.2-2.2 6.2-5.1S12.7 5.5 9.2 5.5Z" />
     <path d="M15.5 10.2c3 0 5.5 1.9 5.5 4.5 0 1.3-.7 2.5-1.8 3.3l.5 2-2.2-1.1c-.6.1-1.2.2-1.9.2-3 0-5.5-1.9-5.5-4.5s2.5-4.4 5.4-4.4Z" />
@@ -719,7 +822,7 @@ _PORTAL_CONTACT_ACTIONS_HTML = """
     <circle cx="17.2" cy="14.6" r=".8" fill="currentColor" stroke="none" />
   </svg>
 </button>
-<a class="top-action-link feedback-link" href="https://my.feishu.cn/share/base/form/shrcnQVnRPvEuOGjz9ojf05tD1d" target="_blank" rel="noreferrer" aria-label="意见反馈" title="意见反馈">
+<a class="top-action-link feedback-link" href="{feedback_url}" target="_blank" rel="noreferrer" aria-label="意见反馈" title="意见反馈">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M12 3.75 4.75 8v8L12 20.25 19.25 16V8L12 3.75Z" />
     <path d="M12 7.75v5.25" />
@@ -747,11 +850,21 @@ _PORTAL_CHATBOT_SNIPPET = """
 
 
 def _wechat_qr_data_url() -> str:
+  """Fallback: load from file if DB has no value."""
   qr_path = Path(__file__).resolve().parents[2] / "微信二维码.jpg"
   if not qr_path.exists():
     return ""
   encoded = base64.b64encode(qr_path.read_bytes()).decode("ascii")
   return f"data:image/jpeg;base64,{encoded}"
+
+
+def _load_contact_config() -> dict[str, str]:
+  """Load contact config from DB (cached), with file fallback for QR."""
+  with _postgres_conn() as conn:
+    cfg = _get_contact_config(conn)
+  if not cfg.get("wechat_qr_base64"):
+    cfg["wechat_qr_base64"] = _wechat_qr_data_url()
+  return cfg
 
 
 def _cny(cents: int) -> str:
@@ -814,11 +927,18 @@ def _sidebar(groups: list[tuple[str, list[tuple[str, str]]]]) -> str:
 
 def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html: str, body_html: str) -> str:
     openwebui_home_url = escape(_portal_base_url())
-    wechat_qr_data_url = _wechat_qr_data_url()
+    contact = _load_contact_config()
+    contact_email = escape(contact.get("contact_email") or "")
+    feedback_url = escape(contact.get("feedback_url") or "")
+    wechat_qr_data_url = contact.get("wechat_qr_base64") or ""
+    contact_actions_html = _PORTAL_CONTACT_ACTIONS_HTML.format(
+        contact_email=contact_email,
+        feedback_url=feedback_url,
+    )
     wechat_qr_html = (
-        f'<div class="wechat-qr-wrap"><img class="wechat-qr-image" src="{wechat_qr_data_url}" alt="微信二维码" /></div>'
+      f'<div class="wechat-qr-wrap"><img class="wechat-qr-image" src="{wechat_qr_data_url}" alt="企微二维码" /></div>'
         if wechat_qr_data_url
-        else '<div class="contact-modal-note">当前未找到微信二维码图片，先使用下方微信号添加。</div>'
+        else '<div class="contact-modal-note">当前未找到企微二维码图片，请联系管理员上传。</div>'
     )
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -845,7 +965,7 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
           <div class="top-route-nav">{_top_nav(active)}</div>
           <div class="top-utility-actions">
             <a class="top-home-link" id="open-webui-home-link" href="{openwebui_home_url}">回到首要</a>
-            {_PORTAL_CONTACT_ACTIONS_HTML}
+            {contact_actions_html}
           </div>
         </div>
       </div>
@@ -859,20 +979,12 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
   <div class="contact-modal-card" role="dialog" aria-modal="true" aria-labelledby="wechat-contact-title">
     <div class="contact-modal-top">
       <div>
-        <div class="contact-modal-title" id="wechat-contact-title">微信联系</div>
-        <div class="contact-modal-note">扫码即可添加微信，也可以直接复制微信号 xiamimate。</div>
+        <div class="contact-modal-title" id="wechat-contact-title">企微联系</div>
+        <div class="contact-modal-note">扫码即可添加企业微信。</div>
       </div>
       <button type="button" class="contact-modal-close" id="wechat-contact-close" aria-label="关闭">×</button>
     </div>
-    {wechat_qr_html}
-    <div class="wechat-id-box">
-      <div class="wechat-id-label">微信号</div>
-      <div class="wechat-id-value" id="wechat-contact-id">xiamimate</div>
-    </div>
-    <div class="contact-modal-actions">
-      <button type="button" class="contact-action-btn" id="wechat-contact-copy">复制微信号</button>
-      <span class="contact-inline-status" id="wechat-contact-status"></span>
-    </div>
+    <div id="wechat-contact-body">{wechat_qr_html}</div>
   </div>
 </div>
 <script>
@@ -882,14 +994,59 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
   var wechatTrigger = document.getElementById("wechat-contact-trigger");
   var wechatModal = document.getElementById("wechat-contact-modal");
   var wechatClose = document.getElementById("wechat-contact-close");
-  var wechatCopy = document.getElementById("wechat-contact-copy");
-  var wechatStatus = document.getElementById("wechat-contact-status");
-  var wechatId = "xiamimate";
+  var mailLink = document.querySelector(".mail-link");
+  var feedbackLink = document.querySelector(".feedback-link");
+  var wechatBody = document.getElementById("wechat-contact-body");
   function withPortalToken(href) {{
     if (!token || !href || href.indexOf("/portal/") !== 0 || /[?&]t=/.test(href)) {{
       return href;
     }}
     return href + (href.indexOf("?") === -1 ? "?" : "&") + "t=" + encodeURIComponent(token);
+  }}
+  function renderWechatQr(contact) {{
+    if (!wechatBody) return;
+    wechatBody.innerHTML = "";
+    var qr = contact && contact.wechat_qr_base64 ? String(contact.wechat_qr_base64) : "";
+    if (!qr) {{
+      var note = document.createElement("div");
+      note.className = "contact-modal-note";
+      note.textContent = "当前未找到企微二维码图片，请联系管理员上传。";
+      wechatBody.appendChild(note);
+      return;
+    }}
+    var wrap = document.createElement("div");
+    wrap.className = "wechat-qr-wrap";
+    var img = document.createElement("img");
+    img.className = "wechat-qr-image";
+    img.alt = "企微二维码";
+    img.src = qr;
+    wrap.appendChild(img);
+    wechatBody.appendChild(wrap);
+  }}
+  function applyContactConfig(contact) {{
+    if (!contact) return;
+    if (mailLink) {{
+      mailLink.href = contact.contact_email ? ("mailto:" + String(contact.contact_email)) : "#";
+    }}
+    if (feedbackLink && contact.feedback_url) {{
+      feedbackLink.href = String(contact.feedback_url);
+    }}
+    renderWechatQr(contact);
+  }}
+  async function refreshContactConfig() {{
+    try {{
+      var response = await fetch(withPortalToken("/portal/api/public/site-contact-config"), {{
+        cache: "no-store",
+        credentials: "same-origin"
+      }});
+      if (!response.ok) return null;
+      var payload = await response.json();
+      var contact = payload && payload.data ? payload.data.contact : null;
+      applyContactConfig(contact);
+      return contact;
+    }} catch (error) {{
+      return null;
+    }}
   }}
   if (token) {{
     document.querySelectorAll('a[href^="/portal/"]').forEach(function(el) {{
@@ -918,7 +1075,28 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
     document.body.style.overflow = "";
   }}
   if (wechatTrigger) {{
-    wechatTrigger.addEventListener("click", openWechatModal);
+    wechatTrigger.addEventListener("click", async function() {{
+      await refreshContactConfig();
+      openWechatModal();
+    }});
+  }}
+  if (mailLink) {{
+    mailLink.addEventListener("click", async function(event) {{
+      event.preventDefault();
+      var contact = await refreshContactConfig();
+      var target = contact && contact.contact_email ? ("mailto:" + String(contact.contact_email)) : (mailLink.getAttribute("href") || "#");
+      window.location.href = target;
+    }});
+  }}
+  if (feedbackLink) {{
+    feedbackLink.addEventListener("click", async function(event) {{
+      event.preventDefault();
+      var contact = await refreshContactConfig();
+      var target = contact && contact.feedback_url ? String(contact.feedback_url) : (feedbackLink.getAttribute("href") || "");
+      if (target) {{
+        window.open(target, "_blank", "noopener,noreferrer");
+      }}
+    }});
   }}
   if (wechatClose) {{
     wechatClose.addEventListener("click", closeWechatModal);
@@ -935,22 +1113,7 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
       closeWechatModal();
     }}
   }});
-  if (wechatCopy) {{
-    wechatCopy.addEventListener("click", function() {{
-      var done = function(message) {{
-        if (wechatStatus) wechatStatus.textContent = message;
-      }};
-      if (navigator.clipboard && navigator.clipboard.writeText) {{
-        navigator.clipboard.writeText(wechatId).then(function() {{
-          done("微信号已复制，可以直接到微信里粘贴添加。");
-        }}).catch(function() {{
-          done("复制失败，请手动添加微信号：" + wechatId);
-        }});
-        return;
-      }}
-      done("当前浏览器不支持自动复制，请手动添加微信号：" + wechatId);
-    }});
-  }}
+  refreshContactConfig();
   markActiveSection();
 }})();
 </script>
@@ -1112,62 +1275,121 @@ def render_portal_products_html() -> str:
 def render_portal_guide_html() -> str:
     body_html = '''
       <section id="start" class="section-block card">
-        <h2>开始使用</h2>
-        <div class="card-note">如果你是第一次使用，可以先按下面这套顺序完成登录、进入工作流、查看结果和回到账户页确认消耗。</div>
+        <h2>新手上手路径</h2>
+        <div class="card-note">第一次使用时，不建议一上来就跑很大的任务。先按下面这条路径走一遍，通常 5 分钟内就能完成第一次有效体验。</div>
         <div class="guide-list">
-          <div class="guide-item"><div class="guide-title">1. 进入首页并登录</div><div class="guide-desc">从 Open WebUI 首页进入产品，使用统一登录态进入对话与工作流环境。首次登录后，系统会自动为你初始化账户和积分状态。</div></div>
-          <div class="guide-item"><div class="guide-title">2. 选择合适的分析入口</div><div class="guide-desc">如果你已经有明确目标商品或类目，可以直接进入 workflow 提交任务；如果还在探索阶段，可以先结合工具与知识库做问题澄清，再进入工作流。</div></div>
-          <div class="guide-item"><div class="guide-title">3. 查看结果与中间过程</div><div class="guide-desc">工作流执行完成后，优先查看结论摘要、关键指标和异常提示；如果结果和预期不一致，再回看输入条件、工具返回数据和引用知识内容。</div></div>
-          <div class="guide-item"><div class="guide-title">4. 回到账户页查看消耗</div><div class="guide-desc">每次使用后，都可以回到账户管理页确认余额、消费记录和趋势，判断当前套餐是否够用，或者是否需要补充充值额度。</div></div>
+          <div class="guide-item"><div class="guide-title">1. 先登录，再确认账户可用</div><div class="guide-desc">从 Open WebUI 首页进入产品，首次登录后系统会自动初始化账户。建议先用 /me 或 /points 看一下当前套餐、积分余额和是否已经完成邮箱验证。</div></div>
+          <div class="guide-item"><div class="guide-title">2. 有完整任务时优先用 /workflow</div><div class="guide-desc">如果你已经知道目标市场、类目和问题，直接用 /workflow 最省事。它适合输出一份相对完整的分析结果，而不是只查一个局部指标。</div></div>
+          <div class="guide-item"><div class="guide-title">3. 只是验证一个点时用 /tool 或 /web</div><div class="guide-desc">如果你只想先验证趋势、规则或某个市场变化，不要急着跑完整 workflow。先用 /tool 做局部分析，或者用 /web 查最新外部信息，会更稳也更省积分。</div></div>
+          <div class="guide-item"><div class="guide-title">4. 看结果时先看结论，再看证据</div><div class="guide-desc">优先关注结论、关键指标、风险提示；如果结果和预期不一致，再回看工具返回、知识库引用和输入条件，判断是不是问题范围太大或条件不够明确。</div></div>
+          <div class="guide-item"><div class="guide-title">5. 用完回到账户页核对消费</div><div class="guide-desc">每次使用后，都可以回到账户管理页看消费记录、扣减来源和使用趋势。系统会优先扣减月包积分，月包不足时再扣充值包积分。</div></div>
         </div>
       </section>
-      <section id="workflow" class="section-block card">
-        <h2>Workflow 使用方法</h2>
-        <div class="card-note">workflow 是产品的核心使用入口，适合你把一个完整分析任务交给系统跑完，并拿到结构化结果。</div>
-        <div class="guide-list">
-          <div class="guide-item"><div class="guide-title">明确输入条件</div><div class="guide-desc">在发起 workflow 前，尽量明确国家站点、目标类目、分析周期、价格带和你最关心的问题。输入越具体，结果越稳定。</div></div>
-          <div class="guide-item"><div class="guide-title">优先提交完整问题而不是短关键词</div><div class="guide-desc">推荐用完整句描述任务，例如“分析澳洲站便携榨汁机近 90 天的需求和竞争情况”，这样系统更容易正确调用工具和知识库。</div></div>
-          <div class="guide-item"><div class="guide-title">重点看结论、证据和风险提示</div><div class="guide-desc">不要只看最终一句建议。更重要的是看系统引用了哪些数据、得出了哪些趋势结论、有哪些不确定性和风险点。</div></div>
-          <div class="guide-item"><div class="guide-title">二次迭代时缩小问题范围</div><div class="guide-desc">如果第一次结果太泛，可以在第二轮把问题收窄到某个类目、某个市场或某个用户群，提升结果的可执行性。</div></div>
+      <section id="commands" class="section-block card">
+        <h2>常用命令示例</h2>
+        <div class="card-note">下面这些命令可以直接复制后再替换商品、市场和时间范围。对于新手来说，先照着示例改，比从零组织问题更容易成功。</div>
+        <div class="example-grid">
+          <div class="example-card highlight">
+            <div class="example-kicker">完整分析</div>
+            <h3 class="example-title">/workflow：拿一份完整的选品分析</h3>
+            <p class="example-desc">适合已经有目标商品或类目，希望系统自动调工具、拉数据、形成结论的场景。</p>
+            <div class="command-block">/workflow 帮我调研一下 portable blender 在 Amazon 美国站近 90 天的需求、竞争和进入机会，重点看价格带、销量趋势和风险点</div>
+            <div class="example-meta">
+              <div class="example-meta-item">适合：第一次做完整市场判断、要拿结构化结论时。</div>
+              <div class="example-meta-item">提示：问题里尽量带上市场、类目、时间范围和你最关心的输出。</div>
+            </div>
+          </div>
+          <div class="example-card">
+            <div class="example-kicker">局部验证</div>
+            <h3 class="example-title">/tool：先查一个点，再决定要不要跑大任务</h3>
+            <p class="example-desc">适合你已经有一个猜想，只想先验证趋势、竞争强度或类目情况。</p>
+            <div class="command-block">/tool 帮我先判断 pet grooming vacuum 在 TikTok 美国市场最近是否明显升温，并告诉我下一步最值得调用哪些工具验证</div>
+            <div class="example-meta">
+              <div class="example-meta-item">适合：快速试水、缩小问题范围、减少无效消耗。</div>
+              <div class="example-meta-item">提示：如果只是查一个指标或一个判断，不要一开始就跑完整 workflow。</div>
+            </div>
+          </div>
+          <div class="example-card">
+            <div class="example-kicker">最新信息</div>
+            <h3 class="example-title">/web：查最新政策、站外情报和外部变化</h3>
+            <p class="example-desc">适合政策变化、平台动态、行业新闻这类需要最新外部信息的问题。</p>
+            <div class="command-block">/web 帮我搜索并总结 2026 年 TikTok Shop 美国站最近的入驻政策和合规变化，重点列出卖家最容易踩坑的点</div>
+            <div class="example-meta">
+              <div class="example-meta-item">适合：知识库不一定覆盖、你又需要最新信息的时候。</div>
+              <div class="example-meta-item">提示：实时外部变化优先用 /web，不要只靠知识库回答。</div>
+            </div>
+          </div>
+          <div class="example-card">
+            <div class="example-kicker">账户自查</div>
+            <h3 class="example-title">/points 和 /usage：看余额、消费和使用趋势</h3>
+            <p class="example-desc">适合你做完几轮分析之后，快速确认积分是否够用、最近主要消耗在哪类请求上。</p>
+            <div class="command-block">/points
+/usage</div>
+            <div class="example-meta">
+              <div class="example-meta-item">适合：复盘最近消耗、判断是否需要月包或充值包。</div>
+              <div class="example-meta-item">提示：账户页会展示更完整的消费记录、扣减来源和中文解释。</div>
+            </div>
+          </div>
         </div>
       </section>
-      <section id="tools" class="section-block card">
-        <h2>工具如何使用</h2>
-        <div class="card-note">工具能力用于补充 workflow 的自动分析，也适合你在开始正式任务前先做快速验证。</div>
-        <div class="guide-list">
-          <div class="guide-item"><div class="guide-title">先用工具验证假设</div><div class="guide-desc">如果你只想快速验证一个点，例如类目趋势是否存在、某个国家站点是否有明显波峰，可以先用工具做局部查询，再决定要不要跑完整 workflow。</div></div>
-          <div class="guide-item"><div class="guide-title">对结果异常时回查工具输出</div><div class="guide-desc">当 workflow 结果与你经验冲突时，优先看工具层返回的数据是否完整、过滤条件是否准确，以及是否存在时间范围或地区选择错误。</div></div>
-          <div class="guide-item"><div class="guide-title">工具适合短平快，workflow 适合完整分析</div><div class="guide-desc">如果你的目标是快速查一个指标，用工具即可；如果你要拿一份相对完整的市场判断、竞争判断和建议结论，还是应该用 workflow。</div></div>
+      <section id="scenes" class="section-block card">
+        <h2>什么时候用哪种模式</h2>
+        <div class="card-note">如果你不知道该用哪个命令，先按下面的判断来，通常不会错。</div>
+        <div class="notice-grid">
+          <div class="notice-card accent"><h3 class="notice-title">我有完整问题，想一次拿到结论</h3><p class="notice-desc">优先用 /workflow。它更适合做“某商品在某市场是否值得做”这类完整分析。</p></div>
+          <div class="notice-card"><h3 class="notice-title">我只想先验证一个局部判断</h3><p class="notice-desc">优先用 /tool。它更适合先做小范围验证，再决定要不要继续扩大任务。</p></div>
+          <div class="notice-card"><h3 class="notice-title">我需要最新外部信息</h3><p class="notice-desc">优先用 /web。平台政策、行业新闻、外部舆情和近期变化都更适合走联网搜索。</p></div>
+          <div class="notice-card"><h3 class="notice-title">我想知道余额和最近消耗</h3><p class="notice-desc">优先用 /points、/usage，或者直接去账户页看消费记录、使用趋势和扣减来源。</p></div>
         </div>
       </section>
-      <section id="knowledge" class="section-block card">
-        <h2>知识库如何使用</h2>
-        <div class="card-note">知识库适合承接背景规则、方法论和固定经验，用来帮助系统理解上下文，而不是替代实时数据分析。</div>
+      <section id="support" class="section-block card">
+        <h2>遇到问题先这样处理</h2>
+        <div class="card-note">新手最容易卡在“不知道怎么提问”或者“结果看不懂”。先用下面这套办法排查，通常比反复重跑更有效。</div>
         <div class="guide-list">
-          <div class="guide-item"><div class="guide-title">适合问规则、方法和背景</div><div class="guide-desc">例如平台规则、选品思路、某类分析框架，这类相对稳定的问题更适合让系统检索知识库后回答。</div></div>
-          <div class="guide-item"><div class="guide-title">不要把知识库当成实时行情源</div><div class="guide-desc">涉及实时销量、近期热度或最新竞争格局的问题，仍然应该优先用 workflow 和数据工具来完成，知识库只做补充解释。</div></div>
-          <div class="guide-item"><div class="guide-title">把知识库和 workflow 组合使用</div><div class="guide-desc">推荐先用知识库确认概念、规则和分析方法，再进入 workflow 拉取数据并形成结论，这样准确率和可读性会更高。</div></div>
+          <div class="guide-item"><div class="guide-title">先把问题说完整</div><div class="guide-desc">尽量一次写清楚市场、类目、时间范围、目标用户和你想要的输出，避免系统反复追问或跑偏。</div></div>
+          <div class="guide-item"><div class="guide-title">第一次先小范围试跑</div><div class="guide-desc">如果任务很大，先从单市场、单类目开始。确认方向对了，再扩大到更多国家或更多商品段。</div></div>
+          <div class="guide-item"><div class="guide-title">右下角智能客服可以直接问</div><div class="guide-desc">如果你不知道命令怎么写、套餐怎么选、消费为什么这样扣，或者某个页面怎么用，可以直接问右下角的智能客服。它更适合回答操作问题和产品规则。</div></div>
+          <div class="guide-item"><div class="guide-title">结果异常时先看证据和工具返回</div><div class="guide-desc">不要只盯最终一句结论。优先检查输入条件是否过宽、是否用了错误市场，以及工具返回的数据是不是不完整。</div></div>
         </div>
       </section>
-      <section id="tips" class="section-block card">
-        <h2>使用建议</h2>
-        <div class="card-note">下面这些习惯可以帮助你更稳定地获得高质量结果，也能避免不必要的积分消耗。</div>
-        <div class="guide-list">
-          <div class="guide-item"><div class="guide-title">问题一次说完整</div><div class="guide-desc">尽量把市场、类目、时间范围、目标用户和你要的输出形式一次说清楚，避免系统多轮追问或重复执行。</div></div>
-          <div class="guide-item"><div class="guide-title">先小范围试跑，再扩大范围</div><div class="guide-desc">当任务比较大时，先从单市场、单类目开始试跑，确认分析方向正确后，再扩大到更多国家或更多商品段。</div></div>
-          <div class="guide-item"><div class="guide-title">结合账户页管理使用成本</div><div class="guide-desc">如果你近期频繁使用 workflow 或高频调用工具，建议定期到账户管理页查看消费趋势和账本，及时调整套餐或充值策略。</div></div>
+      <section id="demo" class="section-block card">
+        <h2>演示区预留</h2>
+        <div class="card-note">这里已经预留好后续演示位。等你准备好实际操作 GIF 或截图后，可以直接替换，不需要再改导航结构。</div>
+        <div class="demo-grid">
+          <div class="demo-card">
+            <h3 class="demo-title">演示 1：如何发起一次 /workflow</h3>
+            <p class="demo-desc">建议后续放一张或一段演示“输入命令 -> 等待执行 -> 查看结论”的 GIF 或截图。</p>
+            <div class="demo-media" data-demo-slot="workflow">
+              <div>
+                <div class="demo-placeholder-title">预留 GIF / 截图区</div>
+                <p class="demo-placeholder-note">后续可替换成实际使用虾米选品智能体的演示 GIF；如果暂时没有 GIF，也可以先放一张实操截图。</p>
+              </div>
+            </div>
+            <p class="demo-caption">建议内容：输入 /workflow 命令、等待进度、查看最终结果。</p>
+          </div>
+          <div class="demo-card">
+            <h3 class="demo-title">演示 2：如何查看消费记录和扣减来源</h3>
+            <p class="demo-desc">建议后续放一张账户页截图，让新手理解“为什么扣费”和“月包/充值包是怎么被扣的”。</p>
+            <div class="demo-media" data-demo-slot="billing">
+              <div>
+                <div class="demo-placeholder-title">预留 GIF / 截图区</div>
+                <p class="demo-placeholder-note">后续可替换成账户页实操截图，例如消费记录页、使用趋势页或积分概览页。</p>
+              </div>
+            </div>
+            <p class="demo-caption">建议内容：消费记录、扣减来源、当前余额与使用趋势。</p>
+          </div>
         </div>
       </section>
     '''
 
     sidebar_html = _sidebar([
-        ("使用说明", [("start", "开始使用"), ("workflow", "Workflow 使用"), ("tools", "工具使用"), ("knowledge", "知识库使用"), ("tips", "使用建议")]),
+        ("使用说明", [("start", "新手上手"), ("commands", "命令示例"), ("scenes", "模式选择"), ("support", "常见卡点"), ("demo", "演示区预留")]),
     ])
     return _layout(
         active="guide",
         kicker="使用指南",
         title="产品使用指南",
-        subtitle="说明如何使用 workflow、工具和知识库完成实际分析任务，并帮助你更高效地管理使用成本。",
+        subtitle="把新手最常见的使用路径、命令示例和操作提醒整理成一页，方便你快速开始并少走弯路。",
         sidebar_html=sidebar_html,
         body_html=body_html,
     )

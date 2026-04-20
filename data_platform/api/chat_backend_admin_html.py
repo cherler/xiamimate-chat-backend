@@ -319,10 +319,38 @@ def render_admin_backoffice_html() -> str:
       min-width: 0;
     }
 
+    .ops-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .module-card {
+      display: flex;
+      flex-direction: column;
+      min-height: 320px;
+      max-height: 440px;
+      overflow: hidden;
+    }
+
+    .module-card-head {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .module-card-body {
+      flex: 1;
+      overflow: auto;
+      overscroll-behavior: contain;
+      padding-right: 4px;
+    }
+
     @media (max-width: 1100px) {
       .hero,
       .layout,
-      .detail-grid {
+      .detail-grid,
+      .ops-grid {
         grid-template-columns: 1fr;
       }
 
@@ -388,63 +416,6 @@ def render_admin_backoffice_html() -> str:
         <div class="scroll-stack" style="margin-top: 14px;">
           <div id="user-results" class="user-list"></div>
         </div>
-
-        <div style="margin-top: 18px;">
-          <h3>人工加积分</h3>
-          <div class="field-grid">
-            <div>
-                <label for="grant-user-id">目标用户 ID</label>
-              <input id="grant-user-id" type="text" placeholder="先从右侧详情或搜索结果填充" />
-            </div>
-            <div>
-                <label for="grant-points">积分数</label>
-              <input id="grant-points" type="number" min="1" value="100" />
-            </div>
-            <div>
-                <label for="grant-description">说明</label>
-              <textarea id="grant-description" placeholder="例如：手工补单 / 客诉补偿 / 灰度测试加额"></textarea>
-            </div>
-            <button id="grant-submit" class="warn">执行加积分</button>
-            <div id="grant-status" class="status"></div>
-          </div>
-        </div>
-
-        <div style="margin-top: 18px;">
-          <h3>系统通知广播</h3>
-          <div class="field-grid">
-            <div>
-              <label for="broadcast-title">通知标题</label>
-              <input id="broadcast-title" type="text" placeholder="例如：五一期间客服响应时间调整" />
-            </div>
-            <div>
-              <label for="broadcast-tag">标签</label>
-              <input id="broadcast-tag" type="text" value="系统通知" />
-            </div>
-            <div>
-              <label for="broadcast-level">级别</label>
-              <input id="broadcast-level" type="text" value="info" placeholder="info / success / warning / error" />
-            </div>
-            <div>
-              <label for="broadcast-action-url">跳转链接（可选）</label>
-              <input id="broadcast-action-url" type="text" placeholder="例如：/portal/guide" />
-            </div>
-            <div>
-              <label for="broadcast-body">通知正文</label>
-              <textarea id="broadcast-body" placeholder="请输入要推送到通知中心系统通知中的内容"></textarea>
-            </div>
-            <button id="broadcast-submit" class="warn">发送系统通知</button>
-            <div id="broadcast-status" class="status"></div>
-          </div>
-        </div>
-
-        <div style="margin-top: 18px;">
-          <h3>计价管理</h3>
-          <div id="pricing-list" class="field-grid" style="margin-bottom: 10px;"></div>
-          <div class="button-row">
-            <button id="load-pricing" class="secondary">刷新计价</button>
-          </div>
-          <div id="pricing-status" class="status"></div>
-        </div>
       </aside>
 
       <main class="section-list">
@@ -467,6 +438,97 @@ def render_admin_backoffice_html() -> str:
           <h2>用户详情</h2>
           <div id="user-detail" class="detail-grid full">
             <div class="empty">先搜索并选择一个用户。</div>
+          </div>
+        </section>
+
+        <section class="card panel">
+          <h2>管理操作</h2>
+          <div class="ops-grid">
+            <section class="mini-card module-card">
+              <div class="module-card-head">
+                <h3>人工加积分</h3>
+                <div class="hint">对指定用户做带审计的人工补额，适合补单、客诉补偿和运营灰度。</div>
+              </div>
+              <div class="module-card-body">
+                <div class="field-grid">
+                  <div>
+                    <label for="grant-user-id">目标用户 ID</label>
+                    <input id="grant-user-id" type="text" placeholder="先从左侧检索或右侧详情填充" />
+                  </div>
+                  <div>
+                    <label for="grant-points">积分数</label>
+                    <input id="grant-points" type="number" min="1" value="100" />
+                  </div>
+                  <div>
+                    <label for="grant-description">说明</label>
+                    <textarea id="grant-description" placeholder="例如：手工补单 / 客诉补偿 / 灰度测试加额"></textarea>
+                  </div>
+                  <button id="grant-submit" class="warn">执行加积分</button>
+                  <div id="grant-status" class="status"></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="mini-card module-card">
+              <div class="module-card-head">
+                <h3>系统通知广播</h3>
+                <div class="hint">向通知中心批量投递系统消息，可附带跳转链接与展示级别。</div>
+              </div>
+              <div class="module-card-body">
+                <div class="field-grid">
+                  <div>
+                    <label for="broadcast-title">通知标题</label>
+                    <input id="broadcast-title" type="text" placeholder="例如：五一期间客服响应时间调整" />
+                  </div>
+                  <div>
+                    <label for="broadcast-tag">标签</label>
+                    <input id="broadcast-tag" type="text" value="系统通知" />
+                  </div>
+                  <div>
+                    <label for="broadcast-level">级别</label>
+                    <input id="broadcast-level" type="text" value="info" placeholder="info / success / warning / error" />
+                  </div>
+                  <div>
+                    <label for="broadcast-action-url">跳转链接（可选）</label>
+                    <input id="broadcast-action-url" type="text" placeholder="例如：/portal/guide" />
+                  </div>
+                  <div>
+                    <label for="broadcast-body">通知正文</label>
+                    <textarea id="broadcast-body" placeholder="请输入要推送到通知中心系统通知中的内容"></textarea>
+                  </div>
+                  <button id="broadcast-submit" class="warn">发送系统通知</button>
+                  <div id="broadcast-status" class="status"></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="mini-card module-card">
+              <div class="module-card-head">
+                <h3>计价管理</h3>
+                <div class="hint">统一维护事件计价和展示顺序，卡片内部支持滚动查看完整配置。</div>
+              </div>
+              <div class="module-card-body">
+                <div id="pricing-list" class="field-grid" style="margin-bottom: 10px;"></div>
+                <div class="button-row">
+                  <button id="load-pricing" class="secondary">刷新计价</button>
+                </div>
+                <div id="pricing-status" class="status"></div>
+              </div>
+            </section>
+
+            <section class="mini-card module-card">
+              <div class="module-card-head">
+                <h3>站点配置</h3>
+                <div class="hint">管理门户页联系方式：联系邮箱、企微二维码、意见反馈链接。</div>
+              </div>
+              <div class="module-card-body">
+                <div id="site-config-list" class="field-grid" style="margin-bottom: 10px;"></div>
+                <div class="button-row">
+                  <button id="load-site-config" class="secondary">刷新站点配置</button>
+                </div>
+                <div id="site-config-status" class="status"></div>
+              </div>
+            </section>
           </div>
         </section>
 
@@ -1079,9 +1141,120 @@ def render_admin_backoffice_html() -> str:
       }
     };
 
+    const siteConfigInputType = (key) => {
+      if (key === 'wechat_qr_base64') return 'file';
+      if (key === 'feedback_url') return 'url';
+      return 'text';
+    };
+
+    const renderSiteConfigList = (rows) => {
+      const target = document.getElementById('site-config-list');
+      if (!rows || rows.length === 0) {
+        target.innerHTML = '<div class="empty">暂无站点配置</div>';
+        return;
+      }
+
+      target.innerHTML = rows.map((row) => {
+        const inputType = siteConfigInputType(row.config_key);
+        if (inputType === 'file') {
+          const previewHtml = row.config_value
+            ? `<img src="${escapeHtml(row.config_value)}" style="max-width:120px;max-height:120px;border-radius:8px;margin-top:6px;" />`
+            : '<div class="hint">暂无图片</div>';
+          return `
+            <div class="mini-card" data-site-config-card="${escapeHtml(row.config_key)}">
+              <div style="display:grid; gap:10px;">
+                <div>
+                  <strong>${escapeHtml(row.display_name || row.config_key)}</strong>
+                  <div class="hint">config_key = ${escapeHtml(row.config_key)}</div>
+                </div>
+                ${previewHtml}
+                <div>
+                  <label for="site-config-file-${escapeHtml(row.config_key)}">上传新图片</label>
+                  <input id="site-config-file-${escapeHtml(row.config_key)}" type="file" accept="image/*" style="width:100%;" />
+                </div>
+                <div class="button-row">
+                  <button class="secondary" data-save-site-config="${escapeHtml(row.config_key)}" data-input-type="file">保存</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+        return `
+          <div class="mini-card" data-site-config-card="${escapeHtml(row.config_key)}">
+            <div style="display:grid; gap:10px;">
+              <div>
+                <strong>${escapeHtml(row.display_name || row.config_key)}</strong>
+                <div class="hint">config_key = ${escapeHtml(row.config_key)}</div>
+              </div>
+              <div>
+                <label for="site-config-val-${escapeHtml(row.config_key)}">值</label>
+                <input id="site-config-val-${escapeHtml(row.config_key)}" type="${inputType}" value="${escapeHtml(row.config_value || '')}" />
+              </div>
+              <div class="button-row">
+                <button class="secondary" data-save-site-config="${escapeHtml(row.config_key)}" data-input-type="text">保存</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      target.querySelectorAll('button[data-save-site-config]').forEach((button) => {
+        button.addEventListener('click', () => saveSiteConfig(button.dataset.saveSiteConfig, button.dataset.inputType));
+      });
+    };
+
+    const loadSiteConfig = async () => {
+      setStatus('site-config-status', '正在加载站点配置...');
+      try {
+        const data = await fetchJson('/admin/api/site-config');
+        renderSiteConfigList(data.site_config || []);
+        setStatus('site-config-status', '站点配置已刷新', 'ok');
+      } catch (error) {
+        setStatus('site-config-status', error.message, 'error');
+      }
+    };
+
+    const saveSiteConfig = async (configKey, inputType) => {
+      if (!configKey) {
+        setStatus('site-config-status', '缺少 config_key', 'error');
+        return;
+      }
+
+      let configValue = '';
+      if (inputType === 'file') {
+        const fileInput = document.getElementById(`site-config-file-${configKey}`);
+        const file = fileInput && fileInput.files && fileInput.files[0];
+        if (!file) {
+          setStatus('site-config-status', '请先选择文件', 'error');
+          return;
+        }
+        configValue = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('文件读取失败'));
+          reader.readAsDataURL(file);
+        });
+      } else {
+        configValue = document.getElementById(`site-config-val-${configKey}`)?.value || '';
+      }
+
+      setStatus('site-config-status', `正在保存 ${configKey}...`);
+      try {
+        await fetchJson(`/admin/api/site-config/${encodeURIComponent(configKey)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ config_value: configValue }),
+        });
+        setStatus('site-config-status', `${configKey} 已更新`, 'ok');
+        await loadSiteConfig();
+      } catch (error) {
+        setStatus('site-config-status', error.message, 'error');
+      }
+    };
+
     document.getElementById('load-overview').addEventListener('click', loadOverview);
     document.getElementById('load-audit').addEventListener('click', loadAuditLogs);
     document.getElementById('load-pricing').addEventListener('click', loadPricing);
+    document.getElementById('load-site-config').addEventListener('click', loadSiteConfig);
     document.getElementById('search-users').addEventListener('click', () => searchUsers(document.getElementById('user-query').value.trim()));
     document.getElementById('search-all').addEventListener('click', () => searchUsers(''));
     document.getElementById('grant-submit').addEventListener('click', grantPoints);
@@ -1099,6 +1272,7 @@ def render_admin_backoffice_html() -> str:
     detectAuthMode().finally(() => {
       loadOverview().catch(() => {});
       loadPricing().catch(() => {});
+      loadSiteConfig().catch(() => {});
       searchUsers('').catch(() => {});
       loadAuditLogs().catch(() => {});
       loadBroadcasts().catch(() => {});

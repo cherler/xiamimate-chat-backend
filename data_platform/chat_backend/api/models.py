@@ -205,3 +205,7 @@ class UpdateEventPricingRequest(BaseModel):
     points_per_unit: int | None = None
     status: str | None = None
     display_order: int | None = None
+
+
+class UpdateSiteConfigRequest(BaseModel):
+    config_value: str = Field(..., max_length=500_000)

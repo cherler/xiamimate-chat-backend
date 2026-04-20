@@ -396,3 +396,14 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_target_created ON app.admin_audit_log
 CREATE INDEX IF NOT EXISTS idx_idempotency_request_created ON app.idempotency_request(created_at DESC);
 -- <<< END migrations/app/020_app_indexes.sql
 
+-- >>> BEGIN migrations/app/030_site_config.sql
+-- Site-level configuration (admin-editable key-value pairs).
+
+CREATE TABLE IF NOT EXISTS app.site_config (
+    config_key    TEXT PRIMARY KEY,
+    config_value  TEXT NOT NULL DEFAULT '',
+    display_name  TEXT NOT NULL DEFAULT '',
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- <<< END migrations/app/030_site_config.sql
+

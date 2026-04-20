@@ -2,19 +2,22 @@ from __future__ import annotations
 
 from html import escape
 
-from data_platform.api.chat_backend_portal_public_html import _wechat_qr_data_url
+from data_platform.api.chat_backend_portal_public_html import _load_contact_config
 from data_platform.chat_backend.domains.portal.service import _portal_base_url
 
 
 def render_portal_html() -> str:
-    openwebui_home_url = escape(_portal_base_url())
-    wechat_qr_data_url = _wechat_qr_data_url()
-    wechat_qr_html = (
-        f'<div class="wechat-qr-wrap"><img class="wechat-qr-image" src="{wechat_qr_data_url}" alt="微信二维码" /></div>'
-        if wechat_qr_data_url
-        else '<div class="contact-modal-note">当前未找到微信二维码图片，先使用下方微信号添加。</div>'
-    )
-    return """<!DOCTYPE html>
+  openwebui_home_url = escape(_portal_base_url())
+  contact = _load_contact_config()
+  contact_email = escape(contact.get("contact_email") or "")
+  feedback_url = escape(contact.get("feedback_url") or "")
+  wechat_qr_data_url = contact.get("wechat_qr_base64") or ""
+  wechat_qr_html = (
+    f'<div class="wechat-qr-wrap"><img class="wechat-qr-image" src="{wechat_qr_data_url}" alt="企微二维码" /></div>'
+    if wechat_qr_data_url
+    else '<div class="contact-modal-note">当前未找到企微二维码图片，请联系管理员上传。</div>'
+  )
+  return """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -580,6 +583,56 @@ def render_portal_html() -> str:
       color: var(--ink);
       font-weight: 600;
     }
+    .table-main-text {
+      color: var(--ink);
+      font-weight: 600;
+      line-height: 1.5;
+    }
+    .table-sub-text {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.6;
+    }
+    .ledger-policy-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+    .ledger-policy-card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 251, 245, 0.86);
+      padding: 16px 18px;
+    }
+    .source-chip-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .source-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .source-chip.subscription {
+      background: rgba(17, 75, 95, 0.12);
+      color: var(--accent);
+    }
+    .source-chip.recharge {
+      background: rgba(15, 118, 110, 0.12);
+      color: var(--ok);
+    }
+    .source-chip.other {
+      background: rgba(217, 119, 6, 0.12);
+      color: #9a6700;
+    }
     table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
     thead th {
       text-align: left; font-weight: 600; color: var(--muted);
@@ -975,13 +1028,13 @@ def render_portal_html() -> str:
         <div class="top-utility-actions">
           <a class="top-home-link" id="open-webui-home-link" href="__OPENWEBUI_HOME_URL__">首页</a>
           <button type="button" class="top-secondary-link" id="portal-logout-button">退出登录</button>
-          <a class="top-icon-link mail-link" href="mailto:xiamijun88@qq.com" aria-label="邮件联系" title="邮件联系">
+          <a class="top-icon-link mail-link" href="mailto:__CONTACT_EMAIL__" aria-label="邮件联系" title="邮件联系">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3.75 6.75h16.5v10.5H3.75z" />
               <path d="m4.5 7.5 7.5 6 7.5-6" />
             </svg>
           </a>
-          <button type="button" class="top-icon-link wechat-link" id="wechat-contact-trigger" aria-label="微信联系" title="微信联系">
+          <button type="button" class="top-icon-link wechat-link" id="wechat-contact-trigger" aria-label="企微联系" title="企微联系">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M9.2 5.5c-3.5 0-6.2 2.2-6.2 5.1 0 1.6.8 3 2.2 4l-.6 2.4 2.6-1.3c.6.1 1.3.2 2 .2 3.5 0 6.2-2.2 6.2-5.1S12.7 5.5 9.2 5.5Z" />
               <path d="M15.5 10.2c3 0 5.5 1.9 5.5 4.5 0 1.3-.7 2.5-1.8 3.3l.5 2-2.2-1.1c-.6.1-1.2.2-1.9.2-3 0-5.5-1.9-5.5-4.5s2.5-4.4 5.4-4.4Z" />
@@ -991,7 +1044,7 @@ def render_portal_html() -> str:
               <circle cx="17.2" cy="14.6" r=".8" fill="currentColor" stroke="none" />
             </svg>
           </button>
-          <a class="top-icon-link feedback-link" href="https://my.feishu.cn/share/base/form/shrcnQVnRPvEuOGjz9ojf05tD1d" target="_blank" rel="noreferrer" aria-label="意见反馈" title="意见反馈">
+          <a class="top-icon-link feedback-link" href="__FEEDBACK_URL__" target="_blank" rel="noreferrer" aria-label="意见反馈" title="意见反馈">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 3.75 4.75 8v8L12 20.25 19.25 16V8L12 3.75Z" />
               <path d="M12 7.75v5.25" />
@@ -1024,7 +1077,7 @@ def render_portal_html() -> str:
             <div id="hero-metric-balance">
               <div class="hero-metric-label">当前积分余额</div>
               <div class="hero-metric-value" id="hero-balance">0</div>
-              <div class="hero-metric-subtitle">消费时优先扣减月包积分；充值包积分永久有效。</div>
+              <div class="hero-metric-subtitle" id="hero-balance-policy">消费时优先扣减月包积分；充值包积分永久有效。</div>
             </div>
             <div id="hero-metric-verify" style="display:none;">
               <div class="hero-metric-label" style="color:var(--accent-2);font-size:1.05rem;">📧 完成邮箱验证</div>
@@ -1191,14 +1244,15 @@ def render_portal_html() -> str:
   <div id="page-billing" class="page">
     <div class="card">
       <h2>消费记录</h2>
-      <div class="card-note">展示所有扣费账本记录，按事件类型和扣减积分追踪。</div>
+      <div class="card-note">这里只展示实际扣费记录，并把扣减顺序、扣减来源和常见计费规则翻成用户容易理解的中文。</div>
+      <div class="ledger-policy-grid" id="billing-policy-grid"></div>
       <div class="table-toolbar">
-        <div><strong>扣费账本</strong>，翻页后仍保留当前位置，适合连续排查近期消费。</div>
+        <div><strong>实际扣费账本</strong>，每条记录都会展示消费项目、扣减来源和原因说明，方便你快速判断为什么会扣费。</div>
         <div id="ledger-meta">加载中…</div>
       </div>
       <div class="table-wrap">
       <table>
-        <thead><tr><th>时间</th><th>类型</th><th>事件</th><th>变动</th><th>余额</th><th>说明</th></tr></thead>
+        <thead><tr><th>时间</th><th>消费项目</th><th>本次扣减</th><th>扣减来源</th><th>扣后余额</th><th>说明</th></tr></thead>
         <tbody id="ledger-body"></tbody>
       </table>
       </div>
@@ -1240,20 +1294,12 @@ def render_portal_html() -> str:
   <div class="contact-modal-card" role="dialog" aria-modal="true" aria-labelledby="wechat-contact-title">
     <div class="contact-modal-top">
       <div>
-        <div class="contact-modal-title" id="wechat-contact-title">微信联系</div>
-        <div class="contact-modal-note">扫码即可添加微信，也可以直接复制微信号 xiamimate。</div>
+        <div class="contact-modal-title" id="wechat-contact-title">企微联系</div>
+        <div class="contact-modal-note">扫码即可添加企业微信。</div>
       </div>
       <button type="button" class="contact-modal-close" id="wechat-contact-close" aria-label="关闭">×</button>
     </div>
-    __WECHAT_QR_HTML__
-    <div class="wechat-id-box">
-      <div class="wechat-id-label">微信号</div>
-      <div class="wechat-id-value" id="wechat-contact-id">xiamimate</div>
-    </div>
-    <div class="contact-modal-actions">
-      <button type="button" class="contact-action-btn" id="wechat-contact-copy">复制微信号</button>
-      <span class="contact-inline-status" id="wechat-contact-status"></span>
-    </div>
+    <div id="wechat-contact-body">__WECHAT_QR_HTML__</div>
   </div>
 </div>
 
@@ -1290,14 +1336,14 @@ def render_portal_html() -> str:
   const wechatContactTrigger = document.getElementById("wechat-contact-trigger");
   const wechatContactModal = document.getElementById("wechat-contact-modal");
   const wechatContactClose = document.getElementById("wechat-contact-close");
-  const wechatContactCopy = document.getElementById("wechat-contact-copy");
-  const wechatContactStatus = document.getElementById("wechat-contact-status");
+  const contactMailLink = document.querySelector(".mail-link");
+  const contactFeedbackLink = document.querySelector(".feedback-link");
+  const wechatContactBody = document.getElementById("wechat-contact-body");
   const topupViewButtons = document.querySelectorAll("[data-topup-view]");
   const notificationsBody = document.getElementById("notifications-body");
   const notificationState = { category: "system", items: [] };
   var currentAccountData = null;
   var verificationGateState = { enforced: false, verified: false };
-  var wechatContactId = "xiamimate";
 
   navItems.forEach(function(item) {
     item.addEventListener("click", function() {
@@ -1416,6 +1462,54 @@ def render_portal_html() -> str:
     });
   }
 
+  function renderWechatQr(contact) {
+    if (!wechatContactBody) return;
+    wechatContactBody.innerHTML = "";
+    var qr = contact && contact.wechat_qr_base64 ? String(contact.wechat_qr_base64) : "";
+    if (!qr) {
+      var note = document.createElement("div");
+      note.className = "contact-modal-note";
+      note.textContent = "当前未找到企微二维码图片，请联系管理员上传。";
+      wechatContactBody.appendChild(note);
+      return;
+    }
+    var wrap = document.createElement("div");
+    wrap.className = "wechat-qr-wrap";
+    var img = document.createElement("img");
+    img.className = "wechat-qr-image";
+    img.alt = "企微二维码";
+    img.src = qr;
+    wrap.appendChild(img);
+    wechatContactBody.appendChild(wrap);
+  }
+
+  function applyContactConfig(contact) {
+    if (!contact) return;
+    if (contactMailLink) {
+      contactMailLink.href = contact.contact_email ? ("mailto:" + String(contact.contact_email)) : "#";
+    }
+    if (contactFeedbackLink && contact.feedback_url) {
+      contactFeedbackLink.href = String(contact.feedback_url);
+    }
+    renderWechatQr(contact);
+  }
+
+  async function refreshContactConfig() {
+    try {
+      var response = await fetch(withPortalToken("/portal/api/public/site-contact-config"), {
+        cache: "no-store",
+        credentials: "same-origin"
+      });
+      if (!response.ok) return null;
+      var payload = await response.json();
+      var contact = payload && payload.data ? payload.data.contact : null;
+      applyContactConfig(contact);
+      return contact;
+    } catch (error) {
+      return null;
+    }
+  }
+
   function openWechatModal() {
     if (!wechatContactModal) return;
     wechatContactModal.hidden = false;
@@ -1429,7 +1523,30 @@ def render_portal_html() -> str:
   }
 
   if (wechatContactTrigger) {
-    wechatContactTrigger.addEventListener("click", openWechatModal);
+    wechatContactTrigger.addEventListener("click", async function() {
+      await refreshContactConfig();
+      openWechatModal();
+    });
+  }
+
+  if (contactMailLink) {
+    contactMailLink.addEventListener("click", async function(event) {
+      event.preventDefault();
+      var contact = await refreshContactConfig();
+      var target = contact && contact.contact_email ? ("mailto:" + String(contact.contact_email)) : (contactMailLink.getAttribute("href") || "#");
+      window.location.href = target;
+    });
+  }
+
+  if (contactFeedbackLink) {
+    contactFeedbackLink.addEventListener("click", async function(event) {
+      event.preventDefault();
+      var contact = await refreshContactConfig();
+      var target = contact && contact.feedback_url ? String(contact.feedback_url) : (contactFeedbackLink.getAttribute("href") || "");
+      if (target) {
+        window.open(target, "_blank", "noopener,noreferrer");
+      }
+    });
   }
 
   if (wechatContactClose) {
@@ -1450,22 +1567,7 @@ def render_portal_html() -> str:
     }
   });
 
-  if (wechatContactCopy) {
-    wechatContactCopy.addEventListener("click", function() {
-      var done = function(message) {
-        if (wechatContactStatus) wechatContactStatus.textContent = message;
-      };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(wechatContactId).then(function() {
-          done("微信号已复制，可以直接到微信里粘贴添加。");
-        }).catch(function() {
-          done("复制失败，请手动添加微信号：" + wechatContactId);
-        });
-        return;
-      }
-      done("当前浏览器不支持自动复制，请手动添加微信号：" + wechatContactId);
-    });
-  }
+  refreshContactConfig();
 
   var usageLoaded = false, ledgerLoaded = false, topupLoaded = false;
 
@@ -1721,6 +1823,7 @@ def render_portal_html() -> str:
     syncNotificationItems(data.notifications || []);
     var pa = data.points_account || {};
     var balanceBreakdown = data.balance_breakdown || {};
+    var policyText = balanceBreakdown.consumption_policy_text || "消费时优先扣减月包积分；充值包积分永久有效。";
     var subs = data.subscriptions || [];
     var activeSubscription = findActiveSubscription(subs);
     var planTier = activeSubscription ? normalizePlanLabel(data.plan_tier || user.plan_tier || activeSubscription.package_code || "已开通") : "无套餐";
@@ -1731,6 +1834,7 @@ def render_portal_html() -> str:
     document.getElementById("user-info").textContent =
       (user.display_name || user.user_id || "用户") + "  ·  " + (user.email || "");
     document.getElementById("hero-balance").textContent = intVal(pa.balance_points);
+    document.getElementById("hero-balance-policy").textContent = policyText;
 
     // Account info
     var infoHtml = [
@@ -1822,7 +1926,7 @@ def render_portal_html() -> str:
       planRows.push(infoRow("套餐有效至", esc(fmtTimeFull(activeSubscription.current_period_end))));
       planRows.push(infoRow("月度积分", activeSubscription.monthly_points || "-"));
       planRows.push(infoRow("积分有效期", "月包积分在当前套餐有效期结束后自动清零"));
-      planRows.push(infoRow("消费顺序", "优先扣减月包余额，不足时再扣充值包余额"));
+      planRows.push(infoRow("消费顺序", esc(policyText)));
     }
     document.getElementById("plan-info").innerHTML = planRows.join("");
 
@@ -1833,6 +1937,8 @@ def render_portal_html() -> str:
       var label = displayMap[et] || et;
       return '<div class="pricing-pill"><span class="name">' + esc(label) + '</span><span class="cost">' + costMap[et] + ' 积分/次</span></div>';
     }).join("");
+
+    renderBillingPolicy(balanceBreakdown, costMap, displayMap);
 
     renderNotifications(data);
     renderInvoiceSummary(data);
@@ -1937,17 +2043,40 @@ def render_portal_html() -> str:
 
   function localizeLedgerDescription(row) {
     var description = String((row && row.description) || "").trim();
-    var eventType = String((row && row.event_type) || "").trim();
+    var entryType = String((row && row.entry_type) || "").trim().toLowerCase();
+    var eventType = String((row && row.event_type) || "").trim().toLowerCase();
     var mapping = {
       "inviter reward points": "邀请新用户注册成功奖励积分",
       "signup gift points": "新用户注册赠送积分",
-      "promotion reward": "活动赠送积分"
+      "promotion reward": "活动赠送积分",
+      "MiniMax agent request": "按 LLM 请求次数计费。",
+      "MiniMax agent request failed": "LLM 请求失败，系统已自动退款。",
+      "Dify workflow run": "一次 Workflow 固定计费 8 积分，内部步骤只保留审计记录，不重复收费。",
+      "Dify workflow request failed": "Workflow 请求失败，系统已自动退款。",
+      "expired subscription points removed": "当前订阅周期结束后，未使用完的月包积分会自动清零。"
     };
     if (mapping[description]) {
       return mapping[description];
     }
     if (description) {
       return description;
+    }
+    if (entryType === "consume") {
+      if (eventType === "workflow_run") {
+        return "一次 Workflow 固定计费 8 积分，内部检索和调用只保留审计记录，不重复收费。";
+      }
+      if (eventType === "llm_request") {
+        return "按 LLM 请求次数计费。";
+      }
+      if (eventType === "kb_retrieve" || eventType === "dify_knowledge_retrieve") {
+        return "按知识库检索次数计费。";
+      }
+      if (eventType === "product_api_call") {
+        return "按商品 API 检索次数计费。";
+      }
+      if (eventType === "web_search") {
+        return "按网络搜索次数计费。";
+      }
     }
     if (eventType === "referral_invited_reward") {
       return "绑定邀请码额外奖励积分";
@@ -1957,6 +2086,12 @@ def render_portal_html() -> str:
     }
     if (eventType === "signup_gift") {
       return "新用户注册赠送积分";
+    }
+    if (entryType === "subscription_expire") {
+      return "当前订阅周期结束后，未使用完的月包积分会自动清零。";
+    }
+    if (entryType === "daily_quota_reset") {
+      return "游客账户会按每日额度上限自动重置余额。";
     }
     return "";
   }
@@ -1982,6 +2117,11 @@ def render_portal_html() -> str:
   }
 
   function localizeLedgerEventType(eventType) {
+    var normalized = String(eventType || "").trim().toLowerCase();
+    var displayMap = (currentAccountData && currentAccountData.event_pricing_display) || {};
+    if (displayMap[normalized]) {
+      return displayMap[normalized];
+    }
     var mapping = {
       llm_request: "LLM 请求",
       workflow_run: "Workflow 请求",
@@ -1999,8 +2139,139 @@ def render_portal_html() -> str:
       admin_grant: "后台加积分",
       promotion_reward: "活动奖励"
     };
-    var normalized = String(eventType || "").trim().toLowerCase();
     return mapping[normalized] || String(eventType || "");
+  }
+
+  function getLedgerEventPointCost(eventType) {
+    var costMap = (currentAccountData && currentAccountData.point_cost_by_event) || {};
+    return intVal(costMap[String(eventType || "").trim().toLowerCase()]);
+  }
+
+  function localizeLedgerSource(source) {
+    var mapping = {
+      subscription: "月包积分",
+      recharge: "充值包积分",
+      other: "其他赠送积分"
+    };
+    var normalized = String(source || "").trim().toLowerCase();
+    return mapping[normalized] || "其他赠送积分";
+  }
+
+  function summarizeLedgerSources(row) {
+    if (Array.isArray(row && row.source_summary) && row.source_summary.length) {
+      return row.source_summary.map(function(item) {
+        return {
+          source: String(item.source || "other").trim().toLowerCase() || "other",
+          label: item.label || localizeLedgerSource(item.source),
+          points: intVal(item.points)
+        };
+      }).filter(function(item) {
+        return item.points > 0;
+      });
+    }
+    var meta = (row && row.meta_json) || {};
+    var allocations = Array.isArray(meta.balance_source_allocations) ? meta.balance_source_allocations : [];
+    var totals = {};
+    allocations.forEach(function(item) {
+      var source = String((item && item.source) || "other").trim().toLowerCase() || "other";
+      var points = intVal(item && item.points);
+      if (points <= 0) {
+        return;
+      }
+      totals[source] = (totals[source] || 0) + points;
+    });
+    if (!Object.keys(totals).length && String((row && row.entry_type) || "").trim().toLowerCase() === "subscription_expire") {
+      totals.subscription = Math.abs(intVal(row && row.points_delta));
+    }
+    return ["subscription", "recharge", "other"].filter(function(source) {
+      return intVal(totals[source]) > 0;
+    }).map(function(source) {
+      return {
+        source: source,
+        label: localizeLedgerSource(source),
+        points: intVal(totals[source])
+      };
+    });
+  }
+
+  function renderLedgerSourceChip(item) {
+    var source = String((item && item.source) || "other").trim().toLowerCase() || "other";
+    var label = item && item.label ? String(item.label) : localizeLedgerSource(source);
+    return '<span class="source-chip ' + esc(source) + '">' + esc(label) + ' ' + intVal(item && item.points) + '</span>';
+  }
+
+  function renderLedgerItemCell(row) {
+    var entryType = String((row && row.entry_type) || "").trim().toLowerCase();
+    var title = entryType === "consume"
+      ? (localizeLedgerEventType(row.event_type) || localizeLedgerEntryType(row.entry_type, row.event_type) || "消费")
+      : localizeLedgerEntryType(row.entry_type, row.event_type);
+    var points = Math.abs(intVal(row && row.points_delta));
+    var units = intVal(row && row.units);
+    var unitCost = getLedgerEventPointCost(row && row.event_type);
+    var detailParts = [];
+    if (entryType === "consume") {
+      if (units > 0) {
+        detailParts.push(units + " 次");
+      }
+      if (unitCost > 0) {
+        detailParts.push(unitCost + " 积分/次");
+      }
+      detailParts.push("合计 " + points + " 积分");
+    } else if (entryType === "subscription_expire") {
+      detailParts.push("到期清零 " + points + " 积分");
+    } else if (points > 0) {
+      detailParts.push("本次变动 " + points + " 积分");
+    }
+    return '<div class="table-main-text">' + esc(title) + '</div>' +
+      (detailParts.length ? '<div class="table-sub-text">' + esc(detailParts.join(' · ')) + '</div>' : '');
+  }
+
+  function renderLedgerSourceCell(row) {
+    var sources = summarizeLedgerSources(row);
+    if (!sources.length) {
+      return '<div class="table-sub-text">按系统默认顺序扣减</div>';
+    }
+    return '<div class="source-chip-row">' + sources.map(renderLedgerSourceChip).join("") + '</div>';
+  }
+
+  function renderLedgerDescriptionCell(row) {
+    var description = localizeLedgerDescription(row);
+    var sourceSummaryText = String((row && row.source_summary_text) || "").trim();
+    var extraLines = [];
+    if (sourceSummaryText) {
+      extraLines.push('实际扣减：' + sourceSummaryText);
+    }
+    return '<div class="table-main-text">' + esc(description || "-") + '</div>' +
+      extraLines.map(function(line) {
+        return '<div class="table-sub-text">' + esc(line) + '</div>';
+      }).join('');
+  }
+
+  function formatConsumptionPriority(priority) {
+    var labels = (Array.isArray(priority) ? priority : ["subscription", "recharge", "other"]).map(localizeLedgerSource);
+    return labels.join(" -> ");
+  }
+
+  function renderBillingPolicy(balanceBreakdown, costMap, displayMap) {
+    var container = document.getElementById("billing-policy-grid");
+    if (!container) {
+      return;
+    }
+    var priorityText = formatConsumptionPriority(balanceBreakdown.consumption_priority || ["subscription", "recharge", "other"]);
+    var policyText = balanceBreakdown.consumption_policy_text || "系统会优先扣减月包积分；月包不足时再扣充值包积分。";
+    var examples = ["workflow_run", "llm_request", "kb_retrieve", "product_api_call", "web_search"].filter(function(eventType) {
+      return intVal(costMap[eventType]) > 0;
+    }).map(function(eventType) {
+      return (displayMap[eventType] || localizeLedgerEventType(eventType) || eventType) + '：' + intVal(costMap[eventType]) + ' 积分/次';
+    });
+    container.innerHTML = '' +
+      '<div class="ledger-policy-card"><div class="table-main-text">扣减顺序</div><div class="table-sub-text">' + esc(priorityText) + '</div><div class="table-sub-text">' + esc(policyText) + '</div></div>' +
+      '<div class="ledger-policy-card"><div class="table-main-text">有效期规则</div><div class="table-sub-text">月包积分只在当前订阅周期内有效，到期后自动清零。</div><div class="table-sub-text">充值包积分永久有效，通常在月包不足时才会继续扣减。</div></div>' +
+      '<div class="ledger-policy-card"><div class="table-main-text">常见单次扣费</div>' +
+        (examples.length
+          ? examples.map(function(line) { return '<div class="table-sub-text">' + esc(line) + '</div>'; }).join('')
+          : '<div class="table-sub-text">按后台最新计价规则实时结算。</div>') +
+      '</div>';
   }
 
   function renderInvoiceSummary(data) {
@@ -2072,15 +2343,15 @@ def render_portal_html() -> str:
     var total = data.total || 0;
     var pageSize = data.page_size || 20;
     var totalPages = Math.max(1, Math.ceil(total / pageSize));
-    document.getElementById("ledger-meta").textContent = "共 " + total + " 条，本页 " + rows.length + " 条";
+    document.getElementById("ledger-meta").textContent = "共 " + total + " 条实际扣费记录，本页 " + rows.length + " 条";
 
     document.getElementById("ledger-body").innerHTML = rows.length ? rows.map(function(r) {
       var delta = intVal(r.points_delta);
       var cls = delta >= 0 ? "positive" : "negative";
       var sign = delta >= 0 ? "+" : "";
-      return '<tr><td>' + fmtTime(r.created_at) + '</td><td>' + esc(localizeLedgerEntryType(r.entry_type, r.event_type)) +
-        '</td><td>' + esc(localizeLedgerEventType(r.event_type)) + '</td><td class="' + cls + '">' + sign + delta +
-        '</td><td>' + intVal(r.balance_after_points) + '</td><td>' + esc(localizeLedgerDescription(r)) + '</td></tr>';
+      return '<tr><td>' + fmtTime(r.created_at) + '</td><td>' + renderLedgerItemCell(r) +
+        '</td><td class="' + cls + '">' + sign + delta + '</td><td>' + renderLedgerSourceCell(r) +
+        '</td><td>' + intVal(r.balance_after_points) + '</td><td>' + renderLedgerDescriptionCell(r) + '</td></tr>';
     }).join("") : renderEmptyRow(6, "暂无消费记录");
 
     document.getElementById("ledger-pager").innerHTML =
@@ -2146,4 +2417,4 @@ def render_portal_html() -> str:
  defer>
 </script>
 </body>
-</html>""".replace("__OPENWEBUI_HOME_URL__", openwebui_home_url).replace("__WECHAT_QR_HTML__", wechat_qr_html)
+</html>""".replace("__OPENWEBUI_HOME_URL__", openwebui_home_url).replace("__WECHAT_QR_HTML__", wechat_qr_html).replace("__CONTACT_EMAIL__", contact_email).replace("__FEEDBACK_URL__", feedback_url)

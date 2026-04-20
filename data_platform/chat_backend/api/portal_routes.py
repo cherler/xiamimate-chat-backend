@@ -54,6 +54,7 @@ from data_platform.chat_backend.domains.notifications.service import (
     _set_notification_read_state,
 )
 from data_platform.chat_backend.domains.payments.service import _fetch_payment_order_for_user
+from data_platform.chat_backend.domains.site_config import _get_contact_config
 
 from data_platform.chat_backend.api.models import (
     BindReferralCodeRequest,
@@ -77,6 +78,58 @@ _PORTAL_PROVIDER_LABELS = {
     "wechat": "微信支付",
     "manual": "线下/手工",
 }
+
+_PORTAL_LEDGER_SOURCE_LABELS = {
+    "subscription": "月包积分",
+    "recharge": "充值包积分",
+    "other": "其他赠送积分",
+}
+
+
+def _normalize_portal_ledger_source(source: Any) -> str:
+    normalized = str(source or "").strip().lower()
+    if normalized in _PORTAL_LEDGER_SOURCE_LABELS:
+        return normalized
+    return "other"
+
+
+def _summarize_portal_ledger_sources(row: dict[str, Any]) -> list[dict[str, Any]]:
+    meta_json = dict(row.get("meta_json") or {})
+    allocations = list(meta_json.get("balance_source_allocations") or [])
+    totals: dict[str, int] = {}
+    for allocation in allocations:
+        source = _normalize_portal_ledger_source((allocation or {}).get("source"))
+        points = max(0, int((allocation or {}).get("points") or 0))
+        if points <= 0:
+            continue
+        totals[source] = totals.get(source, 0) + points
+
+    if not totals and str(row.get("entry_type") or "").strip().lower() == "subscription_expire":
+        expired_points = max(0, int(meta_json.get("expired_points") or abs(int(row.get("points_delta") or 0))))
+        if expired_points > 0:
+            totals["subscription"] = expired_points
+
+    ordered_sources = ("subscription", "recharge", "other")
+    return [
+        {
+            "source": source,
+            "label": _PORTAL_LEDGER_SOURCE_LABELS[source],
+            "points": totals[source],
+        }
+        for source in ordered_sources
+        if totals.get(source, 0) > 0
+    ]
+
+
+def _build_portal_ledger_row(row: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(row)
+    source_summary = _summarize_portal_ledger_sources(enriched)
+    enriched["source_summary"] = source_summary
+    enriched["source_summary_text"] = "；".join(
+        f"{item['label']} {int(item.get('points') or 0)} 积分"
+        for item in source_summary
+    )
+    return enriched
 
 
 def _resolve_openwebui_session_user(request: Request) -> tuple[str, str, str] | None:
@@ -202,22 +255,33 @@ def openwebui_verified_user_check(request: Request) -> Response:
 
 @router.get("/portal")
 def portal_page() -> HTMLResponse:
-    return HTMLResponse(render_portal_html())
+    return HTMLResponse(render_portal_html(), headers={"Cache-Control": "no-store"})
 
 
 @router.get("/portal/account")
 def portal_account_page() -> HTMLResponse:
-    return HTMLResponse(render_portal_html())
+    return HTMLResponse(render_portal_html(), headers={"Cache-Control": "no-store"})
 
 
 @router.get("/portal/products")
 def portal_products_page() -> HTMLResponse:
-    return HTMLResponse(render_portal_products_html())
+    return HTMLResponse(render_portal_products_html(), headers={"Cache-Control": "no-store"})
 
 
 @router.get("/portal/guide")
 def portal_guide_page() -> HTMLResponse:
-    return HTMLResponse(render_portal_guide_html())
+    return HTMLResponse(render_portal_guide_html(), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/portal/api/public/site-contact-config")
+def portal_public_site_contact_config() -> dict[str, Any]:
+    with _postgres_conn() as conn:
+        contact = _get_contact_config(conn)
+    return _success_response(
+        "/portal/api/public/site-contact-config",
+        {"contact": contact},
+        "portal site contact config loaded",
+    )
 
 
 @router.get("/portal/contact/wechat-qr")
@@ -258,7 +322,8 @@ def portal_checkout_page(request: Request) -> HTMLResponse:
             selected_package=selected_package,
             pricing_preview=pricing_preview,
             mock_payment_enabled=PORTAL_MOCK_PAYMENT_ENABLED,
-        )
+        ),
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -365,13 +430,16 @@ def portal_get_ledger(request: Request) -> dict[str, Any]:
         _enforce_verified_portal_user(conn, user_id)
         base_query = (
             "SELECT entry_id, entry_type, event_type, units, points_delta, balance_after_points,"
-            " description, created_at"
+            " reference_id, description, meta_json, created_at"
             " FROM app.credit_ledger_entry"
             " WHERE user_id = %s" + filter_clause +
             " ORDER BY created_at DESC, entry_id DESC"
             " LIMIT %s OFFSET %s"
         )
-        rows = _run_pg_dict_query(conn, base_query, [user_id, page_size, offset])
+        rows = [
+            _build_portal_ledger_row(row)
+            for row in _run_pg_dict_query(conn, base_query, [user_id, page_size, offset])
+        ]
         count_query = "SELECT COUNT(*) AS cnt FROM app.credit_ledger_entry WHERE user_id = %s" + filter_clause
         total_row = _fetch_optional_one(conn, count_query, [user_id])
     total = int((total_row or {}).get("cnt", 0))

@@ -34,10 +34,16 @@ from data_platform.chat_backend.domains.notifications.service import (
     _fanout_system_notification_broadcast,
     _list_system_notification_broadcasts,
 )
+from data_platform.chat_backend.domains.site_config import (
+    _list_site_config,
+    _update_site_config,
+    _invalidate_site_config_cache,
+)
 from data_platform.chat_backend.api.models import (
     AdminGrantPointsRequest,
     CreateSystemNotificationBroadcastRequest,
     UpdateEventPricingRequest,
+    UpdateSiteConfigRequest,
 )
 
 # Import HTML renderer from original location (will be moved in a later phase)
@@ -345,4 +351,39 @@ def admin_update_event_pricing(event_type: str, request: Request, payload: Updat
         f"/admin/api/pricing/{event_type}",
         {"event_pricing": rows[0]},
         "event pricing updated",
+    )
+
+
+@router.get("/admin/api/site-config")
+def admin_list_site_config(request: Request) -> dict[str, Any]:
+    _require_admin_operator(request)
+    with _postgres_conn() as conn:
+        rows = _list_site_config(conn)
+    return _success_response(
+        "/admin/api/site-config",
+        {"site_config": rows},
+        "site config loaded",
+    )
+
+
+@router.put("/admin/api/site-config/{config_key}")
+def admin_update_site_config(config_key: str, request: Request, payload: UpdateSiteConfigRequest) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    with _postgres_conn() as conn:
+        updated = _update_site_config(conn, config_key, payload.config_value)
+        if not updated:
+            raise HTTPException(status_code=404, detail=f"config_key not found: {config_key}")
+        _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="update_site_config",
+            target_type="site_config",
+            target_id=config_key,
+            request_json={"config_value": payload.config_value[:200] if len(payload.config_value) > 200 else payload.config_value},
+            result_json={"config_key": updated["config_key"], "display_name": updated["display_name"], "updated_at": str(updated["updated_at"])},
+        )
+    return _success_response(
+        f"/admin/api/site-config/{config_key}",
+        {"site_config": updated},
+        "site config updated",
     )
