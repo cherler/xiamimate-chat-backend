@@ -926,7 +926,7 @@ def _sidebar(groups: list[tuple[str, list[tuple[str, str]]]]) -> str:
 
 
 def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html: str, body_html: str) -> str:
-  openwebui_home_url = escape(_portal_public_base_url())
+    openwebui_home_url = escape(_portal_public_base_url())
     contact = _load_contact_config()
     contact_email = escape(contact.get("contact_email") or "")
     feedback_url = escape(contact.get("feedback_url") or "")
