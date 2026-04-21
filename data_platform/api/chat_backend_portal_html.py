@@ -725,6 +725,9 @@ def render_portal_html() -> str:
       color: var(--accent);
       border-color: rgba(17, 75, 95, 0.18);
     }
+    .ledger-filter-tabs {
+      margin-bottom: 10px;
+    }
     .subview {
       display: none;
     }
@@ -1000,7 +1003,7 @@ def render_portal_html() -> str:
     <div class="nav-group-title">💰 财务管理</div>
     <a class="nav-item" data-page="balance"><span class="nav-item-label">余额概览</span></a>
     <a class="nav-item" data-page="topup"><span class="nav-item-label">充值/赠送记录</span></a>
-    <a class="nav-item" data-page="billing"><span class="nav-item-label">消费记录</span></a>
+    <a class="nav-item" data-page="billing"><span class="nav-item-label">完整账单</span></a>
     <a class="nav-item" data-page="usage"><span class="nav-item-label">使用趋势</span></a>
   </div>
   <div class="nav-group">
@@ -1240,19 +1243,27 @@ def render_portal_html() -> str:
     </div>
   </div>
 
-  <!-- 消费记录 -->
+  <!-- 完整账单 -->
   <div id="page-billing" class="page">
     <div class="card">
-      <h2>消费记录</h2>
-      <div class="card-note">这里只展示实际扣费记录，并把扣减顺序、扣减来源和常见计费规则翻成用户容易理解的中文。</div>
+      <h2>完整账单</h2>
+      <div class="card-note">默认按时间倒序展示全部积分变动；你也可以按消费、退款、充值/赠送、每日额度重置或其他来源筛选查看。</div>
       <div class="ledger-policy-grid" id="billing-policy-grid"></div>
+      <div class="subnav-tabs ledger-filter-tabs" id="ledger-filter-tabs">
+        <button type="button" class="sub-tab active" data-ledger-filter="all">全部</button>
+        <button type="button" class="sub-tab" data-ledger-filter="consume">消费</button>
+        <button type="button" class="sub-tab" data-ledger-filter="refund">退款</button>
+        <button type="button" class="sub-tab" data-ledger-filter="credit">充值/赠送</button>
+        <button type="button" class="sub-tab" data-ledger-filter="daily_reset">每日额度重置</button>
+        <button type="button" class="sub-tab" data-ledger-filter="other">其他</button>
+      </div>
       <div class="table-toolbar">
-        <div><strong>实际扣费账本</strong>，每条记录都会展示消费项目、扣减来源和原因说明，方便你快速判断为什么会扣费。</div>
+        <div><strong>完整账单</strong>，每条记录都会展示账单项目、来源、变动后余额和原因说明，方便你按时间回看完整积分流水。</div>
         <div id="ledger-meta">加载中…</div>
       </div>
       <div class="table-wrap">
       <table>
-        <thead><tr><th>时间</th><th>消费项目</th><th>本次扣减</th><th>扣减来源</th><th>扣后余额</th><th>说明</th></tr></thead>
+        <thead><tr><th>时间</th><th>账单项目</th><th>本次变动</th><th>变动来源</th><th>变动后余额</th><th>说明</th></tr></thead>
         <tbody id="ledger-body"></tbody>
       </table>
       </div>
@@ -1315,7 +1326,7 @@ def render_portal_html() -> str:
   const notificationsNavBadge = document.getElementById("notifications-nav-badge");
   const pageTitles = {
     account: "账户信息", notifications: "通知中心", balance: "余额概览", topup: "充值/赠送记录",
-    billing: "消费记录", usage: "使用趋势", plan: "当前套餐"
+    billing: "完整账单", usage: "使用趋势", plan: "当前套餐"
   };
   const notificationCategoryButtons = document.querySelectorAll("[data-notification-category]");
   const markNotificationsReadButton = document.getElementById("mark-notifications-read");
@@ -1340,6 +1351,7 @@ def render_portal_html() -> str:
   const contactFeedbackLink = document.querySelector(".feedback-link");
   const wechatContactBody = document.getElementById("wechat-contact-body");
   const topupViewButtons = document.querySelectorAll("[data-topup-view]");
+  const ledgerFilterButtons = document.querySelectorAll("[data-ledger-filter]");
   const notificationsBody = document.getElementById("notifications-body");
   const notificationState = { category: "system", items: [] };
   var currentAccountData = null;
@@ -1354,6 +1366,12 @@ def render_portal_html() -> str:
   topupViewButtons.forEach(function(button) {
     button.addEventListener("click", function() {
       setTopupView(button.getAttribute("data-topup-view") || "records");
+    });
+  });
+
+  ledgerFilterButtons.forEach(function(button) {
+    button.addEventListener("click", function() {
+      setLedgerFilter(button.getAttribute("data-ledger-filter") || "all");
     });
   });
 
@@ -2228,8 +2246,21 @@ def render_portal_html() -> str:
 
   function renderLedgerSourceCell(row) {
     var sources = summarizeLedgerSources(row);
+    var entryType = String((row && row.entry_type) || "").trim().toLowerCase();
     if (!sources.length) {
-      return '<div class="table-sub-text">按系统默认顺序扣减</div>';
+      if (entryType === "consume") {
+        return '<div class="table-sub-text">按系统默认顺序扣减</div>';
+      }
+      if (entryType === "refund") {
+        return '<div class="table-sub-text">按原扣减来源退回</div>';
+      }
+      if (entryType === "daily_quota_reset") {
+        return '<div class="table-sub-text">系统按日自动重置</div>';
+      }
+      if (intVal(row && row.points_delta) > 0) {
+        return '<div class="table-sub-text">系统发放或到账</div>';
+      }
+      return '<div class="table-sub-text">-</div>';
     }
     return '<div class="source-chip-row">' + sources.map(renderLedgerSourceChip).join("") + '</div>';
   }
@@ -2237,9 +2268,19 @@ def render_portal_html() -> str:
   function renderLedgerDescriptionCell(row) {
     var description = localizeLedgerDescription(row);
     var sourceSummaryText = String((row && row.source_summary_text) || "").trim();
+    var entryType = String((row && row.entry_type) || "").trim().toLowerCase();
+    var delta = intVal(row && row.points_delta);
     var extraLines = [];
     if (sourceSummaryText) {
-      extraLines.push('实际扣减：' + sourceSummaryText);
+      if (entryType === "consume") {
+        extraLines.push('实际扣减：' + sourceSummaryText);
+      } else if (entryType === "refund") {
+        extraLines.push('实际退回：' + sourceSummaryText);
+      } else if (entryType === "subscription_expire") {
+        extraLines.push('到期清零：' + sourceSummaryText);
+      } else if (delta > 0) {
+        extraLines.push('到账构成：' + sourceSummaryText);
+      }
     }
     return '<div class="table-main-text">' + esc(description || "-") + '</div>' +
       extraLines.map(function(line) {
@@ -2326,14 +2367,62 @@ def render_portal_html() -> str:
     }).join("");
   }
 
-  // ── Billing ledger (消费记录) ──
+  function normalizeLedgerFilter(filter) {
+    var normalized = String(filter || "all").trim().toLowerCase() || "all";
+    if (["all", "consume", "refund", "credit", "daily_reset", "other"].indexOf(normalized) !== -1) {
+      return normalized;
+    }
+    if (normalized === "spend") {
+      return "consume";
+    }
+    if (normalized === "topup") {
+      return "credit";
+    }
+    return "all";
+  }
+
+  function getLedgerFilterLabel(filter) {
+    var mapping = {
+      all: "全部来源",
+      consume: "消费",
+      refund: "退款",
+      credit: "充值/赠送",
+      daily_reset: "每日额度重置",
+      other: "其他"
+    };
+    var normalized = normalizeLedgerFilter(filter);
+    return mapping[normalized] || mapping.all;
+  }
+
+  function syncLedgerFilterButtons() {
+    ledgerFilterButtons.forEach(function(button) {
+      button.classList.toggle("active", button.getAttribute("data-ledger-filter") === currentLedgerFilter);
+    });
+  }
+
+  function setLedgerFilter(filter) {
+    currentLedgerFilter = normalizeLedgerFilter(filter);
+    syncLedgerFilterButtons();
+    loadLedger(1, currentLedgerFilter);
+  }
+
+  // ── Billing ledger (完整账单) ──
   var currentLedgerPage = 1;
-  function loadLedger(page) {
+  var currentLedgerFilter = "all";
+  function loadLedger(page, filter) {
     if (verificationGateState.enforced && !verificationGateState.verified) {
       return;
     }
     currentLedgerPage = page || 1;
-    apiFetch("/portal/api/ledger?page=" + currentLedgerPage + "&page_size=20&filter=spend").then(function(data) {
+    if (typeof filter !== "undefined") {
+      currentLedgerFilter = normalizeLedgerFilter(filter);
+    }
+    syncLedgerFilterButtons();
+    var requestUrl = "/portal/api/ledger?page=" + currentLedgerPage + "&page_size=20";
+    if (currentLedgerFilter !== "all") {
+      requestUrl += "&filter=" + encodeURIComponent(currentLedgerFilter);
+    }
+    apiFetch(requestUrl).then(function(data) {
       renderLedger(data);
     }).catch(function() {});
   }
@@ -2343,7 +2432,7 @@ def render_portal_html() -> str:
     var total = data.total || 0;
     var pageSize = data.page_size || 20;
     var totalPages = Math.max(1, Math.ceil(total / pageSize));
-    document.getElementById("ledger-meta").textContent = "共 " + total + " 条实际扣费记录，本页 " + rows.length + " 条";
+    document.getElementById("ledger-meta").textContent = "当前筛选：" + getLedgerFilterLabel(currentLedgerFilter) + " · 共 " + total + " 条，按时间倒序展示；本页 " + rows.length + " 条";
 
     document.getElementById("ledger-body").innerHTML = rows.length ? rows.map(function(r) {
       var delta = intVal(r.points_delta);
@@ -2352,7 +2441,7 @@ def render_portal_html() -> str:
       return '<tr><td>' + fmtTime(r.created_at) + '</td><td>' + renderLedgerItemCell(r) +
         '</td><td class="' + cls + '">' + sign + delta + '</td><td>' + renderLedgerSourceCell(r) +
         '</td><td>' + intVal(r.balance_after_points) + '</td><td>' + renderLedgerDescriptionCell(r) + '</td></tr>';
-    }).join("") : renderEmptyRow(6, "暂无消费记录");
+    }).join("") : renderEmptyRow(6, "暂无账单记录");
 
     document.getElementById("ledger-pager").innerHTML =
       '<button id="lg-prev" ' + (currentLedgerPage <= 1 ? 'disabled' : '') + '>上一页</button>' +

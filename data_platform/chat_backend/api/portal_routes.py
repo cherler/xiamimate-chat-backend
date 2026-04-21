@@ -85,6 +85,13 @@ _PORTAL_LEDGER_SOURCE_LABELS = {
     "other": "其他赠送积分",
 }
 
+_PORTAL_LEDGER_FILTER_CLAUSES = {
+    "consume": " AND entry_type = 'consume'",
+    "refund": " AND entry_type = 'refund'",
+    "credit": " AND points_delta > 0 AND entry_type NOT IN ('refund', 'daily_quota_reset')",
+    "daily_reset": " AND entry_type = 'daily_quota_reset'",
+}
+
 
 def _normalize_portal_ledger_source(source: Any) -> str:
     normalized = str(source or "").strip().lower()
@@ -95,7 +102,10 @@ def _normalize_portal_ledger_source(source: Any) -> str:
 
 def _summarize_portal_ledger_sources(row: dict[str, Any]) -> list[dict[str, Any]]:
     meta_json = dict(row.get("meta_json") or {})
+    entry_type = str(row.get("entry_type") or "").strip().lower()
     allocations = list(meta_json.get("balance_source_allocations") or [])
+    if entry_type == "refund" and not allocations:
+        allocations = list(meta_json.get("refund_allocations") or [])
     totals: dict[str, int] = {}
     for allocation in allocations:
         source = _normalize_portal_ledger_source((allocation or {}).get("source"))
@@ -104,7 +114,7 @@ def _summarize_portal_ledger_sources(row: dict[str, Any]) -> list[dict[str, Any]
             continue
         totals[source] = totals.get(source, 0) + points
 
-    if not totals and str(row.get("entry_type") or "").strip().lower() == "subscription_expire":
+    if not totals and entry_type == "subscription_expire":
         expired_points = max(0, int(meta_json.get("expired_points") or abs(int(row.get("points_delta") or 0))))
         if expired_points > 0:
             totals["subscription"] = expired_points
@@ -422,9 +432,20 @@ def portal_get_ledger(request: Request) -> dict[str, Any]:
 
     filter_clause = ""
     if ledger_filter == "topup":
-        filter_clause = " AND points_delta > 0 AND entry_type <> 'refund'"
+        filter_clause = _PORTAL_LEDGER_FILTER_CLAUSES["credit"]
     elif ledger_filter == "spend":
         filter_clause = " AND points_delta < 0"
+    elif ledger_filter in _PORTAL_LEDGER_FILTER_CLAUSES:
+        filter_clause = _PORTAL_LEDGER_FILTER_CLAUSES[ledger_filter]
+    elif ledger_filter == "other":
+        filter_clause = (
+            " AND NOT ("
+            "entry_type = 'consume'"
+            " OR entry_type = 'refund'"
+            " OR entry_type = 'daily_quota_reset'"
+            " OR (points_delta > 0 AND entry_type NOT IN ('refund', 'daily_quota_reset'))"
+            ")"
+        )
 
     with _postgres_conn() as conn:
         _enforce_verified_portal_user(conn, user_id)
