@@ -98,6 +98,16 @@ class ConfirmEmailVerificationRequest(BaseModel):
     code: str = Field(..., min_length=4, max_length=8)
 
 
+class RequestPasswordResetRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+
+
+class ConfirmPasswordResetRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    code: str = Field(..., min_length=4, max_length=8)
+    new_password: str = Field(..., min_length=8, max_length=72)
+
+
 class BindReferralCodeRequest(BaseModel):
     invite_code: str = Field(..., min_length=4, max_length=32)
 

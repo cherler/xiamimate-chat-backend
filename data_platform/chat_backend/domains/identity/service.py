@@ -5,10 +5,15 @@ Depends on: infra.settings, infra.postgres, identity.models,
 """
 from __future__ import annotations
 
+import logging
 import re
+import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
+import bcrypt
 from fastapi import HTTPException, Request
 
 from data_platform.chat_backend.infra.settings import (
@@ -18,6 +23,9 @@ from data_platform.chat_backend.infra.settings import (
     DEMO_FALLBACK_ENABLED,
     EMAIL_VERIFICATION_CODE_TTL_SECONDS,
     EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS,
+    OPENWEBUI_DB_PATH,
+    PASSWORD_RESET_MIN_LENGTH,
+    PROJECT_ROOT,
     USER_ID_HEADER_NAME,
     USER_EMAIL_HEADER_NAME,
     USER_NAME_HEADER_NAME,
@@ -50,6 +58,10 @@ _APP_USER_SELECT = """
 """
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_EMAIL_CHALLENGE_PURPOSE_SIGNUP = "signup_email_verify"
+_EMAIL_CHALLENGE_PURPOSE_PASSWORD_RESET = "password_reset"
+_OPENWEBUI_DB_LOCK = threading.Lock()
+_LOGGER = logging.getLogger(__name__)
 
 
 def _normalize_user_headers(request: Request) -> tuple[str, str, str]:
@@ -104,8 +116,12 @@ def _ensure_invite_code_for_row(conn, row: dict[str, Any]) -> dict[str, Any]:
     return refetched
 
 
+def _build_email_challenge_code_hash(user_id: str, email: str, code: str, purpose: str) -> str:
+    return _hash_text(f"{purpose}:{user_id}:{email.strip().lower()}:{code.strip()}")
+
+
 def _build_email_verification_code_hash(user_id: str, email: str, code: str) -> str:
-    return _hash_text(f"email-verify:{user_id}:{email.strip().lower()}:{code.strip()}")
+    return _build_email_challenge_code_hash(user_id, email, code, _EMAIL_CHALLENGE_PURPOSE_SIGNUP)
 
 
 def _email_verification_day_window(now: datetime) -> tuple[datetime, datetime]:
@@ -118,17 +134,18 @@ def _email_verification_day_window(now: datetime) -> tuple[datetime, datetime]:
 def _count_email_verification_sends(
     conn,
     *,
+    purpose: str,
     user_id: str | None = None,
     email: str | None = None,
     start_at: datetime,
     end_at: datetime,
 ) -> int:
     conditions = [
-        "purpose = 'signup_email_verify'",
+        "purpose = %s",
         "last_sent_at >= %s",
         "last_sent_at < %s",
     ]
-    params: list[Any] = [start_at, end_at]
+    params: list[Any] = [purpose, start_at, end_at]
     if user_id:
         conditions.append("user_id = %s")
         params.append(user_id)
@@ -162,6 +179,7 @@ def _enforce_email_verification_send_quota(conn, user_id: str, email: str, now: 
     if per_user_limit > 0:
         sent_by_user = _count_email_verification_sends(
             conn,
+            purpose=_EMAIL_CHALLENGE_PURPOSE_SIGNUP,
             user_id=user_id,
             start_at=start_at,
             end_at=end_at,
@@ -173,6 +191,37 @@ def _enforce_email_verification_send_quota(conn, user_id: str, email: str, now: 
     if per_email_limit > 0:
         sent_by_email = _count_email_verification_sends(
             conn,
+            purpose=_EMAIL_CHALLENGE_PURPOSE_SIGNUP,
+            email=email,
+            start_at=start_at,
+            end_at=end_at,
+        )
+        if sent_by_email >= per_email_limit:
+            raise HTTPException(status_code=429, detail="今日邮箱验证码发送次数已达单邮箱上限，请明天再试")
+
+    return limits
+
+
+def _enforce_email_challenge_send_quota(conn, *, purpose: str, user_id: str, email: str, now: datetime) -> dict[str, int]:
+    limits = _get_email_verification_security_config(conn)
+    start_at, end_at = _email_verification_day_window(now)
+    per_user_limit = int(limits.get("daily_send_limit_per_user") or 0)
+    if per_user_limit > 0:
+        sent_by_user = _count_email_verification_sends(
+            conn,
+            purpose=purpose,
+            user_id=user_id,
+            start_at=start_at,
+            end_at=end_at,
+        )
+        if sent_by_user >= per_user_limit:
+            raise HTTPException(status_code=429, detail="今日邮箱验证码发送次数已达单用户上限，请明天再试")
+
+    per_email_limit = int(limits.get("daily_send_limit_per_email") or 0)
+    if per_email_limit > 0:
+        sent_by_email = _count_email_verification_sends(
+            conn,
+            purpose=purpose,
             email=email,
             start_at=start_at,
             end_at=end_at,
@@ -274,6 +323,320 @@ def _ensure_user_record(
     )
 
 
+def _fetch_user_by_email(conn, email: str) -> RequestUser | None:
+    normalized_email = _validate_email_address(email)
+    row = _fetch_optional_one(
+        conn,
+        _APP_USER_SELECT + " WHERE LOWER(email) = %s ORDER BY created_at DESC LIMIT 1",
+        [normalized_email],
+    )
+    if row is None:
+        return None
+    row = _ensure_invite_code_for_row(conn, row)
+    return RequestUser(**row)
+
+
+def _resolve_openwebui_db_path() -> Path:
+    configured = (OPENWEBUI_DB_PATH or "").strip()
+    if not configured:
+        raise HTTPException(status_code=503, detail="Open WebUI 账号库路径未配置，暂时无法找回密码")
+    path = Path(configured).expanduser()
+    if not path.is_absolute():
+        path = (PROJECT_ROOT / path).resolve()
+    if not path.exists():
+        raise HTTPException(status_code=503, detail="Open WebUI 账号库不存在，暂时无法找回密码")
+    return path
+
+
+def _fetch_openwebui_user_identity_by_email(email: str) -> tuple[str, str, str] | None:
+    normalized_email = _validate_email_address(email)
+    db_path = _resolve_openwebui_db_path()
+    with _OPENWEBUI_DB_LOCK:
+        conn = sqlite3.connect(str(db_path), timeout=5)
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout = 5000")
+            row = conn.execute(
+                """
+                SELECT auth.id AS user_id,
+                       LOWER(auth.email) AS email,
+                       COALESCE(user.name, user.email, auth.email) AS display_name,
+                       auth.active AS active
+                FROM auth
+                LEFT JOIN user ON user.id = auth.id
+                WHERE LOWER(auth.email) = ?
+                LIMIT 1
+                """,
+                [normalized_email],
+            ).fetchone()
+        finally:
+            conn.close()
+    if row is None or not int(row["active"] or 0):
+        return None
+    return str(row["user_id"]), str(row["email"]), str(row["display_name"] or row["email"] or normalized_email)
+
+
+def _ensure_password_reset_user(conn, email: str) -> RequestUser | None:
+    identity = _fetch_openwebui_user_identity_by_email(email)
+    if identity is None:
+        return None
+    user_id, resolved_email, display_name = identity
+    existing = _fetch_user_by_email(conn, resolved_email)
+    if existing is not None and existing.user_id == user_id:
+        return _ensure_user_record(conn, user_id=user_id, email=resolved_email, display_name=display_name)
+    return _ensure_user_record(conn, user_id=user_id, email=resolved_email, display_name=display_name)
+
+
+def _validate_password_reset_password(password: str) -> str:
+    candidate = password or ""
+    if not candidate.strip():
+        raise HTTPException(status_code=400, detail="新密码不能为空")
+    if len(candidate) < PASSWORD_RESET_MIN_LENGTH:
+        raise HTTPException(status_code=400, detail=f"新密码长度不能少于 {PASSWORD_RESET_MIN_LENGTH} 位")
+    if len(candidate.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="新密码不能超过 72 字节")
+    return candidate
+
+
+def _hash_openwebui_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+
+def _update_openwebui_password_by_email(email: str, new_password: str) -> bool:
+    normalized_email = _validate_email_address(email)
+    hashed_password = _hash_openwebui_password(new_password)
+    db_path = _resolve_openwebui_db_path()
+    with _OPENWEBUI_DB_LOCK:
+        conn = sqlite3.connect(str(db_path), timeout=5)
+        try:
+            conn.execute("PRAGMA busy_timeout = 5000")
+            cursor = conn.execute(
+                "UPDATE auth SET password = ? WHERE LOWER(email) = ? AND active = 1",
+                [hashed_password, normalized_email],
+            )
+            conn.commit()
+            return int(cursor.rowcount or 0) == 1
+        finally:
+            conn.close()
+
+
+def _request_password_reset(conn, email: str) -> dict[str, Any]:
+    normalized_email = _validate_email_address(email)
+    user = _ensure_password_reset_user(conn, normalized_email)
+    if user is None:
+        _LOGGER.info("password reset rejected for unregistered email", extra={"email": normalized_email})
+        raise HTTPException(status_code=404, detail="当前邮箱尚未注册，无法找回密码")
+
+    latest = _fetch_optional_one(
+        conn,
+        """
+        SELECT challenge_id, user_id, email, expires_at, consumed_at, last_sent_at, created_at,
+               failed_attempt_count, locked_until, last_failed_at
+        FROM app.email_verification_challenge
+        WHERE user_id = %s
+          AND email = %s
+          AND purpose = %s
+          AND consumed_at IS NULL
+          AND expires_at >= NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        [user.user_id, normalized_email, _EMAIL_CHALLENGE_PURPOSE_PASSWORD_RESET],
+    )
+    now = _utc_now()
+    if latest and latest.get("locked_until") is not None and latest["locked_until"] > now:
+        remaining = int((latest["locked_until"] - now).total_seconds())
+        raise HTTPException(
+            status_code=429,
+            detail=f"验证码已被锁定，请在{_format_retry_after_seconds(remaining)}后重新获取",
+        )
+    _enforce_email_challenge_send_quota(
+        conn,
+        purpose=_EMAIL_CHALLENGE_PURPOSE_PASSWORD_RESET,
+        user_id=user.user_id,
+        email=normalized_email,
+        now=now,
+    )
+    if latest and latest.get("last_sent_at") is not None:
+        cooldown = (now - latest["last_sent_at"]).total_seconds()
+        if cooldown < EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS:
+            remaining = int(EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS - cooldown)
+            raise HTTPException(status_code=429, detail=f"请在 {remaining} 秒后再重新发送验证码")
+
+    code = _generate_numeric_code(6)
+    challenge_id = _generate_id("password_reset")
+    expires_at = now + timedelta(seconds=EMAIL_VERIFICATION_CODE_TTL_SECONDS)
+    _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.email_verification_challenge
+        SET consumed_at = NOW(),
+            updated_at = NOW()
+        WHERE user_id = %s
+          AND purpose = %s
+          AND consumed_at IS NULL
+        RETURNING challenge_id
+        """,
+        [user.user_id, _EMAIL_CHALLENGE_PURPOSE_PASSWORD_RESET],
+    )
+    _run_pg_dict_query(
+        conn,
+        """
+        INSERT INTO app.email_verification_challenge (
+            challenge_id, user_id, email, purpose, code_hash, failed_attempt_count,
+            locked_until, last_failed_at, expires_at,
+            consumed_at, last_sent_at, created_at, updated_at
+        ) VALUES (%s, %s, %s, %s, %s, 0, NULL, NULL, %s, NULL, NOW(), NOW(), NOW())
+        RETURNING challenge_id
+        """,
+        [
+            challenge_id,
+            user.user_id,
+            normalized_email,
+            _EMAIL_CHALLENGE_PURPOSE_PASSWORD_RESET,
+            _build_email_challenge_code_hash(user.user_id, normalized_email, code, _EMAIL_CHALLENGE_PURPOSE_PASSWORD_RESET),
+            expires_at,
+        ],
+    )
+    try:
+        _send_email_message(
+            normalized_email,
+            "虾米选品密码找回验证码",
+            (
+                f"你好，{user.display_name or user.user_id}。\n\n"
+                f"你正在找回虾米选品的账户密码，验证码是：{code}\n"
+                f"验证码 {EMAIL_VERIFICATION_CODE_TTL_SECONDS // 60} 分钟内有效。\n\n"
+                "如果这不是你本人操作，请忽略此邮件，原密码不会被自动修改。"
+            ),
+        )
+        _LOGGER.info(
+            "password reset email sent",
+            extra={"email": normalized_email, "user_id": user.user_id, "challenge_id": challenge_id},
+        )
+    except RuntimeError as exc:
+        _LOGGER.exception(
+            "password reset email unavailable",
+            extra={"email": normalized_email, "user_id": user.user_id, "challenge_id": challenge_id},
+        )
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        _LOGGER.exception(
+            "password reset email failed",
+            extra={"email": normalized_email, "user_id": user.user_id, "challenge_id": challenge_id},
+        )
+        raise HTTPException(status_code=502, detail=f"failed to send verification email: {exc}") from exc
+    return {
+        "email": normalized_email,
+        "accepted": True,
+        "challenge_id": challenge_id,
+        "expires_in_seconds": EMAIL_VERIFICATION_CODE_TTL_SECONDS,
+    }
+
+
+def _confirm_password_reset(conn, email: str, code: str, new_password: str) -> dict[str, Any]:
+    normalized_email = _validate_email_address(email)
+    normalized_code = (code or "").strip()
+    if not normalized_code:
+        raise HTTPException(status_code=400, detail="missing email verification code")
+    validated_password = _validate_password_reset_password(new_password)
+
+    user = _ensure_password_reset_user(conn, normalized_email)
+    if user is None:
+        raise HTTPException(status_code=400, detail="验证码不存在或已过期，请重新获取")
+
+    limits = _get_email_verification_security_config(conn)
+    max_failed_attempts = max(1, int(limits.get("max_failed_attempts") or 1))
+    lock_seconds = max(0, int(limits.get("lock_seconds") or 0))
+    now = _utc_now()
+
+    challenge = _fetch_optional_one(
+        conn,
+        """
+        SELECT challenge_id, user_id, email, code_hash, expires_at, consumed_at, created_at,
+               failed_attempt_count, locked_until, last_failed_at
+        FROM app.email_verification_challenge
+        WHERE user_id = %s
+          AND email = %s
+          AND purpose = %s
+          AND consumed_at IS NULL
+          AND expires_at >= NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        [user.user_id, normalized_email, _EMAIL_CHALLENGE_PURPOSE_PASSWORD_RESET],
+    )
+    if challenge is None:
+        raise HTTPException(status_code=400, detail="验证码不存在或已过期，请重新获取")
+    if challenge.get("locked_until") is not None and challenge["locked_until"] > now:
+        remaining = int((challenge["locked_until"] - now).total_seconds())
+        raise HTTPException(
+            status_code=429,
+            detail=f"验证码已被锁定，请在{_format_retry_after_seconds(remaining)}后重新获取",
+        )
+    expected_hash = _build_email_challenge_code_hash(
+        user.user_id,
+        normalized_email,
+        normalized_code,
+        _EMAIL_CHALLENGE_PURPOSE_PASSWORD_RESET,
+    )
+    if not challenge.get("code_hash") or challenge["code_hash"] != expected_hash:
+        failed_attempt_count = int(challenge.get("failed_attempt_count") or 0) + 1
+        locked_until = None
+        if failed_attempt_count >= max_failed_attempts and lock_seconds > 0:
+            locked_until = now + timedelta(seconds=lock_seconds)
+        _run_pg_dict_query(
+            conn,
+            """
+            UPDATE app.email_verification_challenge
+            SET failed_attempt_count = %s,
+                locked_until = %s,
+                last_failed_at = NOW(),
+                updated_at = NOW()
+            WHERE challenge_id = %s
+            RETURNING challenge_id
+            """,
+            [failed_attempt_count, locked_until, challenge["challenge_id"]],
+        )
+        if failed_attempt_count >= max_failed_attempts:
+            raise HTTPException(
+                status_code=429,
+                detail=f"验证码尝试次数过多，请在{_format_retry_after_seconds(lock_seconds or 1)}后重新获取",
+            )
+        remaining_attempts = max_failed_attempts - failed_attempt_count
+        raise HTTPException(status_code=400, detail=f"验证码错误，还可尝试 {remaining_attempts} 次")
+
+    updated = _update_openwebui_password_by_email(normalized_email, validated_password)
+    if not updated:
+        raise HTTPException(status_code=502, detail="密码回写 Open WebUI 失败，请稍后重试")
+
+    _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.email_verification_challenge
+        SET consumed_at = NOW(),
+            updated_at = NOW()
+        WHERE challenge_id = %s
+        RETURNING challenge_id
+        """,
+        [challenge["challenge_id"]],
+    )
+    _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.app_user
+        SET updated_at = NOW()
+        WHERE user_id = %s
+        RETURNING user_id
+        """,
+        [user.user_id],
+    )
+    return {
+        "email": normalized_email,
+        "password_reset": True,
+        "force_relogin": True,
+    }
+
+
 def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
     user = _fetch_user(conn, user_id)
     email = _validate_email_address(user.email)
@@ -293,13 +656,13 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
         FROM app.email_verification_challenge
         WHERE user_id = %s
           AND email = %s
-          AND purpose = 'signup_email_verify'
+                    AND purpose = %s
           AND consumed_at IS NULL
           AND expires_at >= NOW()
         ORDER BY created_at DESC
         LIMIT 1
         """,
-        [user_id, email],
+                [user_id, email, _EMAIL_CHALLENGE_PURPOSE_SIGNUP],
     )
     now = _utc_now()
     if latest and latest.get("locked_until") is not None and latest["locked_until"] > now:
@@ -325,11 +688,11 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
         SET consumed_at = NOW(),
             updated_at = NOW()
         WHERE user_id = %s
-          AND purpose = 'signup_email_verify'
+                    AND purpose = %s
           AND consumed_at IS NULL
         RETURNING challenge_id
         """,
-        [user_id],
+                [user_id, _EMAIL_CHALLENGE_PURPOSE_SIGNUP],
     )
     _run_pg_dict_query(
         conn,
@@ -338,10 +701,17 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
             challenge_id, user_id, email, purpose, code_hash, failed_attempt_count,
             locked_until, last_failed_at, expires_at,
             consumed_at, last_sent_at, created_at, updated_at
-        ) VALUES (%s, %s, %s, 'signup_email_verify', %s, 0, NULL, NULL, %s, NULL, NOW(), NOW(), NOW())
+        ) VALUES (%s, %s, %s, %s, %s, 0, NULL, NULL, %s, NULL, NOW(), NOW(), NOW())
         RETURNING challenge_id, email, expires_at, last_sent_at, created_at
         """,
-        [challenge_id, user_id, email, _build_email_verification_code_hash(user_id, email, code), expires_at],
+        [
+            challenge_id,
+            user_id,
+            email,
+            _EMAIL_CHALLENGE_PURPOSE_SIGNUP,
+            _build_email_verification_code_hash(user_id, email, code),
+            expires_at,
+        ],
     )
     try:
         _send_email_message(
@@ -389,13 +759,13 @@ def _confirm_email_verification(conn, user_id: str, code: str) -> RequestUser:
         FROM app.email_verification_challenge
         WHERE user_id = %s
           AND email = %s
-          AND purpose = 'signup_email_verify'
+                    AND purpose = %s
           AND consumed_at IS NULL
           AND expires_at >= NOW()
         ORDER BY created_at DESC
         LIMIT 1
         """,
-        [user_id, email],
+                [user_id, email, _EMAIL_CHALLENGE_PURPOSE_SIGNUP],
     )
     if challenge is None:
         raise HTTPException(status_code=400, detail="验证码不存在或已过期，请重新获取")

@@ -344,6 +344,77 @@ _BASE_CSS = """
     border-color: rgba(17, 75, 95, 0.18);
     color: var(--accent);
   }
+  .form-grid {
+    display: grid;
+    gap: 18px;
+  }
+  .field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+  }
+  .field-group {
+    display: grid;
+    gap: 8px;
+  }
+  .field-label {
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .field-hint {
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.6;
+  }
+  .text-field {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: #fff;
+    padding: 0 14px;
+    color: var(--ink);
+    font: inherit;
+  }
+  .text-field:focus {
+    outline: none;
+    border-color: rgba(17, 75, 95, 0.34);
+    box-shadow: 0 0 0 4px rgba(17, 75, 95, 0.08);
+  }
+  .status-banner {
+    display: none;
+    border-radius: 14px;
+    padding: 12px 14px;
+    font-size: 0.84rem;
+    line-height: 1.65;
+  }
+  .status-banner[data-state="info"] {
+    display: block;
+    background: rgba(17, 75, 95, 0.08);
+    border: 1px solid rgba(17, 75, 95, 0.14);
+    color: var(--accent);
+  }
+  .status-banner[data-state="success"] {
+    display: block;
+    background: rgba(22, 163, 74, 0.1);
+    border: 1px solid rgba(22, 163, 74, 0.16);
+    color: #166534;
+  }
+  .status-banner[data-state="error"] {
+    display: block;
+    background: rgba(220, 38, 38, 0.08);
+    border: 1px solid rgba(220, 38, 38, 0.14);
+    color: #b91c1c;
+  }
+  .support-inline-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .support-inline-link:hover {
+    color: #0f3f50;
+  }
   .cta-hint {
     color: var(--muted);
     font-size: 0.8rem;
@@ -1331,6 +1402,189 @@ def render_portal_guide_html() -> str:
         sidebar_html=sidebar_html,
         body_html=body_html,
     )
+
+
+def render_portal_password_reset_html() -> str:
+    openwebui_home_url = escape(_portal_public_base_url())
+    body_html = f'''
+      <section id="request" class="section-block card">
+        <h2>第一步：发送验证码</h2>
+        <div class="form-grid">
+          <div class="field-grid">
+            <label class="field-group">
+              <span class="field-label">注册邮箱</span>
+              <input id="password-reset-email" class="text-field" type="email" autocomplete="email" placeholder="请输入登录邮箱" />
+              <span class="field-hint">如果该邮箱对应 Open WebUI 账户，验证码会发送到该邮箱。</span>
+            </label>
+          </div>
+          <div class="checkout-actions">
+            <button type="button" class="offer-cta" id="password-reset-request-button">发送验证码</button>
+            <a class="ghost-button" href="{openwebui_home_url}">回到登录页</a>
+          </div>
+          <div id="password-reset-request-status" class="status-banner"></div>
+        </div>
+      </section>
+      <section id="confirm" class="section-block card">
+        <h2>第二步：设置新密码</h2>
+        <div class="card-note">验证码校验通过后，系统会直接回写 Open WebUI 账号库中的密码。重置成功后，请返回登录页重新登录。</div>
+        <div class="form-grid">
+          <div class="field-grid">
+            <label class="field-group">
+              <span class="field-label">验证码</span>
+              <input id="password-reset-code" class="text-field" type="text" inputmode="numeric" maxlength="8" placeholder="输入邮箱验证码" />
+            </label>
+            <label class="field-group">
+              <span class="field-label">新密码</span>
+              <input id="password-reset-new-password" class="text-field" type="password" autocomplete="new-password" placeholder="至少 8 位" />
+            </label>
+            <label class="field-group">
+              <span class="field-label">确认新密码</span>
+              <input id="password-reset-confirm-password" class="text-field" type="password" autocomplete="new-password" placeholder="再次输入新密码" />
+            </label>
+          </div>
+          <div class="card-note">建议使用字母、数字和符号组合；长度不要超过 72 字节。</div>
+          <div class="checkout-actions">
+            <button type="button" class="offer-cta" id="password-reset-confirm-button">确认重置密码</button>
+            <a class="ghost-button" href="{openwebui_home_url}">返回登录</a>
+          </div>
+          <div id="password-reset-confirm-status" class="status-banner"></div>
+        </div>
+      </section>
+      <section id="support" class="section-block card">
+        <h2>常见说明</h2>
+        <div class="guide-list">
+          <div class="guide-item"><div class="guide-title">为什么我没收到邮件？</div><div class="guide-desc">先检查垃圾邮箱和退信箱。如果多次点击发送，可能触发了频率限制。你也可以等一分钟后再试一次。</div></div>
+          <div class="guide-item"><div class="guide-title">重置后原有登录态会怎样？</div><div class="guide-desc">第一版会要求你手动重新登录。若你当前浏览器仍保留旧登录态，建议主动退出再重新登录，以确保凭据完全切换。</div></div>
+          <div class="guide-item"><div class="guide-title">邮箱不存在时会提示吗？</div><div class="guide-desc">会。当前邮箱如果尚未注册，页面会直接提示“当前邮箱尚未注册，无法找回密码”。</div></div>
+        </div>
+      </section>
+    '''
+
+    sidebar_html = _sidebar([
+        ("密码找回", [("request", "发送验证码"), ("confirm", "设置新密码"), ("support", "常见说明")]),
+    ])
+
+    page = _layout(
+        active="recover",
+        kicker="账户恢复",
+        title="邮箱验证码找回密码",
+        subtitle="用于在忘记 Open WebUI 登录密码时，通过注册邮箱完成验证并设置新密码。",
+        sidebar_html=sidebar_html,
+        body_html=body_html,
+    )
+    script = '''
+<script>
+(function() {
+  var requestBtn = document.getElementById("password-reset-request-button");
+  var confirmBtn = document.getElementById("password-reset-confirm-button");
+  var emailInput = document.getElementById("password-reset-email");
+  var codeInput = document.getElementById("password-reset-code");
+  var newPasswordInput = document.getElementById("password-reset-new-password");
+  var confirmPasswordInput = document.getElementById("password-reset-confirm-password");
+  var requestStatus = document.getElementById("password-reset-request-status");
+  var confirmStatus = document.getElementById("password-reset-confirm-status");
+
+  function setStatus(el, text, state) {
+    if (!el) return;
+    el.textContent = text || "";
+    if (!text) {
+      el.removeAttribute("data-state");
+      return;
+    }
+    el.setAttribute("data-state", state || "info");
+  }
+
+  async function postJson(url, payload) {
+    var response = await fetch(url, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      credentials: "same-origin",
+      body: JSON.stringify(payload || {})
+    });
+    var data = null;
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = null;
+    }
+    if (!response.ok || !data || !data.success) {
+      var message = data && data.message
+        ? data.message
+        : (data && data.error && data.error.message ? data.error.message : "请求失败，请稍后重试");
+      throw new Error(message);
+    }
+    return data.data || {};
+  }
+
+  if (requestBtn) {
+    requestBtn.addEventListener("click", async function() {
+      var email = (emailInput && emailInput.value || "").trim();
+      setStatus(requestStatus, "", "info");
+      if (!email) {
+        setStatus(requestStatus, "请先输入邮箱地址。", "error");
+        return;
+      }
+      requestBtn.disabled = true;
+      setStatus(requestStatus, "正在发送验证码，请稍候...", "info");
+      try {
+        await postJson("/portal/api/public/password-reset/request", {email: email});
+        setStatus(requestStatus, "验证码已发送，请去邮箱查收后继续下一步。", "success");
+      } catch (error) {
+        setStatus(requestStatus, error.message || "发送验证码失败，请稍后重试。", "error");
+      } finally {
+        requestBtn.disabled = false;
+      }
+    });
+  }
+
+  if (confirmBtn) {
+    confirmBtn.addEventListener("click", async function() {
+      var email = (emailInput && emailInput.value || "").trim();
+      var code = (codeInput && codeInput.value || "").trim();
+      var newPassword = newPasswordInput && newPasswordInput.value || "";
+      var confirmPassword = confirmPasswordInput && confirmPasswordInput.value || "";
+      setStatus(confirmStatus, "", "info");
+      if (!email) {
+        setStatus(confirmStatus, "请先填写邮箱地址。", "error");
+        return;
+      }
+      if (!code) {
+        setStatus(confirmStatus, "请先输入邮箱验证码。", "error");
+        return;
+      }
+      if (!newPassword) {
+        setStatus(confirmStatus, "请先输入新密码。", "error");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setStatus(confirmStatus, "两次输入的新密码不一致。", "error");
+        return;
+      }
+      confirmBtn.disabled = true;
+      setStatus(confirmStatus, "正在校验验证码并重置密码...", "info");
+      try {
+        await postJson("/portal/api/public/password-reset/confirm", {
+          email: email,
+          code: code,
+          new_password: newPassword
+        });
+        if (newPasswordInput) newPasswordInput.value = "";
+        if (confirmPasswordInput) confirmPasswordInput.value = "";
+        if (codeInput) codeInput.value = "";
+        setStatus(confirmStatus, "密码已重置成功，请返回登录页重新登录。", "success");
+        window.setTimeout(function() {
+          window.location.href = "''' + openwebui_home_url + '''";
+        }, 1200);
+      } catch (error) {
+        setStatus(confirmStatus, error.message || "重置密码失败，请稍后重试。", "error");
+      } finally {
+        confirmBtn.disabled = false;
+      }
+    });
+  }
+})();
+</script>'''
+    return page.replace("</body>", script + "</body>")
 
 
 def render_portal_checkout_html(

@@ -10,6 +10,7 @@ import secrets
 import smtplib
 import string
 from datetime import date, datetime, timezone
+from email.utils import format_datetime, make_msgid
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
@@ -86,6 +87,12 @@ EMAIL_VERIFICATION_CODE_TTL_SECONDS = max(60, int(os.environ.get("CHAT_BACKEND_E
 EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS = max(30, int(os.environ.get("CHAT_BACKEND_EMAIL_VERIFICATION_RESEND_INTERVAL", "60")))
 REFERRAL_INVITER_REWARD_POINTS = max(0, int(os.environ.get("CHAT_BACKEND_REFERRAL_INVITER_REWARD_POINTS", "500")))
 PORTAL_REQUIRE_EMAIL_VERIFICATION = os.environ.get("CHAT_BACKEND_PORTAL_REQUIRE_EMAIL_VERIFICATION", "false").strip().lower() in {"1", "true", "yes", "on"}
+PASSWORD_RESET_MIN_LENGTH = max(1, int(os.environ.get("CHAT_BACKEND_PASSWORD_RESET_MIN_LENGTH", "8")))
+
+_default_openwebui_db_path = PROJECT_ROOT.parent / "xiamimate-openwebui-bridge" / "data" / "open-webui" / "webui.db"
+OPENWEBUI_DB_PATH = os.environ.get("CHAT_BACKEND_OPENWEBUI_DB_PATH", "").strip() or (
+    str(_default_openwebui_db_path) if _default_openwebui_db_path.exists() else ""
+)
 
 # ---------------------------------------------------------------------------
 # Pricing
@@ -526,10 +533,17 @@ def _send_email_message(to_email: str, subject: str, text_body: str) -> None:
     if not _smtp_configured():
         raise RuntimeError("CHAT_BACKEND_SMTP_HOST / CHAT_BACKEND_SMTP_FROM_EMAIL 未配置，无法发送邮箱验证码")
 
+    from_email = SMTP_FROM_EMAIL.strip()
+    message_id_domain = ""
+    if "@" in from_email:
+        message_id_domain = from_email.rsplit("@", 1)[-1].strip()
+
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = f"{SMTP_FROM_NAME} <{SMTP_FROM_EMAIL}>"
+    message["From"] = f"{SMTP_FROM_NAME} <{from_email}>"
     message["To"] = to_email
+    message["Date"] = format_datetime(datetime.now(timezone.utc))
+    message["Message-ID"] = make_msgid(domain=message_id_domain or None)
     message.set_content(text_body)
 
     if SMTP_USE_SSL:

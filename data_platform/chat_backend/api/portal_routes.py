@@ -48,8 +48,10 @@ from data_platform.chat_backend.domains.billing.service import (
 from data_platform.chat_backend.domains.identity.service import (
     _bind_user_referral,
     _confirm_email_verification,
+    _confirm_password_reset,
     _ensure_user_record,
     _fetch_user,
+    _request_password_reset,
     _request_email_verification,
 )
 from data_platform.chat_backend.domains.notifications.service import (
@@ -64,14 +66,17 @@ from data_platform.chat_backend.domains.site_config import (
 
 from data_platform.chat_backend.api.models import (
     BindReferralCodeRequest,
+    ConfirmPasswordResetRequest,
     ConfirmEmailVerificationRequest,
     CreatePaymentOrderRequest,
+    RequestPasswordResetRequest,
     UpdateNotificationReadStateRequest,
 )
 from data_platform.api.chat_backend_portal_html import render_portal_html
 from data_platform.api.chat_backend_portal_public_html import (
     render_portal_checkout_html,
     render_portal_guide_html,
+    render_portal_password_reset_html,
     render_portal_products_html,
 )
 
@@ -377,6 +382,17 @@ def portal_guide_page() -> HTMLResponse:
     return HTMLResponse(render_portal_guide_html(), headers={"Cache-Control": "no-store"})
 
 
+@router.get("/portal/recover-password", response_model=None)
+def portal_password_reset_page(request: Request) -> Response:
+    if _resolve_openwebui_session_user(request) is not None:
+        redirect_target = "/portal/account"
+        portal_token = (request.query_params.get("t") or "").strip()
+        if portal_token:
+            redirect_target += f"?t={portal_token}"
+        return RedirectResponse(redirect_target, status_code=303, headers={"Cache-Control": "no-store"})
+    return HTMLResponse(render_portal_password_reset_html(), headers={"Cache-Control": "no-store"})
+
+
 @router.get("/portal/api/public/site-contact-config")
 def portal_public_site_contact_config() -> dict[str, Any]:
     with _postgres_conn() as conn:
@@ -385,6 +401,39 @@ def portal_public_site_contact_config() -> dict[str, Any]:
         "/portal/api/public/site-contact-config",
         {"contact": contact},
         "portal site contact config loaded",
+    )
+
+
+@router.post("/portal/api/public/password-reset/request")
+def portal_request_password_reset(request: Request, payload: RequestPasswordResetRequest) -> dict[str, Any]:
+    with _postgres_conn() as conn:
+        rate_limited = _enforce_email_verification_ip_guard(conn, request, "request")
+        if rate_limited is not None:
+            retry_after = int(rate_limited.headers.get("X-Portal-Guard-Retry-After") or 1)
+            raise HTTPException(status_code=429, detail=f"请求过于频繁，请在 {retry_after} 秒后重试")
+        result = _request_password_reset(conn, payload.email)
+    return _success_response(
+        "/portal/api/public/password-reset/request",
+        result,
+        "password reset request accepted",
+    )
+
+
+@router.post("/portal/api/public/password-reset/confirm")
+def portal_confirm_password_reset(
+    request: Request,
+    payload: ConfirmPasswordResetRequest,
+) -> dict[str, Any]:
+    with _postgres_conn() as conn:
+        rate_limited = _enforce_email_verification_ip_guard(conn, request, "confirm")
+        if rate_limited is not None:
+            retry_after = int(rate_limited.headers.get("X-Portal-Guard-Retry-After") or 1)
+            raise HTTPException(status_code=429, detail=f"请求过于频繁，请在 {retry_after} 秒后重试")
+        result = _confirm_password_reset(conn, payload.email, payload.code, payload.new_password)
+    return _success_response(
+        "/portal/api/public/password-reset/confirm",
+        result,
+        "password reset completed",
     )
 
 
