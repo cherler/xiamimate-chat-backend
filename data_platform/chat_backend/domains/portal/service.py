@@ -6,6 +6,7 @@ import secrets
 import threading
 import time
 
+import requests as http_requests
 from fastapi import HTTPException, Request
 
 from data_platform.chat_backend.infra.settings import (
@@ -69,6 +70,33 @@ def _backend_base_url() -> str:
     return f"http://localhost:{port}"
 
 
+def _resolve_openwebui_access_token_user(token: str) -> tuple[str, str, str] | None:
+    normalized = str(token or "").strip()
+    if not normalized:
+        return None
+    try:
+        response = http_requests.get(
+            f"{_portal_internal_base_url()}/api/v1/auths/",
+            headers={"Authorization": f"Bearer {normalized}"},
+            timeout=5,
+        )
+    except Exception:
+        return None
+    if response.status_code != 200:
+        return None
+    try:
+        user_data = response.json()
+    except Exception:
+        return None
+
+    user_id = str(user_data.get("id") or "").strip()
+    if not user_id:
+        return None
+    email = str(user_data.get("email") or "").strip()
+    display_name = str(user_data.get("name") or "").strip() or user_id
+    return user_id, email, display_name
+
+
 def _require_portal_user(request: Request) -> str:
     """Validate portal user from nginx session header (preferred) or Bearer token (fallback).
 
@@ -90,6 +118,17 @@ def _require_portal_user(request: Request) -> str:
     if not token:
         raise HTTPException(status_code=401, detail="not authenticated")
     user_id = _verify_portal_token(token)
-    if user_id is None:
+    if user_id is not None:
+        return user_id
+
+    resolved_user = _resolve_openwebui_access_token_user(token)
+    if resolved_user is None:
         raise HTTPException(status_code=401, detail="invalid or expired portal token")
+
+    user_id, email, display_name = resolved_user
+    from data_platform.chat_backend.domains.identity.service import _ensure_user_record
+    from data_platform.chat_backend.infra.postgres import _postgres_conn
+
+    with _postgres_conn() as conn:
+        _ensure_user_record(conn, user_id=user_id, email=email, display_name=display_name)
     return user_id

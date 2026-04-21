@@ -524,6 +524,15 @@ def render_portal_html() -> str:
       display: grid;
       gap: 10px;
     }
+    .hero-action-section {
+      display: grid;
+      gap: 10px;
+    }
+    .hero-action-divider {
+      height: 1px;
+      background: var(--line);
+      margin: 4px 0 2px;
+    }
     .hero-metric-value {
       font-size: 2rem;
       font-weight: 700;
@@ -1083,18 +1092,30 @@ def render_portal_html() -> str:
               <div class="hero-metric-subtitle" id="hero-balance-policy">消费时优先扣减月包积分；充值包积分永久有效。</div>
             </div>
             <div id="hero-metric-verify" style="display:none;">
-              <div class="hero-metric-label" style="color:var(--accent-2);font-size:1.05rem;">📧 完成邮箱验证</div>
-              <div class="hero-metric-subtitle" style="margin:8px 0 14px;">验证通过后解锁全部功能，新用户自动到账 <strong>500 积分</strong>。</div>
-              <div class="action-stack">
-                <div class="inline-form">
-                  <button type="button" id="hero-send-code-btn">发送邮箱验证码</button>
-                  <span class="helper-text" id="hero-send-msg"></span>
+              <div class="hero-action-section">
+                <div class="hero-metric-label" style="color:var(--accent-2);font-size:1.05rem;">📧 完成邮箱验证</div>
+                <div class="hero-metric-subtitle">验证通过后解锁全部功能，新用户自动到账 <strong>500 积分</strong>。</div>
+                <div class="action-stack">
+                  <div class="inline-form">
+                    <button type="button" id="hero-send-code-btn">发送邮箱验证码</button>
+                    <span class="helper-text" id="hero-send-msg"></span>
+                  </div>
+                  <div class="inline-form">
+                    <input id="hero-code-input" class="text-input" type="text" inputmode="numeric" maxlength="8" placeholder="输入邮箱验证码" />
+                    <button type="button" id="hero-confirm-btn">确认验证</button>
+                  </div>
+                  <div class="helper-text" id="hero-confirm-msg"></div>
                 </div>
+              </div>
+              <div class="hero-action-divider"></div>
+              <div class="hero-action-section">
+                <div class="hero-metric-label" style="color:var(--accent);font-size:1.05rem;">🎁 绑定邀请码</div>
+                <div class="hero-metric-subtitle">如果你是被邀请来的，建议先绑定邀请码；绑定成功后你会额外获得 <strong>500 积分</strong>。</div>
                 <div class="inline-form">
-                  <input id="hero-code-input" class="text-input" type="text" inputmode="numeric" maxlength="8" placeholder="输入邮箱验证码" />
-                  <button type="button" id="hero-confirm-btn">确认验证</button>
+                  <input id="invite-code-input" class="text-input" type="text" maxlength="32" placeholder="输入邀请人的邀请码" />
+                  <button type="button" id="bind-invite-code-button">绑定邀请码</button>
                 </div>
-                <div class="helper-text" id="hero-confirm-msg"></div>
+                <div class="helper-text" id="bind-invite-code-message">如果你是被邀请来的，请先绑定邀请码，再完成邮箱验证。</div>
               </div>
             </div>
           </div>
@@ -1142,12 +1163,8 @@ def render_portal_html() -> str:
             <div class="info-value" id="invite-binding-status">加载中…</div>
           </div>
           <div class="action-stack">
-              <div class="helper-text">新用户绑定邀请码，新老用户均额外赠送500积分</div>
-            <div class="inline-form">
-              <input id="invite-code-input" class="text-input" type="text" maxlength="32" placeholder="输入邀请人的邀请码" />
-              <button type="button" id="bind-invite-code-button">绑定邀请码</button>
-            </div>
-            <div class="helper-text" id="bind-invite-code-message">如果你是被邀请来的，请先绑定邀请码，再完成邮箱验证。</div>
+            <div class="helper-text">新用户绑定邀请码后，你和邀请人都可额外获得 500 积分。</div>
+            <div class="helper-text">首次注册请优先使用首屏右侧快捷入口完成邀请码绑定和邮箱验证。</div>
           </div>
         </div>
       </div>
