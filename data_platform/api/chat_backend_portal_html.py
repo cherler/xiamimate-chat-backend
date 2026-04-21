@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from html import escape
 
-from data_platform.api.chat_backend_portal_public_html import _load_contact_config
+from data_platform.api.chat_backend_portal_public_html import (
+  _load_contact_config,
+  _render_portal_chatbot_snippet,
+)
 from data_platform.chat_backend.domains.portal.service import _portal_public_base_url
 
 
 def render_portal_html() -> str:
   openwebui_home_url = escape(_portal_public_base_url())
+  chatbot_snippet = _render_portal_chatbot_snippet()
   contact = _load_contact_config()
   contact_email = escape(contact.get("contact_email") or "")
   feedback_url = escape(contact.get("feedback_url") or "")
@@ -2508,19 +2512,6 @@ def render_portal_html() -> str:
   setActivePage(initialPage || "account", false);
 })();
 </script>
-<script>
- window.difyChatbotConfig = {
-  token: 'QmSaZ6H42s0ZdaxM',
-  baseUrl: 'http://localhost',
-  inputs: {},
-  systemVariables: {},
-  userVariables: {},
- }
-</script>
-<script
- src="http://localhost/embed.min.js"
- id="QmSaZ6H42s0ZdaxM"
- defer>
-</script>
+__PORTAL_CHATBOT_SNIPPET__
 </body>
-</html>""".replace("__OPENWEBUI_HOME_URL__", openwebui_home_url).replace("__WECHAT_QR_HTML__", wechat_qr_html).replace("__CONTACT_EMAIL__", contact_email).replace("__FEEDBACK_URL__", feedback_url)
+</html>""".replace("__OPENWEBUI_HOME_URL__", openwebui_home_url).replace("__WECHAT_QR_HTML__", wechat_qr_html).replace("__CONTACT_EMAIL__", contact_email).replace("__FEEDBACK_URL__", feedback_url).replace("__PORTAL_CHATBOT_SNIPPET__", chatbot_snippet)

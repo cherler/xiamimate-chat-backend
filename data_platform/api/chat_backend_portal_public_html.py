@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -831,18 +832,26 @@ _PORTAL_CONTACT_ACTIONS_HTML = """
 </a>
 """
 
-_PORTAL_CHATBOT_SNIPPET = """
+def _portal_chatbot_base_url() -> str:
+  return f"{_portal_public_base_url()}/_dify"
+
+
+def _render_portal_chatbot_snippet() -> str:
+  chatbot_base_url = _portal_chatbot_base_url()
+  chatbot_base_url_json = json.dumps(chatbot_base_url)
+  chatbot_embed_src = escape(f"{chatbot_base_url}/embed.min.js", quote=True)
+  return f"""
 <script>
- window.difyChatbotConfig = {
+ window.difyChatbotConfig = {{
   token: 'QmSaZ6H42s0ZdaxM',
-  baseUrl: 'http://localhost',
-  inputs: {},
-  systemVariables: {},
-  userVariables: {},
- }
+  baseUrl: {chatbot_base_url_json},
+  inputs: {{}},
+  systemVariables: {{}},
+  userVariables: {{}},
+ }}
 </script>
 <script
- src="http://localhost/embed.min.js"
+ src="{chatbot_embed_src}"
  id="QmSaZ6H42s0ZdaxM"
  defer>
 </script>
@@ -927,6 +936,7 @@ def _sidebar(groups: list[tuple[str, list[tuple[str, str]]]]) -> str:
 
 def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html: str, body_html: str) -> str:
     openwebui_home_url = escape(_portal_public_base_url())
+    chatbot_snippet = _render_portal_chatbot_snippet()
     contact = _load_contact_config()
     contact_email = escape(contact.get("contact_email") or "")
     feedback_url = escape(contact.get("feedback_url") or "")
@@ -1117,7 +1127,7 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
   markActiveSection();
 }})();
 </script>
-{_PORTAL_CHATBOT_SNIPPET}
+{chatbot_snippet}
 </body>
 </html>"""
 
