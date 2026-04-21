@@ -34,11 +34,67 @@ DEFAULT_SITE_CONFIG: list[dict[str, str]] = [
         "config_value": "",  # will be populated from file at seed time
     },
     {
+        "config_key": "official_account_qr_base64",
+        "display_name": "公众号二维码 (base64)",
+        "config_value": "",
+    },
+    {
         "config_key": "feedback_url",
         "display_name": "意见反馈链接",
         "config_value": "https://my.feishu.cn/share/base/form/shrcnQVnRPvEuOGjz9ojf05tD1d",
     },
+    {
+        "config_key": "email_verification_request_ip_window_seconds",
+        "display_name": "邮箱验证码发送-IP 限流窗口秒数",
+        "config_value": "300",
+    },
+    {
+        "config_key": "email_verification_request_ip_max_attempts",
+        "display_name": "邮箱验证码发送-IP 窗口最大次数",
+        "config_value": "3",
+    },
+    {
+        "config_key": "email_verification_confirm_ip_window_seconds",
+        "display_name": "邮箱验证码确认-IP 限流窗口秒数",
+        "config_value": "300",
+    },
+    {
+        "config_key": "email_verification_confirm_ip_max_attempts",
+        "display_name": "邮箱验证码确认-IP 窗口最大次数",
+        "config_value": "8",
+    },
+    {
+        "config_key": "email_verification_daily_send_limit_per_user",
+        "display_name": "邮箱验证码单用户单日发送上限",
+        "config_value": "3",
+    },
+    {
+        "config_key": "email_verification_daily_send_limit_per_email",
+        "display_name": "邮箱验证码单邮箱单日发送上限",
+        "config_value": "5",
+    },
+    {
+        "config_key": "email_verification_max_failed_attempts",
+        "display_name": "邮箱验证码单 challenge 最大输错次数",
+        "config_value": "5",
+    },
+    {
+        "config_key": "email_verification_lock_seconds",
+        "display_name": "邮箱验证码输错锁定秒数",
+        "config_value": "900",
+    },
 ]
+
+_EMAIL_VERIFICATION_SECURITY_DEFAULTS: dict[str, int] = {
+    "request_ip_window_seconds": 300,
+    "request_ip_max_attempts": 3,
+    "confirm_ip_window_seconds": 300,
+    "confirm_ip_max_attempts": 8,
+    "daily_send_limit_per_user": 3,
+    "daily_send_limit_per_email": 5,
+    "max_failed_attempts": 5,
+    "lock_seconds": 900,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +149,25 @@ def _get_site_config_value(conn, key: str, default: str = "") -> str:
     if row is None:
         return default
     return str(row.get("config_value") or default)
+
+
+def _get_site_config_int_value(
+    conn,
+    key: str,
+    default: int,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    raw_value = _get_site_config_value(conn, key, str(default)).strip()
+    try:
+        parsed = int(raw_value)
+    except Exception:
+        parsed = int(default)
+    if minimum is not None:
+        parsed = max(minimum, parsed)
+    if maximum is not None:
+        parsed = min(maximum, parsed)
+    return parsed
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +230,59 @@ def _list_site_config(conn) -> list[dict[str, Any]]:
     return [row for row in rows if row.get("config_key") not in _HIDDEN_SITE_CONFIG_KEYS]
 
 
+def _get_email_verification_security_config(conn) -> dict[str, int]:
+    return {
+        "request_ip_window_seconds": _get_site_config_int_value(
+            conn,
+            "email_verification_request_ip_window_seconds",
+            _EMAIL_VERIFICATION_SECURITY_DEFAULTS["request_ip_window_seconds"],
+            minimum=1,
+        ),
+        "request_ip_max_attempts": _get_site_config_int_value(
+            conn,
+            "email_verification_request_ip_max_attempts",
+            _EMAIL_VERIFICATION_SECURITY_DEFAULTS["request_ip_max_attempts"],
+            minimum=1,
+        ),
+        "confirm_ip_window_seconds": _get_site_config_int_value(
+            conn,
+            "email_verification_confirm_ip_window_seconds",
+            _EMAIL_VERIFICATION_SECURITY_DEFAULTS["confirm_ip_window_seconds"],
+            minimum=1,
+        ),
+        "confirm_ip_max_attempts": _get_site_config_int_value(
+            conn,
+            "email_verification_confirm_ip_max_attempts",
+            _EMAIL_VERIFICATION_SECURITY_DEFAULTS["confirm_ip_max_attempts"],
+            minimum=1,
+        ),
+        "daily_send_limit_per_user": _get_site_config_int_value(
+            conn,
+            "email_verification_daily_send_limit_per_user",
+            _EMAIL_VERIFICATION_SECURITY_DEFAULTS["daily_send_limit_per_user"],
+            minimum=0,
+        ),
+        "daily_send_limit_per_email": _get_site_config_int_value(
+            conn,
+            "email_verification_daily_send_limit_per_email",
+            _EMAIL_VERIFICATION_SECURITY_DEFAULTS["daily_send_limit_per_email"],
+            minimum=0,
+        ),
+        "max_failed_attempts": _get_site_config_int_value(
+            conn,
+            "email_verification_max_failed_attempts",
+            _EMAIL_VERIFICATION_SECURITY_DEFAULTS["max_failed_attempts"],
+            minimum=1,
+        ),
+        "lock_seconds": _get_site_config_int_value(
+            conn,
+            "email_verification_lock_seconds",
+            _EMAIL_VERIFICATION_SECURITY_DEFAULTS["lock_seconds"],
+            minimum=0,
+        ),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Convenience: get contact config dict for portal rendering
 # ---------------------------------------------------------------------------
@@ -169,5 +297,6 @@ def _get_contact_config(conn) -> dict[str, str]:
     return {
         "contact_email": (cfg.get("contact_email") or {}).get("config_value", ""),
         "wechat_qr_base64": wechat_qr_base64,
+        "official_account_qr_base64": (cfg.get("official_account_qr_base64") or {}).get("config_value", ""),
         "feedback_url": (cfg.get("feedback_url") or {}).get("config_value", ""),
     }

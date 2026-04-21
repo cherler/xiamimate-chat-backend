@@ -518,15 +518,29 @@ def render_admin_backoffice_html() -> str:
 
             <section class="mini-card module-card">
               <div class="module-card-head">
-                <h3>站点配置</h3>
-                <div class="hint">管理门户页联系方式：联系邮箱、企微二维码、意见反馈链接。</div>
+                <h3>站点联络配置</h3>
+                <div class="hint">管理门户页顶部联络入口：联系邮箱、企微二维码、公众号二维码、意见反馈链接。</div>
               </div>
               <div class="module-card-body">
                 <div id="site-config-list" class="field-grid" style="margin-bottom: 10px;"></div>
                 <div class="button-row">
-                  <button id="load-site-config" class="secondary">刷新站点配置</button>
+                  <button id="load-site-config" class="secondary">刷新联络配置</button>
                 </div>
                 <div id="site-config-status" class="status"></div>
+              </div>
+            </section>
+
+            <section class="mini-card module-card">
+              <div class="module-card-head">
+                <h3>邮箱验证码风控</h3>
+                <div class="hint">单独管理邮箱验证码的限流、次数、配额和锁定策略，方便运营按场景调参。</div>
+              </div>
+              <div class="module-card-body">
+                <div id="email-verification-config-list" class="field-grid" style="margin-bottom: 10px;"></div>
+                <div class="button-row">
+                  <button id="load-email-verification-config" class="secondary">刷新风控配置</button>
+                </div>
+                <div id="email-verification-config-status" class="status"></div>
               </div>
             </section>
           </div>
@@ -1142,75 +1156,194 @@ def render_admin_backoffice_html() -> str:
     };
 
     const siteConfigInputType = (key) => {
-      if (key === 'wechat_qr_base64') return 'file';
+      if (key === 'wechat_qr_base64' || key === 'official_account_qr_base64') return 'file';
       if (key === 'feedback_url') return 'url';
       return 'text';
     };
 
-    const renderSiteConfigList = (rows) => {
-      const target = document.getElementById('site-config-list');
-      if (!rows || rows.length === 0) {
-        target.innerHTML = '<div class="empty">暂无站点配置</div>';
-        return;
-      }
+    const SITE_CONFIG_IMAGE_FILE_MAX_BYTES = 2 * 1024 * 1024;
+    const SITE_CONFIG_DATA_URL_MAX_LENGTH = 3_000_000;
 
-      target.innerHTML = rows.map((row) => {
-        const inputType = siteConfigInputType(row.config_key);
-        if (inputType === 'file') {
-          const previewHtml = row.config_value
-            ? `<img src="${escapeHtml(row.config_value)}" style="max-width:120px;max-height:120px;border-radius:8px;margin-top:6px;" />`
-            : '<div class="hint">暂无图片</div>';
-          return `
-            <div class="mini-card" data-site-config-card="${escapeHtml(row.config_key)}">
-              <div style="display:grid; gap:10px;">
-                <div>
-                  <strong>${escapeHtml(row.display_name || row.config_key)}</strong>
-                  <div class="hint">config_key = ${escapeHtml(row.config_key)}</div>
-                </div>
-                ${previewHtml}
-                <div>
-                  <label for="site-config-file-${escapeHtml(row.config_key)}">上传新图片</label>
-                  <input id="site-config-file-${escapeHtml(row.config_key)}" type="file" accept="image/*" style="width:100%;" />
-                </div>
-                <div class="button-row">
-                  <button class="secondary" data-save-site-config="${escapeHtml(row.config_key)}" data-input-type="file">保存</button>
-                </div>
-              </div>
-            </div>
-          `;
-        }
+    const siteConfigDescriptions = {
+      contact_email: '顶部“邮件”按钮使用的联系邮箱。',
+      wechat_qr_base64: '顶部“企微”按钮弹窗展示的二维码图片，建议上传清晰正方形图片。',
+      official_account_qr_base64: '顶部“公众号”按钮弹窗展示的二维码图片，建议上传清晰正方形图片。',
+      feedback_url: '顶部“反馈”按钮跳转的外部意见收集链接。',
+      email_verification_request_ip_window_seconds: '验证码发送接口按 IP 统计的时间窗口，单位秒。',
+      email_verification_request_ip_max_attempts: '同一 IP 在发送窗口内最多可请求多少次验证码。',
+      email_verification_confirm_ip_window_seconds: '验证码确认接口按 IP 统计的时间窗口，单位秒。',
+      email_verification_confirm_ip_max_attempts: '同一 IP 在确认窗口内最多可提交多少次验证码。',
+      email_verification_daily_send_limit_per_user: '同一登录用户每天最多发送多少次验证码。',
+      email_verification_daily_send_limit_per_email: '同一邮箱每天最多可收到多少次验证码。',
+      email_verification_max_failed_attempts: '单个验证码 challenge 最多允许输错几次。',
+      email_verification_lock_seconds: '输错达到上限后锁定多久，单位秒。',
+    };
+
+    const siteContactConfigGroups = [
+      {
+        key: 'site_contact',
+        title: '站点联络配置',
+        description: '管理顶部联络入口和外部反馈信息。',
+        keys: ['contact_email', 'wechat_qr_base64', 'official_account_qr_base64', 'feedback_url'],
+      },
+    ];
+
+    const emailVerificationConfigGroups = [
+      {
+        key: 'email_verification_basic',
+        title: '验证码风控 · 基础推荐',
+        description: '建议优先调整发送频率、确认频率和单日发送配额，覆盖常见刷接口场景。',
+        keys: [
+          'email_verification_request_ip_window_seconds',
+          'email_verification_request_ip_max_attempts',
+          'email_verification_confirm_ip_window_seconds',
+          'email_verification_confirm_ip_max_attempts',
+          'email_verification_daily_send_limit_per_user',
+          'email_verification_daily_send_limit_per_email',
+        ],
+      },
+      {
+        key: 'email_verification_strict',
+        title: '验证码风控 · 严格模式',
+        description: '攻击明显时再收紧这一组，主要控制验证码输错后的封禁强度。',
+        keys: [
+          'email_verification_max_failed_attempts',
+          'email_verification_lock_seconds',
+        ],
+      },
+    ];
+
+    const emailVerificationConfigKeys = new Set(emailVerificationConfigGroups.flatMap((group) => group.keys));
+
+    const renderSiteConfigCard = (row) => {
+      const inputType = siteConfigInputType(row.config_key);
+      const description = siteConfigDescriptions[row.config_key] || '';
+      if (inputType === 'file') {
+        const previewHtml = row.config_value
+          ? `<img src="${escapeHtml(row.config_value)}" style="max-width:120px;max-height:120px;border-radius:8px;margin-top:6px;" />`
+          : '<div class="hint">暂无图片</div>';
         return `
           <div class="mini-card" data-site-config-card="${escapeHtml(row.config_key)}">
             <div style="display:grid; gap:10px;">
               <div>
                 <strong>${escapeHtml(row.display_name || row.config_key)}</strong>
                 <div class="hint">config_key = ${escapeHtml(row.config_key)}</div>
+                ${description ? `<div class="hint" style="margin-top:6px;line-height:1.6;">${escapeHtml(description)}</div>` : ''}
               </div>
+              ${previewHtml}
               <div>
-                <label for="site-config-val-${escapeHtml(row.config_key)}">值</label>
-                <input id="site-config-val-${escapeHtml(row.config_key)}" type="${inputType}" value="${escapeHtml(row.config_value || '')}" />
+                <label for="site-config-file-${escapeHtml(row.config_key)}">上传新图片</label>
+                <input id="site-config-file-${escapeHtml(row.config_key)}" type="file" accept="image/*" style="width:100%;" />
               </div>
               <div class="button-row">
-                <button class="secondary" data-save-site-config="${escapeHtml(row.config_key)}" data-input-type="text">保存</button>
+                <button class="secondary" data-save-site-config="${escapeHtml(row.config_key)}" data-input-type="file">保存</button>
               </div>
             </div>
           </div>
         `;
+      }
+      return `
+        <div class="mini-card" data-site-config-card="${escapeHtml(row.config_key)}">
+          <div style="display:grid; gap:10px;">
+            <div>
+              <strong>${escapeHtml(row.display_name || row.config_key)}</strong>
+              <div class="hint">config_key = ${escapeHtml(row.config_key)}</div>
+              ${description ? `<div class="hint" style="margin-top:6px;line-height:1.6;">${escapeHtml(description)}</div>` : ''}
+            </div>
+            <div>
+              <label for="site-config-val-${escapeHtml(row.config_key)}">值</label>
+              <input id="site-config-val-${escapeHtml(row.config_key)}" type="${inputType}" value="${escapeHtml(row.config_value || '')}" />
+            </div>
+            <div class="button-row">
+              <button class="secondary" data-save-site-config="${escapeHtml(row.config_key)}" data-input-type="text">保存</button>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    const renderSiteConfigGroup = (group, rows) => {
+      if (!rows || rows.length === 0) return '';
+      return `
+        <div style="grid-column:1 / -1; display:grid; gap:12px; margin-bottom:4px;">
+          <div>
+            <div style="font-size:0.95rem; font-weight:700; color:#1f2937;">${escapeHtml(group.title)}</div>
+            <div class="hint" style="margin-top:4px; line-height:1.6;">${escapeHtml(group.description || '')}</div>
+          </div>
+          <div class="field-grid">${rows.map(renderSiteConfigCard).join('')}</div>
+        </div>
+      `;
+    };
+
+    const renderGroupedSiteConfigList = ({ rows, targetId, groups, emptyText, remainingGroup = null }) => {
+      const target = document.getElementById(targetId);
+      if (!rows || rows.length === 0) {
+        target.innerHTML = `<div class="empty">${escapeHtml(emptyText)}</div>`;
+        return;
+      }
+
+      const rowByKey = new Map(rows.map((row) => [row.config_key, row]));
+      const groupedKeys = new Set();
+      const groupedSectionsHtml = groups.map((group) => {
+        const groupRows = group.keys
+          .map((key) => rowByKey.get(key))
+          .filter(Boolean);
+        groupRows.forEach((row) => groupedKeys.add(row.config_key));
+        return renderSiteConfigGroup(group, groupRows);
       }).join('');
+
+      const remainingRows = rows.filter((row) => !groupedKeys.has(row.config_key));
+      const remainingHtml = remainingGroup && remainingRows.length
+        ? renderSiteConfigGroup(remainingGroup, remainingRows)
+        : '';
+
+      target.innerHTML = groupedSectionsHtml + remainingHtml;
 
       target.querySelectorAll('button[data-save-site-config]').forEach((button) => {
         button.addEventListener('click', () => saveSiteConfig(button.dataset.saveSiteConfig, button.dataset.inputType));
       });
     };
 
+    const renderSiteContactConfigList = (rows) => {
+      const siteContactRows = rows.filter((row) => !emailVerificationConfigKeys.has(row.config_key));
+      renderGroupedSiteConfigList({
+        rows: siteContactRows,
+        targetId: 'site-config-list',
+        groups: siteContactConfigGroups,
+        emptyText: '暂无站点联络配置',
+        remainingGroup: {
+          title: '其他站点配置',
+          description: '不属于顶部联络入口的其他后台配置项。',
+        },
+      });
+    };
+
+    const renderEmailVerificationConfigList = (rows) => {
+      renderGroupedSiteConfigList({
+        rows: rows.filter((row) => emailVerificationConfigKeys.has(row.config_key)),
+        targetId: 'email-verification-config-list',
+        groups: emailVerificationConfigGroups,
+        emptyText: '暂无邮箱验证码风控配置',
+      });
+    };
+
+    const siteConfigStatusId = (configKey) => emailVerificationConfigKeys.has(configKey)
+      ? 'email-verification-config-status'
+      : 'site-config-status';
+
     const loadSiteConfig = async () => {
-      setStatus('site-config-status', '正在加载站点配置...');
+      setStatus('site-config-status', '正在加载联络配置...');
+      setStatus('email-verification-config-status', '正在加载风控配置...');
       try {
         const data = await fetchJson('/admin/api/site-config');
-        renderSiteConfigList(data.site_config || []);
-        setStatus('site-config-status', '站点配置已刷新', 'ok');
+        const rows = data.site_config || [];
+        renderSiteContactConfigList(rows);
+        renderEmailVerificationConfigList(rows);
+        setStatus('site-config-status', '联络配置已刷新', 'ok');
+        setStatus('email-verification-config-status', '风控配置已刷新', 'ok');
       } catch (error) {
         setStatus('site-config-status', error.message, 'error');
+        setStatus('email-verification-config-status', error.message, 'error');
       }
     };
 
@@ -1220,12 +1353,18 @@ def render_admin_backoffice_html() -> str:
         return;
       }
 
+      const statusId = siteConfigStatusId(configKey);
+
       let configValue = '';
       if (inputType === 'file') {
         const fileInput = document.getElementById(`site-config-file-${configKey}`);
         const file = fileInput && fileInput.files && fileInput.files[0];
         if (!file) {
-          setStatus('site-config-status', '请先选择文件', 'error');
+          setStatus(statusId, '请先选择文件', 'error');
+          return;
+        }
+        if (file.size > SITE_CONFIG_IMAGE_FILE_MAX_BYTES) {
+          setStatus(statusId, '图片过大，请压缩到 2MB 以内再上传', 'error');
           return;
         }
         configValue = await new Promise((resolve, reject) => {
@@ -1234,20 +1373,24 @@ def render_admin_backoffice_html() -> str:
           reader.onerror = () => reject(new Error('文件读取失败'));
           reader.readAsDataURL(file);
         });
+        if (String(configValue || '').length > SITE_CONFIG_DATA_URL_MAX_LENGTH) {
+          setStatus(statusId, '图片编码后仍然过大，请继续压缩后再上传', 'error');
+          return;
+        }
       } else {
         configValue = document.getElementById(`site-config-val-${configKey}`)?.value || '';
       }
 
-      setStatus('site-config-status', `正在保存 ${configKey}...`);
+      setStatus(statusId, `正在保存 ${configKey}...`);
       try {
         await fetchJson(`/admin/api/site-config/${encodeURIComponent(configKey)}`, {
           method: 'PUT',
           body: JSON.stringify({ config_value: configValue }),
         });
-        setStatus('site-config-status', `${configKey} 已更新`, 'ok');
+        setStatus(statusId, `${configKey} 已更新`, 'ok');
         await loadSiteConfig();
       } catch (error) {
-        setStatus('site-config-status', error.message, 'error');
+        setStatus(statusId, error.message, 'error');
       }
     };
 
@@ -1255,6 +1398,7 @@ def render_admin_backoffice_html() -> str:
     document.getElementById('load-audit').addEventListener('click', loadAuditLogs);
     document.getElementById('load-pricing').addEventListener('click', loadPricing);
     document.getElementById('load-site-config').addEventListener('click', loadSiteConfig);
+    document.getElementById('load-email-verification-config').addEventListener('click', loadSiteConfig);
     document.getElementById('search-users').addEventListener('click', () => searchUsers(document.getElementById('user-query').value.trim()));
     document.getElementById('search-all').addEventListener('click', () => searchUsers(''));
     document.getElementById('grant-submit').addEventListener('click', grantPoints);

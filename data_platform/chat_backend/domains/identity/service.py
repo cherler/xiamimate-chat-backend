@@ -6,7 +6,7 @@ Depends on: infra.settings, infra.postgres, identity.models,
 from __future__ import annotations
 
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -26,6 +26,7 @@ from data_platform.chat_backend.infra.settings import (
     _generate_numeric_code,
     _hash_text,
     _portal_email_verification_gate_enabled,
+    _reset_timezone,
     _resolve_initial_plan_tier,
     _send_email_message,
     _utc_now,
@@ -39,6 +40,7 @@ from data_platform.chat_backend.domains.api_keys.models import UserAPIKey
 from data_platform.chat_backend.domains.api_keys.service import _ensure_user_api_key
 from data_platform.chat_backend.domains.billing.models import UserCreditAccount
 from data_platform.chat_backend.domains.billing.service import _ensure_user_credit_account_state
+from data_platform.chat_backend.domains.site_config import _get_email_verification_security_config
 
 
 _APP_USER_SELECT = """
@@ -104,6 +106,81 @@ def _ensure_invite_code_for_row(conn, row: dict[str, Any]) -> dict[str, Any]:
 
 def _build_email_verification_code_hash(user_id: str, email: str, code: str) -> str:
     return _hash_text(f"email-verify:{user_id}:{email.strip().lower()}:{code.strip()}")
+
+
+def _email_verification_day_window(now: datetime) -> tuple[datetime, datetime]:
+    local_now = now.astimezone(_reset_timezone())
+    start_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_local = start_local + timedelta(days=1)
+    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
+
+def _count_email_verification_sends(
+    conn,
+    *,
+    user_id: str | None = None,
+    email: str | None = None,
+    start_at: datetime,
+    end_at: datetime,
+) -> int:
+    conditions = [
+        "purpose = 'signup_email_verify'",
+        "last_sent_at >= %s",
+        "last_sent_at < %s",
+    ]
+    params: list[Any] = [start_at, end_at]
+    if user_id:
+        conditions.append("user_id = %s")
+        params.append(user_id)
+    if email:
+        conditions.append("email = %s")
+        params.append(email)
+    row = _fetch_optional_one(
+        conn,
+        f"""
+        SELECT COUNT(*)::INT AS total
+        FROM app.email_verification_challenge
+        WHERE {' AND '.join(conditions)}
+        """,
+        params,
+    )
+    return int((row or {}).get("total") or 0)
+
+
+def _format_retry_after_seconds(seconds: int) -> str:
+    normalized = max(1, int(seconds))
+    if normalized < 60:
+        return f"{normalized} 秒"
+    minutes = (normalized + 59) // 60
+    return f"{minutes} 分钟"
+
+
+def _enforce_email_verification_send_quota(conn, user_id: str, email: str, now: datetime) -> dict[str, int]:
+    limits = _get_email_verification_security_config(conn)
+    start_at, end_at = _email_verification_day_window(now)
+    per_user_limit = int(limits.get("daily_send_limit_per_user") or 0)
+    if per_user_limit > 0:
+        sent_by_user = _count_email_verification_sends(
+            conn,
+            user_id=user_id,
+            start_at=start_at,
+            end_at=end_at,
+        )
+        if sent_by_user >= per_user_limit:
+            raise HTTPException(status_code=429, detail="今日邮箱验证码发送次数已达单用户上限，请明天再试")
+
+    per_email_limit = int(limits.get("daily_send_limit_per_email") or 0)
+    if per_email_limit > 0:
+        sent_by_email = _count_email_verification_sends(
+            conn,
+            email=email,
+            start_at=start_at,
+            end_at=end_at,
+        )
+        if sent_by_email >= per_email_limit:
+            raise HTTPException(status_code=429, detail="今日邮箱验证码发送次数已达单邮箱上限，请明天再试")
+
+    return limits
 
 
 def _upsert_user_row(
@@ -211,7 +288,8 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
     latest = _fetch_optional_one(
         conn,
         """
-        SELECT challenge_id, user_id, email, expires_at, consumed_at, last_sent_at, created_at
+                SELECT challenge_id, user_id, email, expires_at, consumed_at, last_sent_at, created_at,
+                             failed_attempt_count, locked_until, last_failed_at
         FROM app.email_verification_challenge
         WHERE user_id = %s
           AND email = %s
@@ -224,6 +302,13 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
         [user_id, email],
     )
     now = _utc_now()
+    if latest and latest.get("locked_until") is not None and latest["locked_until"] > now:
+        remaining = int((latest["locked_until"] - now).total_seconds())
+        raise HTTPException(
+            status_code=429,
+            detail=f"验证码已被锁定，请在{_format_retry_after_seconds(remaining)}后重新获取",
+        )
+    _enforce_email_verification_send_quota(conn, user_id=user_id, email=email, now=now)
     if latest and latest.get("last_sent_at") is not None:
         cooldown = (now - latest["last_sent_at"]).total_seconds()
         if cooldown < EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS:
@@ -250,9 +335,10 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
         conn,
         """
         INSERT INTO app.email_verification_challenge (
-            challenge_id, user_id, email, purpose, code_hash, expires_at,
+            challenge_id, user_id, email, purpose, code_hash, failed_attempt_count,
+            locked_until, last_failed_at, expires_at,
             consumed_at, last_sent_at, created_at, updated_at
-        ) VALUES (%s, %s, %s, 'signup_email_verify', %s, %s, NULL, NOW(), NOW(), NOW())
+        ) VALUES (%s, %s, %s, 'signup_email_verify', %s, 0, NULL, NULL, %s, NULL, NOW(), NOW(), NOW())
         RETURNING challenge_id, email, expires_at, last_sent_at, created_at
         """,
         [challenge_id, user_id, email, _build_email_verification_code_hash(user_id, email, code), expires_at],
@@ -290,10 +376,16 @@ def _confirm_email_verification(conn, user_id: str, code: str) -> RequestUser:
     if user.email_verified_at is not None:
         return user
 
+    limits = _get_email_verification_security_config(conn)
+    max_failed_attempts = max(1, int(limits.get("max_failed_attempts") or 1))
+    lock_seconds = max(0, int(limits.get("lock_seconds") or 0))
+    now = _utc_now()
+
     challenge = _fetch_optional_one(
         conn,
         """
-        SELECT challenge_id, user_id, email, code_hash, expires_at, consumed_at, created_at
+        SELECT challenge_id, user_id, email, code_hash, expires_at, consumed_at, created_at,
+               failed_attempt_count, locked_until, last_failed_at
         FROM app.email_verification_challenge
         WHERE user_id = %s
           AND email = %s
@@ -307,8 +399,39 @@ def _confirm_email_verification(conn, user_id: str, code: str) -> RequestUser:
     )
     if challenge is None:
         raise HTTPException(status_code=400, detail="验证码不存在或已过期，请重新获取")
+    if challenge.get("locked_until") is not None and challenge["locked_until"] > now:
+        remaining = int((challenge["locked_until"] - now).total_seconds())
+        raise HTTPException(
+            status_code=429,
+            detail=f"验证码已被锁定，请在{_format_retry_after_seconds(remaining)}后重新获取",
+        )
     if not challenge.get("code_hash") or challenge["code_hash"] != _build_email_verification_code_hash(user_id, email, normalized_code):
-        raise HTTPException(status_code=400, detail="验证码错误")
+        failed_attempt_count = int(challenge.get("failed_attempt_count") or 0) + 1
+        locked_until = None
+        if failed_attempt_count >= max_failed_attempts and lock_seconds > 0:
+            locked_until = now + timedelta(seconds=lock_seconds)
+        _run_pg_dict_query(
+            conn,
+            """
+            UPDATE app.email_verification_challenge
+            SET failed_attempt_count = %s,
+                locked_until = %s,
+                last_failed_at = NOW(),
+                updated_at = NOW()
+            WHERE challenge_id = %s
+            RETURNING challenge_id
+            """,
+            [failed_attempt_count, locked_until, challenge["challenge_id"]],
+        )
+        if failed_attempt_count >= max_failed_attempts:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"验证码尝试次数过多，请在{_format_retry_after_seconds(lock_seconds or 1)}后重新获取"
+                ),
+            )
+        remaining_attempts = max_failed_attempts - failed_attempt_count
+        raise HTTPException(status_code=400, detail=f"验证码错误，还可尝试 {remaining_attempts} 次")
 
     _run_pg_dict_query(
         conn,

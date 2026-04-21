@@ -3,7 +3,6 @@ from __future__ import annotations
 from html import escape
 
 from data_platform.api.chat_backend_portal_public_html import (
-  _load_contact_config,
   _render_portal_chatbot_snippet,
 )
 from data_platform.chat_backend.domains.portal.service import _portal_public_base_url
@@ -12,15 +11,6 @@ from data_platform.chat_backend.domains.portal.service import _portal_public_bas
 def render_portal_html() -> str:
   openwebui_home_url = escape(_portal_public_base_url())
   chatbot_snippet = _render_portal_chatbot_snippet()
-  contact = _load_contact_config()
-  contact_email = escape(contact.get("contact_email") or "")
-  feedback_url = escape(contact.get("feedback_url") or "")
-  wechat_qr_data_url = contact.get("wechat_qr_base64") or ""
-  wechat_qr_html = (
-    f'<div class="wechat-qr-wrap"><img class="wechat-qr-image" src="{wechat_qr_data_url}" alt="企微二维码" /></div>'
-    if wechat_qr_data_url
-    else '<div class="contact-modal-note">当前未找到企微二维码图片，请联系管理员上传。</div>'
-  )
   return """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -272,15 +262,6 @@ def render_portal_html() -> str:
       width: 19px;
       height: 19px;
     }
-    .top-icon-link.mail-link {
-      color: var(--accent);
-    }
-    .top-icon-link.wechat-link {
-      color: #0f766e;
-    }
-    .top-icon-link.feedback-link {
-      color: var(--accent-2);
-    }
     .notif-badge {
       position: absolute;
       top: -5px;
@@ -316,119 +297,6 @@ def render_portal_html() -> str:
     .top-home-link:hover {
       background: #0f3f50;
       border-color: #0f3f50;
-    }
-    .contact-modal {
-      position: fixed;
-      inset: 0;
-      z-index: 1200;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      background: rgba(30, 42, 47, 0.38);
-      backdrop-filter: blur(8px);
-    }
-    .contact-modal[hidden] {
-      display: none;
-    }
-    .contact-modal-card {
-      width: min(420px, calc(100vw - 32px));
-      background: rgba(255, 251, 245, 0.98);
-      border: 1px solid var(--line);
-      border-radius: 22px;
-      box-shadow: var(--shadow);
-      padding: 22px;
-      display: grid;
-      gap: 14px;
-    }
-    .contact-modal-top {
-      display: flex;
-      align-items: start;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    .contact-modal-title {
-      font-size: 1.08rem;
-      font-weight: 700;
-      margin: 0;
-    }
-    .contact-modal-close {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      border: 1px solid var(--line);
-      background: rgba(255, 251, 245, 0.92);
-      color: var(--muted);
-      cursor: pointer;
-    }
-    .contact-modal-close:hover {
-      color: var(--accent);
-      background: var(--accent-soft);
-    }
-    .contact-modal-note {
-      color: var(--muted);
-      font-size: 0.84rem;
-      line-height: 1.7;
-    }
-    .wechat-id-box {
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(244, 236, 223, 0.9));
-      padding: 16px 18px;
-    }
-    .wechat-id-label {
-      color: var(--muted);
-      font-size: 0.78rem;
-      margin-bottom: 6px;
-    }
-    .wechat-id-value {
-      font-size: 1.24rem;
-      font-weight: 700;
-      letter-spacing: 0.01em;
-    }
-    .wechat-qr-wrap {
-      display: flex;
-      justify-content: center;
-      padding: 4px 0 2px;
-    }
-    .wechat-qr-image {
-      width: min(100%, 320px);
-      border-radius: 18px;
-      border: 1px solid rgba(17, 75, 95, 0.12);
-      background: #fff;
-      box-shadow: 0 14px 34px rgba(30, 42, 47, 0.1);
-    }
-    .contact-modal-actions {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .contact-action-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 42px;
-      padding: 0 16px;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      background: rgba(255, 251, 245, 0.82);
-      color: var(--accent);
-      text-decoration: none;
-      cursor: pointer;
-      font-size: 0.84rem;
-      font-weight: 600;
-    }
-    .contact-action-btn:hover {
-      background: var(--accent-soft);
-      border-color: rgba(17, 75, 95, 0.18);
-    }
-    .contact-inline-status {
-      color: var(--muted);
-      font-size: 0.8rem;
-    }
-    .contact-inline-status:empty {
-      display: none;
     }
     #dify-chatbot-bubble-button {
       background-color: #1C64F2 !important;
@@ -1052,29 +920,6 @@ def render_portal_html() -> str:
         <div class="top-utility-actions">
           <a class="top-home-link" id="open-webui-home-link" href="__OPENWEBUI_HOME_URL__">首页</a>
           <button type="button" class="top-secondary-link" id="portal-logout-button">退出登录</button>
-          <a class="top-icon-link mail-link" href="mailto:__CONTACT_EMAIL__" aria-label="邮件联系" title="邮件联系">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3.75 6.75h16.5v10.5H3.75z" />
-              <path d="m4.5 7.5 7.5 6 7.5-6" />
-            </svg>
-          </a>
-          <button type="button" class="top-icon-link wechat-link" id="wechat-contact-trigger" aria-label="企微联系" title="企微联系">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M9.2 5.5c-3.5 0-6.2 2.2-6.2 5.1 0 1.6.8 3 2.2 4l-.6 2.4 2.6-1.3c.6.1 1.3.2 2 .2 3.5 0 6.2-2.2 6.2-5.1S12.7 5.5 9.2 5.5Z" />
-              <path d="M15.5 10.2c3 0 5.5 1.9 5.5 4.5 0 1.3-.7 2.5-1.8 3.3l.5 2-2.2-1.1c-.6.1-1.2.2-1.9.2-3 0-5.5-1.9-5.5-4.5s2.5-4.4 5.4-4.4Z" />
-              <circle cx="7.2" cy="10.5" r=".8" fill="currentColor" stroke="none" />
-              <circle cx="11.2" cy="10.5" r=".8" fill="currentColor" stroke="none" />
-              <circle cx="13.8" cy="14.6" r=".8" fill="currentColor" stroke="none" />
-              <circle cx="17.2" cy="14.6" r=".8" fill="currentColor" stroke="none" />
-            </svg>
-          </button>
-          <a class="top-icon-link feedback-link" href="__FEEDBACK_URL__" target="_blank" rel="noreferrer" aria-label="意见反馈" title="意见反馈">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 3.75 4.75 8v8L12 20.25 19.25 16V8L12 3.75Z" />
-              <path d="M12 7.75v5.25" />
-              <circle cx="12" cy="15.8" r=".9" fill="currentColor" stroke="none" />
-            </svg>
-          </a>
         </div>
       </div>
     </div>
@@ -1330,19 +1175,6 @@ def render_portal_html() -> str:
 </div>
 </div>
 
-<div class="contact-modal" id="wechat-contact-modal" hidden>
-  <div class="contact-modal-card" role="dialog" aria-modal="true" aria-labelledby="wechat-contact-title">
-    <div class="contact-modal-top">
-      <div>
-        <div class="contact-modal-title" id="wechat-contact-title">企微联系</div>
-        <div class="contact-modal-note">扫码即可添加企业微信。</div>
-      </div>
-      <button type="button" class="contact-modal-close" id="wechat-contact-close" aria-label="关闭">×</button>
-    </div>
-    <div id="wechat-contact-body">__WECHAT_QR_HTML__</div>
-  </div>
-</div>
-
 <script>
 (function() {
   var portalToken = new URLSearchParams(location.search).get("t") || "";
@@ -1373,12 +1205,6 @@ def render_portal_html() -> str:
   const bindInviteCodeButton = document.getElementById("bind-invite-code-button");
   const bindInviteCodeMessage = document.getElementById("bind-invite-code-message");
   const portalLogoutButton = document.getElementById("portal-logout-button");
-  const wechatContactTrigger = document.getElementById("wechat-contact-trigger");
-  const wechatContactModal = document.getElementById("wechat-contact-modal");
-  const wechatContactClose = document.getElementById("wechat-contact-close");
-  const contactMailLink = document.querySelector(".mail-link");
-  const contactFeedbackLink = document.querySelector(".feedback-link");
-  const wechatContactBody = document.getElementById("wechat-contact-body");
   const topupViewButtons = document.querySelectorAll("[data-topup-view]");
   const ledgerFilterButtons = document.querySelectorAll("[data-ledger-filter]");
   const notificationsBody = document.getElementById("notifications-body");
@@ -1508,113 +1334,6 @@ def render_portal_html() -> str:
       signOutOpenWebUI();
     });
   }
-
-  function renderWechatQr(contact) {
-    if (!wechatContactBody) return;
-    wechatContactBody.innerHTML = "";
-    var qr = contact && contact.wechat_qr_base64 ? String(contact.wechat_qr_base64) : "";
-    if (!qr) {
-      var note = document.createElement("div");
-      note.className = "contact-modal-note";
-      note.textContent = "当前未找到企微二维码图片，请联系管理员上传。";
-      wechatContactBody.appendChild(note);
-      return;
-    }
-    var wrap = document.createElement("div");
-    wrap.className = "wechat-qr-wrap";
-    var img = document.createElement("img");
-    img.className = "wechat-qr-image";
-    img.alt = "企微二维码";
-    img.src = qr;
-    wrap.appendChild(img);
-    wechatContactBody.appendChild(wrap);
-  }
-
-  function applyContactConfig(contact) {
-    if (!contact) return;
-    if (contactMailLink) {
-      contactMailLink.href = contact.contact_email ? ("mailto:" + String(contact.contact_email)) : "#";
-    }
-    if (contactFeedbackLink && contact.feedback_url) {
-      contactFeedbackLink.href = String(contact.feedback_url);
-    }
-    renderWechatQr(contact);
-  }
-
-  async function refreshContactConfig() {
-    try {
-      var response = await fetch(withPortalToken("/portal/api/public/site-contact-config"), {
-        cache: "no-store",
-        credentials: "same-origin"
-      });
-      if (!response.ok) return null;
-      var payload = await response.json();
-      var contact = payload && payload.data ? payload.data.contact : null;
-      applyContactConfig(contact);
-      return contact;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  function openWechatModal() {
-    if (!wechatContactModal) return;
-    wechatContactModal.hidden = false;
-    document.body.style.overflow = "hidden";
-  }
-
-  function closeWechatModal() {
-    if (!wechatContactModal) return;
-    wechatContactModal.hidden = true;
-    document.body.style.overflow = "";
-  }
-
-  if (wechatContactTrigger) {
-    wechatContactTrigger.addEventListener("click", async function() {
-      await refreshContactConfig();
-      openWechatModal();
-    });
-  }
-
-  if (contactMailLink) {
-    contactMailLink.addEventListener("click", async function(event) {
-      event.preventDefault();
-      var contact = await refreshContactConfig();
-      var target = contact && contact.contact_email ? ("mailto:" + String(contact.contact_email)) : (contactMailLink.getAttribute("href") || "#");
-      window.location.href = target;
-    });
-  }
-
-  if (contactFeedbackLink) {
-    contactFeedbackLink.addEventListener("click", async function(event) {
-      event.preventDefault();
-      var contact = await refreshContactConfig();
-      var target = contact && contact.feedback_url ? String(contact.feedback_url) : (contactFeedbackLink.getAttribute("href") || "");
-      if (target) {
-        window.open(target, "_blank", "noopener,noreferrer");
-      }
-    });
-  }
-
-  if (wechatContactClose) {
-    wechatContactClose.addEventListener("click", closeWechatModal);
-  }
-
-  if (wechatContactModal) {
-    wechatContactModal.addEventListener("click", function(event) {
-      if (event.target === wechatContactModal) {
-        closeWechatModal();
-      }
-    });
-  }
-
-  document.addEventListener("keydown", function(event) {
-    if (event.key === "Escape" && wechatContactModal && !wechatContactModal.hidden) {
-      closeWechatModal();
-    }
-  });
-
-  refreshContactConfig();
 
   var usageLoaded = false, ledgerLoaded = false, topupLoaded = false;
 
@@ -2522,4 +2241,4 @@ def render_portal_html() -> str:
 </script>
 __PORTAL_CHATBOT_SNIPPET__
 </body>
-</html>""".replace("__OPENWEBUI_HOME_URL__", openwebui_home_url).replace("__WECHAT_QR_HTML__", wechat_qr_html).replace("__CONTACT_EMAIL__", contact_email).replace("__FEEDBACK_URL__", feedback_url).replace("__PORTAL_CHATBOT_SNIPPET__", chatbot_snippet)
+</html>""".replace("__OPENWEBUI_HOME_URL__", openwebui_home_url).replace("__PORTAL_CHATBOT_SNIPPET__", chatbot_snippet)

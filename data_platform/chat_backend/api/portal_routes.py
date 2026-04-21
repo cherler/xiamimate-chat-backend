@@ -1,6 +1,9 @@
 """Portal API routes — /portal/*."""
 from __future__ import annotations
 
+import threading
+import time
+from collections import defaultdict, deque
 from pathlib import Path
 from uuid import uuid4
 from typing import Any
@@ -54,7 +57,10 @@ from data_platform.chat_backend.domains.notifications.service import (
     _set_notification_read_state,
 )
 from data_platform.chat_backend.domains.payments.service import _fetch_payment_order_for_user
-from data_platform.chat_backend.domains.site_config import _get_contact_config
+from data_platform.chat_backend.domains.site_config import (
+    _get_contact_config,
+    _get_email_verification_security_config,
+)
 
 from data_platform.chat_backend.api.models import (
     BindReferralCodeRequest,
@@ -91,6 +97,9 @@ _PORTAL_LEDGER_FILTER_CLAUSES = {
     "credit": " AND points_delta > 0 AND entry_type NOT IN ('refund', 'daily_quota_reset')",
     "daily_reset": " AND entry_type = 'daily_quota_reset'",
 }
+
+_EMAIL_VERIFICATION_IP_GUARD_LOCK = threading.Lock()
+_EMAIL_VERIFICATION_IP_GUARD_BUCKETS: dict[str, deque[float]] = defaultdict(deque)
 
 
 def _normalize_portal_ledger_source(source: Any) -> str:
@@ -182,6 +191,81 @@ def _resolve_openwebui_session_user(request: Request) -> tuple[str, str, str] | 
     return user_id, email, name
 
 
+def _request_client_ip(request: Request) -> str:
+    x_real_ip = (request.headers.get("x-real-ip") or "").strip()
+    if x_real_ip:
+        return x_real_ip
+    forwarded_for = (request.headers.get("x-forwarded-for") or "").strip()
+    if forwarded_for:
+        return forwarded_for.split(",", 1)[0].strip()
+    if request.client and request.client.host:
+        return str(request.client.host).strip()
+    return "unknown"
+
+
+def _build_portal_guard_response(user_id: str, email: str, name: str) -> Response:
+    return Response(
+        status_code=200,
+        headers={
+            "X-Portal-User-Id": user_id,
+            "X-Portal-User-Email": email,
+            "X-Portal-User-Name": name,
+        },
+    )
+
+
+def _build_portal_guard_rate_limited_response(retry_after_seconds: int) -> Response:
+    return Response(
+        status_code=403,
+        headers={
+            "X-Portal-Guard-Result": "rate_limited",
+            "X-Portal-Guard-Retry-After": str(max(1, int(retry_after_seconds))),
+        },
+    )
+
+
+def _enforce_email_verification_ip_guard(conn, request: Request, action: str) -> Response | None:
+    limits = _get_email_verification_security_config(conn)
+    if action == "request":
+        window_seconds = int(limits.get("request_ip_window_seconds") or 0)
+        max_attempts = int(limits.get("request_ip_max_attempts") or 0)
+    else:
+        window_seconds = int(limits.get("confirm_ip_window_seconds") or 0)
+        max_attempts = int(limits.get("confirm_ip_max_attempts") or 0)
+    if window_seconds <= 0 or max_attempts <= 0:
+        return None
+
+    client_ip = _request_client_ip(request)
+    bucket_key = f"{action}:{client_ip}"
+    now = time.monotonic()
+    with _EMAIL_VERIFICATION_IP_GUARD_LOCK:
+        bucket = _EMAIL_VERIFICATION_IP_GUARD_BUCKETS[bucket_key]
+        while bucket and bucket[0] <= now - window_seconds:
+            bucket.popleft()
+        if len(bucket) >= max_attempts:
+            retry_after = int(max(1, window_seconds - (now - bucket[0]))) if bucket else window_seconds
+            return _build_portal_guard_rate_limited_response(retry_after)
+        bucket.append(now)
+    return None
+
+
+def _portal_email_verification_guard(request: Request, action: str) -> Response:
+    resolved_user = _resolve_openwebui_session_user(request)
+    if resolved_user is None:
+        return Response(status_code=401)
+
+    user_id, email, name = resolved_user
+    try:
+        with _postgres_conn() as conn:
+            _ensure_user_record(conn, user_id=user_id, email=email, display_name=name)
+            guard_response = _enforce_email_verification_ip_guard(conn, request, action)
+            if guard_response is not None:
+                return guard_response
+    except Exception:
+        return Response(status_code=500)
+    return _build_portal_guard_response(user_id, email, name)
+
+
 def _portal_user_requires_email_verification(conn, user_id: str) -> bool:
     if not _portal_email_verification_gate_enabled():
         return False
@@ -238,6 +322,16 @@ def portal_validate_session(request: Request) -> Response:
             "X-Portal-User-Name": name,
         },
     )
+
+
+@router.get("/_internal/portal/email-verification/request-guard")
+def portal_email_verification_request_guard(request: Request) -> Response:
+    return _portal_email_verification_guard(request, "request")
+
+
+@router.get("/_internal/portal/email-verification/confirm-guard")
+def portal_email_verification_confirm_guard(request: Request) -> Response:
+    return _portal_email_verification_guard(request, "confirm")
 
 
 @router.get("/_internal/openwebui/verified-user-check")

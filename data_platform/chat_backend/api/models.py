@@ -208,4 +208,4 @@ class UpdateEventPricingRequest(BaseModel):
 
 
 class UpdateSiteConfigRequest(BaseModel):
-    config_value: str = Field(..., max_length=500_000)
+    config_value: str = Field(..., max_length=3_000_000)
