@@ -65,3 +65,4 @@ PostgreSQL DDL：
 3. `CHAT_BACKEND_GUEST_DAILY_POINTS`：guest 每日积分上限，默认 `500`。
 4. `CHAT_BACKEND_DAILY_RESET_TIMEZONE`：日配额重置时区，默认 `Asia/Shanghai`。
 5. `CHAT_BACKEND_DISABLE_DEMO_FALLBACK`：设为 `true` 后，public API 不再接受 demo fallback 用户。
+6. `DIFY_CHATBOT_TOKEN`：portal 右下角 bubble 使用的 Dify chatbot token/share code；切换 chatbot 时只改这个值即可，无需改代码。

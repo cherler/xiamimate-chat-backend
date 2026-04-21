@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -844,24 +845,218 @@ def _portal_chatbot_base_url() -> str:
   return f"{_portal_public_base_url()}/_dify"
 
 
+def _portal_chatbot_token() -> str:
+  return (
+    os.environ.get("DIFY_CHATBOT_TOKEN")
+    or os.environ.get("DIFY_CHATBOT_SHARE_CODE")
+    or "QmSaZ6H42s0ZdaxM"
+  ).strip()
+
+
 def _render_portal_chatbot_snippet() -> str:
   chatbot_base_url = _portal_chatbot_base_url()
+  chatbot_token = _portal_chatbot_token()
   chatbot_base_url_json = json.dumps(chatbot_base_url)
-  chatbot_embed_src = escape(f"{chatbot_base_url}/embed.min.js", quote=True)
+  chatbot_embed_src_json = json.dumps(f"{chatbot_base_url}/embed.min.js")
+  chatbot_page_src_json = json.dumps(f"{chatbot_base_url}/chatbot/{chatbot_token}")
+  chatbot_token_json = json.dumps(chatbot_token)
   return f"""
 <script>
- window.difyChatbotConfig = {{
-  token: 'QmSaZ6H42s0ZdaxM',
-  baseUrl: {chatbot_base_url_json},
-  inputs: {{}},
-  systemVariables: {{}},
-  userVariables: {{}},
- }}
-</script>
-<script
- src="{chatbot_embed_src}"
- id="QmSaZ6H42s0ZdaxM"
- defer>
+ (function() {{
+  const config = {{
+   token: {chatbot_token_json},
+   baseUrl: {chatbot_base_url_json},
+    dynamicScript: true,
+   inputs: {{}},
+   systemVariables: {{}},
+   userVariables: {{}},
+  }};
+  const passportStorageKey = `passport-${{config.token}}`;
+  const chatbotPageUrl = {chatbot_page_src_json};
+  let hasScheduledWarmup = false;
+  const appendHintLink = (rel, href, as) => {{
+    if (!href || document.head.querySelector(`link[rel="${{rel}}"][data-dify-href="${{href}}"]`)) {{
+    return;
+   }}
+   const link = document.createElement('link');
+   link.rel = rel;
+   link.href = href;
+   if (as) {{
+    link.as = as;
+   }}
+   link.dataset.difyHref = href;
+   document.head.appendChild(link);
+  }};
+  const scheduleIdleWork = (callback) => {{
+   if ('requestIdleCallback' in window) {{
+    window.requestIdleCallback(callback, {{ timeout: 2500 }});
+    return;
+   }}
+   window.setTimeout(callback, 1200);
+  }};
+  const warmupChatbot = () => {{
+   if (hasScheduledWarmup) {{
+    return;
+   }}
+   const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+   if (connection && (connection.saveData || /(^|-)2g$/.test(connection.effectiveType || ''))) {{
+    return;
+   }}
+   hasScheduledWarmup = true;
+   scheduleIdleWork(async () => {{
+    try {{
+     appendHintLink('prefetch', chatbotPageUrl, 'document');
+     const response = await fetch(chatbotPageUrl, {{
+      credentials: 'include',
+     }});
+     if (!response.ok) {{
+      throw new Error(`chatbot warmup failed: ${{response.status}}`);
+     }}
+     const html = await response.text();
+     const assetMatches = Array.from(
+      html.matchAll(/(?:src|href)=\"([^\"]*\/_dify\/_next\/static\/[^\"]+)\"/g),
+      (match) => match[1],
+     );
+     const uniqueAssets = [...new Set(assetMatches)].slice(0, 24);
+     uniqueAssets.forEach((assetUrl) => {{
+      appendHintLink(
+       'prefetch',
+       assetUrl,
+       assetUrl.endsWith('.css') ? 'style' : 'script',
+      );
+     }});
+    }} catch (error) {{
+     console.debug('portal chatbot warmup skipped', error);
+    }}
+   }});
+  }};
+  const loadEmbedScript = () => {{
+   window.difyChatbotConfig = config;
+   if (document.getElementById(config.token)) {{
+    return;
+   }}
+   const script = document.createElement('script');
+   script.src = {chatbot_embed_src_json};
+   script.id = config.token;
+   script.defer = true;
+   document.head.appendChild(script);
+  }};
+  const decodeJwtPayload = (token) => {{
+   try {{
+    const parts = String(token || '').split('.');
+    if (parts.length < 2) {{
+     return null;
+    }}
+    const normalized = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+    return JSON.parse(window.atob(padded));
+   }} catch (error) {{
+    return null;
+   }}
+  }};
+  const getConversationInfo = () => {{
+   try {{
+    return JSON.parse(window.localStorage.getItem('conversationIdInfo') || 'null');
+   }} catch (error) {{
+    return null;
+   }}
+  }};
+  const getStoredConversationId = (passportToken) => {{
+   const payload = decodeJwtPayload(passportToken);
+   const appId = payload && payload.app_id;
+   if (!appId) {{
+    return '';
+   }}
+   const conversationInfo = getConversationInfo();
+   return String(conversationInfo?.[appId]?.DEFAULT || '').trim();
+  }};
+  const clearStoredConversationId = (passportToken) => {{
+   const payload = decodeJwtPayload(passportToken);
+   const appId = payload && payload.app_id;
+   if (!appId) {{
+    window.localStorage.removeItem('conversationIdInfo');
+    return;
+   }}
+   const conversationInfo = getConversationInfo();
+   if (!conversationInfo || typeof conversationInfo !== 'object') {{
+    window.localStorage.removeItem('conversationIdInfo');
+    return;
+   }}
+   if (conversationInfo[appId]) {{
+    delete conversationInfo[appId];
+   }}
+   if (Object.keys(conversationInfo).length === 0) {{
+    window.localStorage.removeItem('conversationIdInfo');
+    return;
+   }}
+   window.localStorage.setItem('conversationIdInfo', JSON.stringify(conversationInfo));
+  }};
+  const validateStoredConversation = async (passportToken) => {{
+   const conversationId = getStoredConversationId(passportToken);
+   if (!conversationId) {{
+    return 'ok';
+   }}
+   try {{
+    const response = await fetch(
+     `${{config.baseUrl}}/api/messages?conversation_id=${{encodeURIComponent(conversationId)}}&limit=1&last_id=`,
+     {{
+      headers: {{
+       'X-App-Code': config.token,
+       'X-App-Passport': passportToken,
+      }},
+      credentials: 'include',
+     }},
+    );
+    if (response.ok) {{
+     return 'ok';
+    }}
+    if (response.status === 404) {{
+     clearStoredConversationId(passportToken);
+     return 'ok';
+    }}
+    if (response.status === 401 || response.status === 403) {{
+     return 'refresh-passport';
+    }}
+   }} catch (error) {{
+    console.debug('portal chatbot stored conversation validation skipped', error);
+   }}
+   return 'ok';
+  }};
+  const bootstrapPassport = async () => {{
+   const existingPassport = String(window.localStorage.getItem(passportStorageKey) || '').trim();
+   if (existingPassport) {{
+    const validationResult = await validateStoredConversation(existingPassport);
+    if (validationResult === 'ok') {{
+     loadEmbedScript();
+     warmupChatbot();
+     return;
+    }}
+    window.localStorage.removeItem(passportStorageKey);
+   }}
+   try {{
+    const response = await fetch(`${{config.baseUrl}}/api/passport`, {{
+     headers: {{
+      'X-App-Code': config.token,
+     }},
+     credentials: 'include',
+    }});
+    if (!response.ok) {{
+     throw new Error(`passport bootstrap failed: ${{response.status}}`);
+    }}
+    const payload = await response.json();
+    if (payload && payload.access_token) {{
+     window.localStorage.setItem(passportStorageKey, payload.access_token);
+      clearStoredConversationId(payload.access_token);
+    }}
+   }} catch (error) {{
+    console.error('portal chatbot passport bootstrap failed', error);
+   }} finally {{
+    loadEmbedScript();
+    warmupChatbot();
+   }}
+  }};
+  bootstrapPassport();
+ }})();
 </script>
 """
 
