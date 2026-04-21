@@ -351,10 +351,18 @@ _BASE_CSS = """
     background-color: #1C64F2 !important;
   }
   #dify-chatbot-bubble-window {
+    position: fixed !important;
+    right: var(--dify-chatbot-bubble-button-right, 1rem) !important;
+    bottom: var(--dify-chatbot-bubble-button-bottom, 1rem) !important;
+    left: auto !important;
+    top: auto !important;
     width: 24rem !important;
     height: 40rem !important;
     max-width: calc(100vw - 24px) !important;
     max-height: calc(100vh - 24px) !important;
+    z-index: 2147483646 !important;
+    box-shadow: 0 24px 60px rgba(8, 10, 18, 0.28) !important;
+    background: #ffffff !important;
   }
   .main {
     width: min(var(--content-w), calc(100% - 48px));
