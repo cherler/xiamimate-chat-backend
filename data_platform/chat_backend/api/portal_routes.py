@@ -32,6 +32,7 @@ from data_platform.chat_backend.infra.settings import (
     PORTAL_MOCK_PAYMENT_ENABLED,
     _portal_email_verification_gate_enabled,
     _generate_id,
+    _utc_now,
 )
 from data_platform.chat_backend.domains.portal.service import (
     _backend_base_url,
@@ -45,6 +46,7 @@ from data_platform.chat_backend.domains.billing.service import (
     _build_payment_order_snapshot,
     _ensure_user_credit_account_state,
     _fetch_billing_package,
+    _fetch_subscriptions_for_user,
     _grant_referral_invited_reward_if_needed,
     _redeem_code,
     _resolve_referral_invited_reward_points,
@@ -240,6 +242,51 @@ def _apply_security_verification_summary(overview: dict[str, Any]) -> dict[str, 
                 "verification_ttl_seconds": DEVICE_SESSION_ELEVATION_TTL_SECONDS,
         }
         return overview
+
+
+def _find_active_monthly_subscription(subscriptions: list[dict[str, Any]]) -> dict[str, Any] | None:
+    now = _utc_now()
+    active_rows: list[dict[str, Any]] = []
+    for row in subscriptions or []:
+        if str(row.get("status") or "").strip().lower() != "active":
+            continue
+        period_end = row.get("current_period_end")
+        if period_end is not None and period_end <= now:
+            continue
+        active_rows.append(row)
+    if not active_rows:
+        return None
+    active_rows.sort(
+        key=lambda row: (
+            row.get("current_period_end") is None,
+            row.get("current_period_end") or row.get("updated_at") or row.get("created_at"),
+        ),
+        reverse=True,
+    )
+    return active_rows[0]
+
+
+def _build_monthly_package_purchase_guard(conn, user_id: str, package: dict[str, Any]) -> dict[str, Any] | None:
+    if str(package.get("product_type") or "").strip().lower() != "monthly_subscription":
+        return None
+    active_subscription = _find_active_monthly_subscription(_fetch_subscriptions_for_user(conn, user_id))
+    if not active_subscription:
+        return None
+    active_package_code = str(active_subscription.get("package_code") or "").strip()
+    target_package_code = str(package.get("package_code") or "").strip()
+    is_current_package = active_package_code == target_package_code
+    return {
+        "blocked": True,
+        "active_subscription": active_subscription,
+        "button_label": "当前订阅" if is_current_package else "套餐切换待上线",
+        "message": (
+            "当前套餐已经生效，本阶段不支持重复购买同一月包；当前按单月购买，到期后如需继续使用，再手动续购。"
+            if is_current_package
+            else "当前账号已有生效中的月包；套餐升降级切换后续再开放，本阶段先不支持新的月包下单。"
+        ),
+        "reason_code": "current_subscription_active" if is_current_package else "subscription_switch_not_supported",
+        "is_current_package": is_current_package,
+    }
 
 
 def _render_portal_session_expired_html() -> str:
@@ -609,6 +656,7 @@ def portal_wechat_qr_image() -> FileResponse:
 @router.get("/portal/checkout")
 def portal_checkout_page(request: Request) -> HTMLResponse:
     user_id = _require_portal_user(request)
+    subscription_purchase_guard: dict[str, Any] | None = None
     with _postgres_conn() as conn:
         if _portal_user_requires_email_verification(conn, user_id):
             redirect_target = "/portal/account"
@@ -622,6 +670,7 @@ def portal_checkout_page(request: Request) -> HTMLResponse:
     if package_code:
         with _postgres_conn() as conn:
             selected_package = _fetch_billing_package(conn, package_code)
+            subscription_purchase_guard = _build_monthly_package_purchase_guard(conn, user_id, selected_package)
             pricing_preview = _build_payment_order_snapshot(
                 conn,
                 user_id=user_id,
@@ -633,6 +682,7 @@ def portal_checkout_page(request: Request) -> HTMLResponse:
             selected_package=selected_package,
             pricing_preview=pricing_preview,
             mock_payment_enabled=PORTAL_MOCK_PAYMENT_ENABLED,
+            subscription_purchase_guard=subscription_purchase_guard,
         ),
         headers={"Cache-Control": "no-store"},
     )
@@ -965,6 +1015,9 @@ def portal_create_payment_order(request: Request, payload: CreatePaymentOrderReq
     with _postgres_conn() as conn:
         _enforce_verified_portal_user(conn, user_id)
         package = _fetch_billing_package(conn, payload.package_code)
+        purchase_guard = _build_monthly_package_purchase_guard(conn, user_id, package)
+        if purchase_guard:
+            raise HTTPException(status_code=409, detail=str(purchase_guard.get("message") or "current subscription blocks monthly purchase"))
         order_id = _generate_id("order")
         pricing_snapshot = _build_payment_order_snapshot(
             conn,

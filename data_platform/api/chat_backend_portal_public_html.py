@@ -332,6 +332,13 @@ _BASE_CSS = """
     background: #0f3f50;
     border-color: #0f3f50;
   }
+  .offer-cta.disabled,
+  .offer-cta[aria-disabled="true"] {
+    background: rgba(17, 75, 95, 0.1);
+    color: var(--muted);
+    border: 1px solid rgba(17, 75, 95, 0.12);
+    pointer-events: none;
+  }
   .ghost-button,
   .payment-method {
     background: rgba(255, 251, 245, 0.78);
@@ -1156,12 +1163,12 @@ def render_portal_products_html() -> str:
                 <div class="bullet-item">月度积分：{int(package.get('points_amount') or 0)} 积分</div>
                 <div class="bullet-item">计费周期：{int(package.get('period_days') or 30)} 天</div>
                 <div class="bullet-item">扣减顺序：优先消耗当前月包剩余积分</div>
-                <div class="bullet-item">续费说明：按标准月费续费，当前标价 {escape(str(renewal_label))}</div>
+                <div class="bullet-item">续费说明：当前按单月购买，不自动续费；如需继续使用，到期后再手动续购</div>
                 <div class="bullet-item">首月促销：{escape(str((first_discount_rule.get('meta_json') or {}).get('display_text') or '首次订阅月包首月 1 折'))}</div>
               </div>
               <div class="offer-actions">
-                <a class="offer-cta" data-checkout-link="1" href="/portal/checkout?package_code={package_code}">立即下单</a>
-                <span class="cta-hint">登录后进入受保护结算页，支持支付宝与微信支付。</span>
+                <a class="offer-cta" data-checkout-link="1" data-package-code="{package_code}" data-product-type="monthly_subscription" href="/portal/checkout?package_code={package_code}">立即下单</a>
+                <span class="cta-hint" data-cta-hint="{package_code}">登录后进入受保护结算页，当前阶段按单月购买，不自动续费。</span>
               </div>
             </div>
             '''
@@ -1193,8 +1200,8 @@ def render_portal_products_html() -> str:
                 <div class="bullet-item">活动说明：{escape(str((bonus_rule.get('meta_json') or {}).get('display_text') or '按单笔充值活动赠送'))}</div>
               </div>
               <div class="offer-actions">
-                <a class="offer-cta" data-checkout-link="1" href="/portal/checkout?package_code={package_code}">立即下单</a>
-                <span class="cta-hint">下单后可在同页查看支付状态与到账结果。</span>
+                  <a class="offer-cta" data-checkout-link="1" data-package-code="{package_code}" data-product-type="recharge" href="/portal/checkout?package_code={package_code}">立即下单</a>
+                  <span class="cta-hint" data-cta-hint="{package_code}">下单后可在同页查看支付状态与到账结果。</span>
               </div>
             </div>
             '''
@@ -1278,7 +1285,125 @@ def render_portal_products_html() -> str:
         subtitle="说明不同方案的积分额度、有效期和到账方式，便于按使用强度选择合适的订阅或充值方案。",
         sidebar_html=sidebar_html,
         body_html=body_html,
-    )
+    ).replace("</body>", '''
+<script>
+(function() {
+  function readStoredToken() {
+    try {
+      var stored = localStorage.getItem('token');
+      if (!stored || stored === '""') return '';
+      if (stored.charAt(0) === '"' && stored.charAt(stored.length - 1) === '"') {
+        stored = stored.slice(1, -1);
+      }
+      return stored || '';
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function authHeaders() {
+    var headers = {};
+    var token = readStoredToken();
+    if (token) {
+      headers.Authorization = 'Bearer ' + token;
+    }
+    return headers;
+  }
+
+  function withPortalToken(path) {
+    var token = readStoredToken();
+    if (!token || !path || /[?&]t=/.test(path)) {
+      return path;
+    }
+    return path + (path.indexOf('?') === -1 ? '?' : '&') + 't=' + encodeURIComponent(token);
+  }
+
+  function findActiveMonthlySubscription(subscriptions) {
+    var rows = Array.isArray(subscriptions) ? subscriptions.slice() : [];
+    var now = Date.now();
+    rows = rows.filter(function(sub) {
+      if (!sub || String(sub.status || '').toLowerCase() !== 'active') {
+        return false;
+      }
+      if (!sub.current_period_end) {
+        return true;
+      }
+      var endTime = new Date(sub.current_period_end).getTime();
+      return !isNaN(endTime) && endTime > now;
+    });
+    if (!rows.length) {
+      return null;
+    }
+    rows.sort(function(left, right) {
+      var leftTime = left && left.current_period_end ? new Date(left.current_period_end).getTime() : 0;
+      var rightTime = right && right.current_period_end ? new Date(right.current_period_end).getTime() : 0;
+      return rightTime - leftTime;
+    });
+    return rows[0] || null;
+  }
+
+  function setCheckoutLinkState(link, text, hint, disabled) {
+    if (!link) {
+      return;
+    }
+    var packageCode = link.getAttribute('data-package-code') || '';
+    var hintEl = packageCode ? document.querySelector('[data-cta-hint="' + packageCode + '"]') : null;
+    link.textContent = text;
+    if (hintEl && hint) {
+      hintEl.textContent = hint;
+    }
+    if (disabled) {
+      link.setAttribute('aria-disabled', 'true');
+      link.classList.add('disabled');
+      link.removeAttribute('href');
+    } else {
+      link.setAttribute('href', withPortalToken('/portal/checkout?package_code=' + encodeURIComponent(packageCode)));
+      link.removeAttribute('aria-disabled');
+      link.classList.remove('disabled');
+    }
+  }
+
+  function applyProductsCheckoutState(account) {
+    var activeSubscription = findActiveMonthlySubscription((account || {}).subscriptions || []);
+    document.querySelectorAll('[data-checkout-link="1"]').forEach(function(link) {
+      var packageCode = link.getAttribute('data-package-code') || '';
+      var productType = link.getAttribute('data-product-type') || '';
+      if (productType !== 'monthly_subscription') {
+        setCheckoutLinkState(link, '立即下单', '下单后可在同页查看支付状态与到账结果。', false);
+        return;
+      }
+      if (!activeSubscription) {
+        setCheckoutLinkState(link, '立即下单', '登录后进入受保护结算页，当前阶段按单月购买，不自动续费。', false);
+        return;
+      }
+      if (String(activeSubscription.package_code || '') === packageCode) {
+        setCheckoutLinkState(link, '当前订阅', '当前月包已生效；本阶段不支持重复购买同一套餐。', true);
+        return;
+      }
+      setCheckoutLinkState(link, '套餐切换待上线', '当前账号已有生效中的月包；升降级切换后续再开放。', true);
+    });
+  }
+
+  fetch(withPortalToken('/portal/api/account'), {
+    method: 'GET',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: authHeaders(),
+  }).then(function(resp) {
+    return resp.json().catch(function() { return {}; }).then(function(body) {
+      if (!resp.ok || !body || body.success !== true) {
+        throw new Error('not_logged_in');
+      }
+      return body.data || {};
+    });
+  }).then(function(account) {
+    applyProductsCheckoutState(account || {});
+  }).catch(function() {
+    applyProductsCheckoutState(null);
+  });
+})();
+</script>
+</body>''')
 
 
 def render_portal_guide_html() -> str:
@@ -1884,6 +2009,7 @@ def render_portal_checkout_html(
     selected_package: dict[str, Any] | None = None,
     pricing_preview: dict[str, Any] | None = None,
     mock_payment_enabled: bool = False,
+  subscription_purchase_guard: dict[str, Any] | None = None,
 ) -> str:
     package_meta = (selected_package or {}).get("meta_json") or {}
     pricing = (pricing_preview or {}).get("pricing") or {}
@@ -1940,6 +2066,8 @@ def render_portal_checkout_html(
         )
     promo_html = "".join(promo_items) if promo_items else '<div class="checkout-note">当前套餐没有叠加中的促销，支付成功后将按基础权益到账。</div>'
     selected_package_name_js = escape(str(package_meta.get("display_name") or (selected_package or {}).get("package_name") or ""))
+    purchase_guard_button_label_js = escape(str((subscription_purchase_guard or {}).get("button_label") or "创建支付订单"))
+    purchase_guard_message_js = escape(str((subscription_purchase_guard or {}).get("message") or ""))
 
     body_html = '''
       <section id="summary" class="section-block card">
@@ -1982,6 +2110,9 @@ def render_portal_checkout_html(
         var packageCode = params.get("package_code") || "";
         var currentOrderId = params.get("order_id") || "";
         var mockPaymentEnabled = __MOCK_PAYMENT_ENABLED__;
+        var subscriptionPurchaseBlocked = __SUBSCRIPTION_PURCHASE_BLOCKED__;
+        var purchaseGuardButtonLabel = __SUBSCRIPTION_PURCHASE_BLOCK_LABEL__;
+        var purchaseGuardMessage = __SUBSCRIPTION_PURCHASE_BLOCK_MESSAGE__;
         var selectedProvider = "alipay";
         var selectedPackageName = __SELECTED_PACKAGE_NAME__;
         var orderPanel = document.getElementById("order-status-panel");
@@ -2035,6 +2166,11 @@ def render_portal_checkout_html(
           });
         }
         function setLoading(loading) {
+          if (subscriptionPurchaseBlocked) {
+            createButton.disabled = true;
+            createButton.textContent = purchaseGuardButtonLabel || '当前不可下单';
+            return;
+          }
           createButton.disabled = loading;
           createButton.textContent = loading ? "创建中..." : "创建支付订单";
         }
@@ -2119,8 +2255,19 @@ def render_portal_checkout_html(
         });
         backProductsLink.href = withPortalToken('/portal/products');
         setSelectedProvider(selectedProvider);
+        if (subscriptionPurchaseBlocked) {
+          noteEl.textContent = purchaseGuardMessage || '当前月包暂不可重复购买。';
+          createButton.disabled = true;
+          createButton.textContent = purchaseGuardButtonLabel || '当前不可下单';
+          simulateButton.style.display = 'none';
+          orderPanel.innerHTML = '<div class="checkout-note">' + esc(purchaseGuardMessage || '当前月包暂不可重复购买。') + '</div>';
+        }
 
         createButton.addEventListener('click', function() {
+          if (subscriptionPurchaseBlocked) {
+            orderPanel.innerHTML = '<div class="checkout-note">' + esc(purchaseGuardMessage || '当前月包暂不可重复购买。') + '</div>';
+            return;
+          }
           if (!packageCode) {
             orderPanel.innerHTML = '<div class="checkout-note">缺少 package_code，请回到套餐页重新进入下单页。</div>';
             return;
@@ -2169,6 +2316,9 @@ def render_portal_checkout_html(
     body_html = body_html.replace("__CHECKOUT_SUMMARY__", summary_html)
     body_html = body_html.replace("__PROMO_ITEMS__", promo_html)
     body_html = body_html.replace("__MOCK_PAYMENT_ENABLED__", "true" if mock_payment_enabled else "false")
+    body_html = body_html.replace("__SUBSCRIPTION_PURCHASE_BLOCKED__", "true" if subscription_purchase_guard else "false")
+    body_html = body_html.replace("__SUBSCRIPTION_PURCHASE_BLOCK_LABEL__", '"{}"'.format(purchase_guard_button_label_js.replace('"', '\\"')))
+    body_html = body_html.replace("__SUBSCRIPTION_PURCHASE_BLOCK_MESSAGE__", '"{}"'.format(purchase_guard_message_js.replace('"', '\\"')))
     body_html = body_html.replace("__SELECTED_PACKAGE_NAME__", '"{}"'.format(selected_package_name_js.replace('"', '\\"')))
 
     sidebar_html = _sidebar([
