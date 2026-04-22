@@ -1016,10 +1016,15 @@ def render_portal_html() -> str:
             <div class="info-value" id="my-invite-code">-</div>
           </div>
           <div class="info-row">
+            <div class="info-label">专属邀请链接</div>
+            <div class="info-value" id="my-invite-link">-</div>
+          </div>
+          <div class="info-row">
             <div class="info-label">邀请绑定</div>
             <div class="info-value" id="invite-binding-status">加载中…</div>
           </div>
           <div class="action-stack">
+            <div class="helper-text" id="invite-auto-bind-status"></div>
             <div class="helper-text">新用户绑定邀请码后，你和邀请人都可额外获得 500 积分。</div>
             <div class="helper-text">首次注册请优先使用首屏右侧快捷入口完成邀请码绑定和邮箱验证。</div>
           </div>
@@ -1200,7 +1205,9 @@ def render_portal_html() -> str:
   const verificationRequestMessage = document.getElementById("verification-request-message");
   const verificationConfirmMessage = document.getElementById("verification-confirm-message");
   const myInviteCodeValue = document.getElementById("my-invite-code");
+  const myInviteLinkValue = document.getElementById("my-invite-link");
   const inviteBindingStatusValue = document.getElementById("invite-binding-status");
+  const inviteAutoBindStatusValue = document.getElementById("invite-auto-bind-status");
   const inviteCodeInput = document.getElementById("invite-code-input");
   const bindInviteCodeButton = document.getElementById("bind-invite-code-button");
   const bindInviteCodeMessage = document.getElementById("bind-invite-code-message");
@@ -1211,6 +1218,7 @@ def render_portal_html() -> str:
   const notificationState = { category: "system", items: [] };
   var currentAccountData = null;
   var verificationGateState = { enforced: false, verified: false };
+  var inviteAutoBindNoticeKey = "xm_pending_invite_binding_notice";
 
   navItems.forEach(function(item) {
     item.addEventListener("click", function() {
@@ -1321,6 +1329,11 @@ def render_portal_html() -> str:
       bindInviteCodeMessage.textContent = "绑定中…";
       apiPost("/portal/api/account/referral/bind", { invite_code: inviteCode }).then(function(data) {
         if (inviteCodeInput) inviteCodeInput.value = "";
+        try {
+          localStorage.removeItem("xm_pending_invite_code");
+          localStorage.removeItem("xm_pending_invite_binding_state");
+          localStorage.removeItem(inviteAutoBindNoticeKey);
+        } catch (error) {}
         bindInviteCodeMessage.textContent = "邀请码绑定成功，额外 500 积分已到账。完成邮箱验证后，邀请人也会获得奖励。";
         renderAccount(data);
       }).catch(function(error) {
@@ -1570,6 +1583,45 @@ def render_portal_html() -> str:
     return apiRequest(path, options);
   }
 
+  function consumeInviteAutoBindNotice(identityVerification) {
+    if (!inviteAutoBindStatusValue) {
+      return;
+    }
+    inviteAutoBindStatusValue.textContent = "";
+    inviteAutoBindStatusValue.removeAttribute("data-state");
+
+    var raw = "";
+    try {
+      raw = localStorage.getItem(inviteAutoBindNoticeKey) || "";
+    } catch (error) {
+      return;
+    }
+    if (!raw) {
+      return;
+    }
+
+    var notice = null;
+    try {
+      notice = JSON.parse(raw);
+    } catch (error) {
+      localStorage.removeItem(inviteAutoBindNoticeKey);
+      return;
+    }
+
+    var invitedBy = identityVerification && identityVerification.invited_by ? identityVerification.invited_by : null;
+    if (!notice || !invitedBy) {
+      return;
+    }
+    if (notice.inviteCode && String(invitedBy.invite_code || "").toUpperCase() !== String(notice.inviteCode || "").toUpperCase()) {
+      return;
+    }
+
+    var inviterDisplay = invitedBy.inviter_display_name || invitedBy.inviter_user_id || "邀请人";
+    inviteAutoBindStatusValue.textContent = "已通过专属邀请链接自动绑定邀请人 " + inviterDisplay + "，无需再手动输入邀请码。";
+    inviteAutoBindStatusValue.setAttribute("data-state", "success");
+    localStorage.removeItem(inviteAutoBindNoticeKey);
+  }
+
   // ── Account page ──
   function loadAccount() {
     apiFetch("/portal/api/account").then(function(data) {
@@ -1646,6 +1698,12 @@ def render_portal_html() -> str:
     if (myInviteCodeValue) {
       myInviteCodeValue.textContent = identityVerification.invite_code || user.invite_code || "-";
     }
+    if (myInviteLinkValue) {
+      var inviteLink = identityVerification.invite_link || "";
+      myInviteLinkValue.innerHTML = inviteLink
+        ? ('<a href="' + esc(inviteLink) + '" target="_blank" rel="noreferrer">' + esc(inviteLink) + '</a>')
+        : "-";
+    }
     if (inviteBindingStatusValue) {
       inviteBindingStatusValue.innerHTML = invitedBy
         ? ("已绑定邀请人 <strong>" + esc(invitedBy.inviter_display_name || invitedBy.inviter_user_id || "-") + "</strong>（邀请码 " + esc(invitedBy.invite_code || "-") + "）")
@@ -1660,6 +1718,7 @@ def render_portal_html() -> str:
           ? "当前账号已完成邮箱验证，邀请码绑定入口已关闭。"
           : "如果你是被邀请来的，请先绑定邀请码，可额外获得 500 积分；完成邮箱验证后邀请人也会得到奖励。");
     }
+    consumeInviteAutoBindNotice(identityVerification);
     if (bindInviteCodeButton) {
       bindInviteCodeButton.disabled = !identityVerification.can_bind_invite_code;
     }

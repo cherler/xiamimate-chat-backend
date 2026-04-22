@@ -44,12 +44,15 @@ from data_platform.chat_backend.domains.billing.service import (
     _ensure_user_credit_account_state,
     _fetch_billing_package,
     _grant_referral_invited_reward_if_needed,
+    _resolve_referral_invited_reward_points,
+    _resolve_signup_gift_points,
 )
 from data_platform.chat_backend.domains.identity.service import (
     _bind_user_referral,
     _confirm_email_verification,
     _confirm_password_reset,
     _ensure_user_record,
+    _fetch_user_by_invite_code,
     _fetch_user,
     _request_password_reset,
     _request_email_verification,
@@ -76,6 +79,7 @@ from data_platform.api.chat_backend_portal_html import render_portal_html
 from data_platform.api.chat_backend_portal_public_html import (
     render_portal_checkout_html,
     render_portal_guide_html,
+    render_portal_invite_html,
     render_portal_password_reset_html,
     render_portal_products_html,
 )
@@ -105,6 +109,18 @@ _PORTAL_LEDGER_FILTER_CLAUSES = {
 
 _EMAIL_VERIFICATION_IP_GUARD_LOCK = threading.Lock()
 _EMAIL_VERIFICATION_IP_GUARD_BUCKETS: dict[str, deque[float]] = defaultdict(deque)
+
+
+def _mask_email_for_display(email: str) -> str:
+    normalized = str(email or "").strip()
+    if "@" not in normalized:
+        return normalized or "-"
+    local, domain = normalized.split("@", 1)
+    if len(local) <= 2:
+        masked_local = local[:1] + "*"
+    else:
+        masked_local = local[:2] + "***"
+    return f"{masked_local}@{domain}"
 
 
 def _normalize_portal_ledger_source(source: Any) -> str:
@@ -382,6 +398,11 @@ def portal_guide_page() -> HTMLResponse:
     return HTMLResponse(render_portal_guide_html(), headers={"Cache-Control": "no-store"})
 
 
+@router.get("/portal/invite")
+def portal_invite_page() -> HTMLResponse:
+    return HTMLResponse(render_portal_invite_html(), headers={"Cache-Control": "no-store"})
+
+
 @router.get("/portal/recover-password", response_model=None)
 def portal_password_reset_page(request: Request) -> Response:
     if _resolve_openwebui_session_user(request) is not None:
@@ -401,6 +422,34 @@ def portal_public_site_contact_config() -> dict[str, Any]:
         "/portal/api/public/site-contact-config",
         {"contact": contact},
         "portal site contact config loaded",
+    )
+
+
+@router.get("/portal/api/public/referral/preview")
+def portal_public_referral_preview(invite_code: str = "") -> dict[str, Any]:
+    normalized_invite_code = (invite_code or "").strip().upper()
+    if not normalized_invite_code:
+        raise HTTPException(status_code=400, detail="missing invite code")
+
+    with _postgres_conn() as conn:
+        inviter = _fetch_user_by_invite_code(conn, normalized_invite_code)
+        signup_reward_points, _ = _resolve_signup_gift_points(conn)
+        bind_reward_points, _ = _resolve_referral_invited_reward_points(conn)
+
+    if inviter is None:
+        raise HTTPException(status_code=404, detail="invite code not found")
+
+    return _success_response(
+        "/portal/api/public/referral/preview",
+        {
+            "invite_code": inviter.invite_code,
+            "inviter_user_id": inviter.user_id,
+            "inviter_display_name": inviter.display_name,
+            "inviter_email_masked": _mask_email_for_display(inviter.email),
+            "signup_reward_points": signup_reward_points,
+            "bind_reward_points": bind_reward_points,
+        },
+        "invite code preview loaded",
     )
 
 

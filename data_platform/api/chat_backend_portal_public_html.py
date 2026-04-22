@@ -1404,6 +1404,298 @@ def render_portal_guide_html() -> str:
     )
 
 
+def render_portal_invite_html() -> str:
+    openwebui_home_url = escape(_portal_public_base_url())
+    body_html = '''
+      <section id="invite" class="section-block card">
+        <h2>邀请注册</h2>
+        <div class="card-note" id="invite-card-note">通过专属邀请链接进入后，完成注册或登录，系统会自动绑定邀请关系。</div>
+        <div class="form-grid">
+          <div class="field-grid">
+            <label class="field-group">
+              <span class="field-label">邀请码</span>
+              <input id="invite-code-input" class="text-field" type="text" maxlength="32" placeholder="正在从邀请链接读取邀请码" />
+              <span class="field-hint" id="invite-code-hint">邀请码会自动从链接中读取；如果你是手动打开页面，也可以在这里直接输入。</span>
+            </label>
+          </div>
+          <div id="invite-preview-card" class="checkout-note">正在校验邀请码，请稍候...</div>
+          <div class="checkout-actions">
+            <button type="button" class="offer-cta" id="invite-continue-button">保存邀请码并去注册/登录</button>
+            <a class="ghost-button" id="invite-secondary-link" href="'''+ openwebui_home_url + '''">返回首页</a>
+          </div>
+          <div id="invite-status" class="status-banner"></div>
+        </div>
+      </section>
+      <section id="product" class="section-block card">
+        <h2>你将注册的是什么产品</h2>
+        <div class="card-note">虾密小助手是一款面向跨境电商卖家的垂直选品与分析助手，不是泛聊天工具。它把问答、Workflow、知识库和账户体系放在一个统一入口里，帮助你从方向判断走到可执行结论。</div>
+        <div class="tip-banner">不是让你多聊一轮，而是帮你更快判断“这个方向值不值得做、风险在哪里、下一步该怎么继续”。如果你正在做跨境电商选品、测品或市场调研，这个产品更像一套可直接上手的分析工作台。</div>
+        <div style="height:18px"></div>
+        <div class="mini-kpi-row">
+          <div class="mini-kpi"><div class="mini-kpi-value">更快收窄方向</div><div class="mini-kpi-label">先问，再筛，再决定要不要继续投入</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">减少盲目试错</div><div class="mini-kpi-label">先看竞争、风险和规则，再决定是否进入</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">输出可执行结论</div><div class="mini-kpi-label">结果不只是一句话，还包含依据、风险和下一步</div></div>
+        </div>
+        <div style="height:18px"></div>
+        <div class="notice-grid">
+          <div class="notice-card accent"><h3 class="notice-title">适合谁</h3><p class="notice-desc">适合正在做跨境电商选品、测品、调研和市场观察的卖家、运营和团队用户。</p></div>
+          <div class="notice-card"><h3 class="notice-title">能帮你做什么</h3><p class="notice-desc">帮助你更快做方向发现、竞争判断、风险排除、规则检索和成本管理，而不是只给一段泛泛回答。</p></div>
+          <div class="notice-card"><h3 class="notice-title">你最终拿到什么</h3><p class="notice-desc">更接近一份可落地的判断结果：是否值得做、为什么、风险点在哪里、下一步怎么验证。</p></div>
+        </div>
+        <div style="height:18px"></div>
+        <h2 style="margin-top:0">核心能力链路</h2>
+        <div class="card-note">它不是单点工具，而是把一次完整分析拆成更容易落地的四个环节，让你从“想到一个方向”走到“知道下一步该怎么做”。</div>
+        <div class="timeline-list">
+          <div class="timeline-item"><div class="timeline-title">1. 智能问答：先把问题问清楚</div><div class="timeline-desc">适合先澄清某个市场、某个类目、某个商品方向值不值得继续看，避免一开始就跑大任务。</div></div>
+          <div class="timeline-item"><div class="timeline-title">2. Workflow：把目标变成完整分析</div><div class="timeline-desc">当你已经有明确目标时，直接输出趋势、竞争、风险和进入建议，拿到结构化判断结果。</div></div>
+          <div class="timeline-item"><div class="timeline-title">3. 知识库：补规则和方法依据</div><div class="timeline-desc">需要看平台规则、SOP、产品说明和标准答复时，不再到处翻资料，直接回到统一入口检索。</div></div>
+          <div class="timeline-item"><div class="timeline-title">4. 账户页：回看成本和奖励结果</div><div class="timeline-desc">分析完成后，可以回到账户页看积分消耗、账本变化、邀请奖励和整体使用趋势。</div></div>
+        </div>
+        <div style="height:18px"></div>
+        <div class="offer-grid">
+          <div class="offer-card featured">
+            <div class="offer-top">
+              <div>
+                <div class="offer-name">智能问答</div>
+                <div class="offer-tagline">适合先澄清问题、判断方向、快速问规则。</div>
+              </div>
+              <div class="offer-badge">快速开始</div>
+            </div>
+            <div class="bullet-list">
+              <div class="bullet-item">先问某个市场或品类值不值得进入</div>
+              <div class="bullet-item">先确认平台规则、常见风险和切入思路</div>
+            </div>
+          </div>
+          <div class="offer-card">
+            <div class="offer-top">
+              <div>
+                <div class="offer-name">Workflow 分析</div>
+                <div class="offer-tagline">适合已经有目标商品或市场时，直接拿完整分析结果。</div>
+              </div>
+              <div class="offer-badge">完整任务</div>
+            </div>
+            <div class="bullet-list">
+              <div class="bullet-item">输出趋势、竞争、风险和进入建议</div>
+              <div class="bullet-item">适合做一份结构化选品分析</div>
+            </div>
+          </div>
+          <div class="offer-card">
+            <div class="offer-top">
+              <div>
+                <div class="offer-name">知识库与账户页</div>
+                <div class="offer-tagline">适合看规则说明、套餐积分和消费记录，方便复盘成本。</div>
+              </div>
+              <div class="offer-badge">长期使用</div>
+            </div>
+            <div class="bullet-list">
+              <div class="bullet-item">查看产品规则、SOP 和常见问题</div>
+              <div class="bullet-item">查看余额、账本、趋势和奖励到账结果</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    '''
+
+    sidebar_html = _sidebar([
+        ("邀请页面", [("invite", "邀请注册"), ("product", "产品介绍")]),
+    ])
+
+    page = _layout(
+        active="invite",
+        kicker="邀请注册",
+        title="通过邀请链接开始使用",
+        subtitle="先确认邀请码有效，再进入产品；如果你还没注册，完成注册或登录后系统会自动绑定邀请关系。",
+        sidebar_html=sidebar_html,
+        body_html=body_html,
+    )
+    script = '''
+<script>
+(function() {
+  var params = new URLSearchParams(location.search);
+  var inviteCodeFromUrl = (params.get("code") || params.get("invite_code") || "").trim().toUpperCase();
+  var input = document.getElementById("invite-code-input");
+  var previewCard = document.getElementById("invite-preview-card");
+  var continueButton = document.getElementById("invite-continue-button");
+  var secondaryLink = document.getElementById("invite-secondary-link");
+  var statusEl = document.getElementById("invite-status");
+  var inviteCardNote = document.getElementById("invite-card-note");
+  var inviteCodeHint = document.getElementById("invite-code-hint");
+  var pendingInviteCodeKey = "xm_pending_invite_code";
+  var pendingInvitePreviewKey = "xm_pending_invite_preview";
+  var invitePreview = null;
+  var loggedIn = false;
+
+  function readStoredToken() {
+    try {
+      var stored = localStorage.getItem('token');
+      if (!stored || stored === '""') return '';
+      if (stored.charAt(0) === '"' && stored.charAt(stored.length - 1) === '"') {
+        stored = stored.slice(1, -1);
+      }
+      return stored || '';
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function authHeaders() {
+    var headers = {};
+    var token = readStoredToken();
+    if (token) {
+      headers.Authorization = 'Bearer ' + token;
+    }
+    return headers;
+  }
+
+  function withPortalToken(path) {
+    var token = readStoredToken();
+    if (!token || !path || /[?&]t=/.test(path)) {
+      return path;
+    }
+    return path + (path.indexOf('?') === -1 ? '?' : '&') + 't=' + encodeURIComponent(token);
+  }
+
+  function setStatus(text, state) {
+    if (!statusEl) return;
+    statusEl.textContent = text || "";
+    if (!text) {
+      statusEl.removeAttribute("data-state");
+      return;
+    }
+    statusEl.setAttribute("data-state", state || "info");
+  }
+
+  function renderPreview(preview) {
+    if (!previewCard) return;
+    if (!preview) {
+      previewCard.innerHTML = '未找到可用的邀请码，请检查链接是否完整。';
+      return;
+    }
+    invitePreview = preview;
+    previewCard.innerHTML = '' +
+      '<div><strong>邀请人：</strong>' + (preview.inviter_display_name || preview.inviter_user_id || '-') + '</div>' +
+      '<div><strong>邀请码：</strong>' + (preview.invite_code || '-') + '</div>' +
+      '<div><strong>注册赠送：</strong>' + String(preview.signup_reward_points || 0) + ' 积分</div>' +
+      '<div><strong>绑定奖励：</strong>' + String(preview.bind_reward_points || 0) + ' 积分</div>';
+  }
+
+  function applyLoggedInMode(account) {
+    loggedIn = true;
+    if (input) {
+      input.disabled = true;
+    }
+    if (inviteCardNote) {
+      inviteCardNote.textContent = '当前浏览器已登录。这个专属邀请链接主要用于邀请新用户注册；如果你刚完成注册，系统会自动处理邀请绑定。';
+    }
+    if (inviteCodeHint) {
+      inviteCodeHint.textContent = '已登录状态下不需要再手动输入邀请码；如需查看绑定结果，请前往账户管理页。';
+    }
+    if (continueButton) {
+      continueButton.textContent = '前往账户管理';
+      continueButton.disabled = false;
+    }
+    if (secondaryLink) {
+      secondaryLink.textContent = '返回首页';
+      secondaryLink.href = ''' + json.dumps(_portal_public_base_url()) + ''';
+    }
+    if (account && account.identity_verification && account.identity_verification.invited_by) {
+      var invitedBy = account.identity_verification.invited_by;
+      setStatus('当前账号已绑定邀请人 ' + (invitedBy.inviter_display_name || invitedBy.inviter_user_id || '-') + '，可以直接去账户页查看结果。', 'success');
+      return;
+    }
+    if (account && account.identity_verification && account.identity_verification.can_bind_invite_code === true) {
+      setStatus('当前账号已登录。如果你刚注册完成，系统会自动尝试绑定邀请码；可直接去账户页确认结果。', 'info');
+      return;
+    }
+    setStatus('当前账号已登录。该邀请链接更适合发送给尚未注册的新用户使用。', 'info');
+  }
+
+  function detectLoggedInAccount() {
+    return fetch(withPortalToken('/portal/api/account'), {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: authHeaders()
+    }).then(function(resp) {
+      return resp.json().catch(function() { return {}; }).then(function(body) {
+        if (!resp.ok || !body || body.success !== true) {
+          throw new Error('not_logged_in');
+        }
+        return body.data || {};
+      });
+    });
+  }
+
+  function loadPreview(inviteCode) {
+    if (!inviteCode) {
+      renderPreview(null);
+      if (continueButton && !loggedIn) continueButton.disabled = true;
+      setStatus("邀请链接里没有邀请码，请确认链接参数。", "error");
+      return;
+    }
+    if (continueButton && !loggedIn) continueButton.disabled = true;
+    setStatus("正在校验邀请码...", "info");
+    fetch('/portal/api/public/referral/preview?invite_code=' + encodeURIComponent(inviteCode), {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store'
+    }).then(function(resp) {
+      return resp.json().catch(function() { return {}; }).then(function(body) {
+        if (!resp.ok || !body || body.success !== true) {
+          throw new Error(body.detail || body.message || '邀请码校验失败');
+        }
+        return body.data || {};
+      });
+    }).then(function(data) {
+      if (input) input.value = inviteCode;
+      renderPreview(data);
+      localStorage.setItem(pendingInvitePreviewKey, JSON.stringify(data));
+      if (continueButton && !loggedIn) continueButton.disabled = false;
+      if (!loggedIn) {
+        setStatus("邀请码校验通过。点击按钮后，系统会记住这次邀请关系并引导你去注册或登录。", "success");
+      }
+    }).catch(function(error) {
+      renderPreview(null);
+      if (continueButton && !loggedIn) continueButton.disabled = true;
+      setStatus(error.message || '邀请码校验失败', 'error');
+    });
+  }
+
+  if (input) {
+    input.value = inviteCodeFromUrl;
+    input.addEventListener('change', function() {
+      loadPreview((input.value || '').trim().toUpperCase());
+    });
+  }
+
+  continueButton.addEventListener('click', function() {
+    if (loggedIn) {
+      window.location.href = withPortalToken('/portal/account');
+      return;
+    }
+    var inviteCode = ((input && input.value) || inviteCodeFromUrl || '').trim().toUpperCase();
+    if (!inviteCode) {
+      setStatus('请先输入有效邀请码。', 'error');
+      return;
+    }
+    localStorage.setItem(pendingInviteCodeKey, inviteCode);
+    setStatus('邀请码已保存。完成注册或登录后，系统会自动绑定邀请关系。', 'success');
+    window.setTimeout(function() {
+      window.location.href = ''' + json.dumps(_portal_public_base_url()) + ''';
+    }, 250);
+  });
+
+  detectLoggedInAccount().then(function(account) {
+    applyLoggedInMode(account || {});
+    loadPreview(inviteCodeFromUrl);
+  }).catch(function() {
+    loadPreview(inviteCodeFromUrl);
+  });
+})();
+</script>'''
+    return page.replace("</body>", script + "</body>")
+
+
 def render_portal_password_reset_html() -> str:
     openwebui_home_url = escape(_portal_public_base_url())
     body_html = f'''

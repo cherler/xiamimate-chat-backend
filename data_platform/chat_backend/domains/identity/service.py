@@ -12,6 +12,7 @@ import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import bcrypt
 from fastapi import HTTPException, Request
@@ -49,6 +50,7 @@ from data_platform.chat_backend.domains.api_keys.service import _ensure_user_api
 from data_platform.chat_backend.domains.billing.models import UserCreditAccount
 from data_platform.chat_backend.domains.billing.service import _ensure_user_credit_account_state
 from data_platform.chat_backend.domains.site_config import _get_email_verification_security_config
+from data_platform.chat_backend.domains.portal.service import _portal_public_base_url
 
 
 _APP_USER_SELECT = """
@@ -329,6 +331,21 @@ def _fetch_user_by_email(conn, email: str) -> RequestUser | None:
         conn,
         _APP_USER_SELECT + " WHERE LOWER(email) = %s ORDER BY created_at DESC LIMIT 1",
         [normalized_email],
+    )
+    if row is None:
+        return None
+    row = _ensure_invite_code_for_row(conn, row)
+    return RequestUser(**row)
+
+
+def _fetch_user_by_invite_code(conn, invite_code: str) -> RequestUser | None:
+    normalized_invite_code = (invite_code or "").strip().upper()
+    if not normalized_invite_code:
+        return None
+    row = _fetch_optional_one(
+        conn,
+        _APP_USER_SELECT + " WHERE invite_code = %s LIMIT 1",
+        [normalized_invite_code],
     )
     if row is None:
         return None
@@ -891,12 +908,17 @@ def _build_identity_verification_summary(conn, user_id: str) -> dict[str, Any]:
     user = _fetch_user(conn, user_id)
     binding = _fetch_user_referral_binding(conn, user_id)
     email_verified = user.email_verified_at is not None
+    invite_code = user.invite_code
+    invite_link = None
+    if invite_code:
+        invite_link = f"{_portal_public_base_url()}/portal/invite?code={quote(invite_code)}"
     return {
         "email": user.email,
         "email_verified": email_verified,
         "email_verified_at": user.email_verified_at,
         "email_verification_required_before_portal_use": _portal_email_verification_gate_enabled(),
-        "invite_code": user.invite_code,
+        "invite_code": invite_code,
+        "invite_link": invite_link,
         "invited_by": binding,
         "can_bind_invite_code": binding is None and not email_verified,
     }
