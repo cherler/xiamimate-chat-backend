@@ -14,6 +14,34 @@ CREATE INDEX IF NOT EXISTS idx_billing_subscription_user_status ON app.billing_s
 CREATE INDEX IF NOT EXISTS idx_subscription_grant_subscription_created ON app.subscription_grant(subscription_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_promotion_claim_user_created ON app.promotion_claim(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_promotion_claim_order_created ON app.promotion_claim(order_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_batch_status_created ON app.redeem_code_batch(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_batch_operator_created ON app.redeem_code_batch(created_by, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_status_created ON app.redeem_code(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_batch_created ON app.redeem_code(batch_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_redeemed_user_created ON app.redeem_code(redeemed_by_user_id, redeemed_at DESC);
+WITH ranked_redeem_duplicates AS (
+		SELECT
+				code_id,
+				ROW_NUMBER() OVER (
+						PARTITION BY batch_id, redeemed_by_user_id
+						ORDER BY COALESCE(redeemed_at, created_at) ASC, code_id ASC
+				) AS redeem_rank
+		FROM app.redeem_code
+		WHERE batch_id IS NOT NULL
+			AND redeemed_by_user_id IS NOT NULL
+)
+UPDATE app.redeem_code AS code
+SET meta_json = COALESCE(code.meta_json, '{}'::jsonb) || '{"legacy_batch_duplicate": true}'::jsonb,
+		updated_at = NOW()
+FROM ranked_redeem_duplicates AS ranked
+WHERE code.code_id = ranked.code_id
+	AND ranked.redeem_rank > 1
+	AND COALESCE(code.meta_json ->> 'legacy_batch_duplicate', 'false') <> 'true';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_redeem_code_batch_user_once ON app.redeem_code(batch_id, redeemed_by_user_id)
+WHERE batch_id IS NOT NULL
+	AND redeemed_by_user_id IS NOT NULL
+	AND COALESCE(meta_json ->> 'legacy_batch_duplicate', 'false') <> 'true';
 CREATE INDEX IF NOT EXISTS idx_email_verification_challenge_user_created ON app.email_verification_challenge(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_email_verification_challenge_email_created ON app.email_verification_challenge(email, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_referral_binding_inviter_created ON app.user_referral_binding(inviter_user_id, created_at DESC);
@@ -26,6 +54,8 @@ CREATE INDEX IF NOT EXISTS idx_analysis_artifact_run ON app.analysis_artifact(ru
 CREATE INDEX IF NOT EXISTS idx_usage_event_user_created ON app.usage_event(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_created ON app.credit_ledger_entry(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_reference ON app.credit_ledger_entry(user_id, entry_type, reference_id);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_hash_status ON app.redeem_code(code_hash, status);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_plaintext_batch_created ON app.redeem_code(batch_id, code_plaintext, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_daily_credit_quota_state_quota_date ON app.daily_credit_quota_state(quota_date DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_notification_user_occurred ON app.user_notification(user_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_notification_user_category_read ON app.user_notification(user_id, category, read_at, occurred_at DESC);

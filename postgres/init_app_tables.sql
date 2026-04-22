@@ -20,12 +20,24 @@ CREATE TABLE IF NOT EXISTS app.app_user (
     status        TEXT NOT NULL DEFAULT 'active',
     plan_tier     TEXT NOT NULL DEFAULT 'free',
     invite_code   TEXT UNIQUE,
+    source_state  TEXT NOT NULL DEFAULT 'active',
+    source_last_seen_at TIMESTAMPTZ,
+    source_orphaned_at TIMESTAMPTZ,
+    source_recovered_at TIMESTAMPTZ,
+    auth_session_version BIGINT NOT NULL DEFAULT 1,
+    last_password_reset_at TIMESTAMPTZ,
     email_verified_at TIMESTAMPTZ,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS invite_code TEXT;
+ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS source_state TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS source_last_seen_at TIMESTAMPTZ;
+ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS source_orphaned_at TIMESTAMPTZ;
+ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS source_recovered_at TIMESTAMPTZ;
+ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS auth_session_version BIGINT NOT NULL DEFAULT 1;
+ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS last_password_reset_at TIMESTAMPTZ;
 ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
 
 DO $$
@@ -191,6 +203,45 @@ CREATE TABLE IF NOT EXISTS app.promotion_claim (
     UNIQUE (rule_code, claim_key)
 );
 
+CREATE TABLE IF NOT EXISTS app.redeem_code_batch (
+    batch_id       TEXT PRIMARY KEY,
+    batch_name     TEXT NOT NULL,
+    code_type      TEXT NOT NULL DEFAULT 'promotion',
+    points_amount  INTEGER NOT NULL,
+    code_count     INTEGER NOT NULL DEFAULT 1,
+    status         TEXT NOT NULL DEFAULT 'active',
+    created_by     TEXT NOT NULL,
+    note           TEXT,
+    meta_json      JSONB NOT NULL DEFAULT '{}'::JSONB,
+    valid_from     TIMESTAMPTZ,
+    valid_until    TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.redeem_code (
+    code_id               TEXT PRIMARY KEY,
+    batch_id              TEXT REFERENCES app.redeem_code_batch(batch_id) ON DELETE SET NULL,
+    code_hash             TEXT NOT NULL UNIQUE,
+    code_plaintext        TEXT,
+    code_mask             TEXT NOT NULL,
+    code_type             TEXT NOT NULL DEFAULT 'promotion',
+    points_amount         INTEGER NOT NULL,
+    status                TEXT NOT NULL DEFAULT 'active',
+    created_by            TEXT NOT NULL,
+    note                  TEXT,
+    meta_json             JSONB NOT NULL DEFAULT '{}'::JSONB,
+    valid_from            TIMESTAMPTZ,
+    valid_until           TIMESTAMPTZ,
+    redeemed_by_user_id   TEXT REFERENCES app.app_user(user_id) ON DELETE SET NULL,
+    redeemed_at           TIMESTAMPTZ,
+    ledger_entry_id       TEXT REFERENCES app.credit_ledger_entry(entry_id) ON DELETE SET NULL,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE app.redeem_code ADD COLUMN IF NOT EXISTS code_plaintext TEXT;
+
 CREATE TABLE IF NOT EXISTS app.email_verification_challenge (
     challenge_id      TEXT PRIMARY KEY,
     user_id           TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
@@ -210,6 +261,24 @@ CREATE TABLE IF NOT EXISTS app.email_verification_challenge (
 ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS failed_attempt_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
 ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS last_failed_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS app.user_device_session (
+    session_id            TEXT PRIMARY KEY,
+    user_id               TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    session_token_hash    TEXT NOT NULL UNIQUE,
+    session_version       BIGINT NOT NULL,
+    device_label          TEXT NOT NULL,
+    user_agent            TEXT NOT NULL DEFAULT '',
+    created_ip            TEXT,
+    last_seen_ip          TEXT,
+    last_seen_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    elevated_until        TIMESTAMPTZ,
+    last_verified_at      TIMESTAMPTZ,
+    revoked_at            TIMESTAMPTZ,
+    revoked_reason        TEXT,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS app.user_referral_binding (
     binding_id          TEXT PRIMARY KEY,
@@ -367,8 +436,10 @@ CREATE TABLE IF NOT EXISTS app.admin_audit_log (
 -- app.* indexes owned by chat-backend.
 
 CREATE INDEX IF NOT EXISTS idx_app_user_plan_tier ON app.app_user(plan_tier);
+CREATE INDEX IF NOT EXISTS idx_app_user_source_state ON app.app_user(source_state, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_app_user_email_verified ON app.app_user(email_verified_at DESC);
 CREATE INDEX IF NOT EXISTS idx_app_user_invite_code ON app.app_user(invite_code);
+CREATE INDEX IF NOT EXISTS idx_app_user_auth_session_version ON app.app_user(auth_session_version);
 CREATE INDEX IF NOT EXISTS idx_user_api_key_status ON app.user_api_key(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_account_balance ON app.user_credit_account(balance_points DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_package_status_order ON app.billing_package(status, display_order ASC, created_at ASC);
@@ -380,8 +451,38 @@ CREATE INDEX IF NOT EXISTS idx_billing_subscription_user_status ON app.billing_s
 CREATE INDEX IF NOT EXISTS idx_subscription_grant_subscription_created ON app.subscription_grant(subscription_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_promotion_claim_user_created ON app.promotion_claim(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_promotion_claim_order_created ON app.promotion_claim(order_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_batch_status_created ON app.redeem_code_batch(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_batch_operator_created ON app.redeem_code_batch(created_by, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_status_created ON app.redeem_code(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_batch_created ON app.redeem_code(batch_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_redeemed_user_created ON app.redeem_code(redeemed_by_user_id, redeemed_at DESC);
+WITH ranked_redeem_duplicates AS (
+        SELECT
+                code_id,
+                ROW_NUMBER() OVER (
+                        PARTITION BY batch_id, redeemed_by_user_id
+                        ORDER BY COALESCE(redeemed_at, created_at) ASC, code_id ASC
+                ) AS redeem_rank
+        FROM app.redeem_code
+        WHERE batch_id IS NOT NULL
+            AND redeemed_by_user_id IS NOT NULL
+)
+UPDATE app.redeem_code AS code
+SET meta_json = COALESCE(code.meta_json, '{}'::jsonb) || '{"legacy_batch_duplicate": true}'::jsonb,
+        updated_at = NOW()
+FROM ranked_redeem_duplicates AS ranked
+WHERE code.code_id = ranked.code_id
+    AND ranked.redeem_rank > 1
+    AND COALESCE(code.meta_json ->> 'legacy_batch_duplicate', 'false') <> 'true';
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_redeem_code_batch_user_once ON app.redeem_code(batch_id, redeemed_by_user_id)
+WHERE batch_id IS NOT NULL
+    AND redeemed_by_user_id IS NOT NULL
+    AND COALESCE(meta_json ->> 'legacy_batch_duplicate', 'false') <> 'true';
 CREATE INDEX IF NOT EXISTS idx_email_verification_challenge_user_created ON app.email_verification_challenge(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_email_verification_challenge_email_created ON app.email_verification_challenge(email, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_device_session_user_seen ON app.user_device_session(user_id, last_seen_at DESC, session_id DESC);
+CREATE INDEX IF NOT EXISTS idx_user_device_session_active_user ON app.user_device_session(user_id, revoked_at, last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_referral_binding_inviter_created ON app.user_referral_binding(inviter_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_referral_binding_status_updated ON app.user_referral_binding(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_session_user_updated ON app.chat_session(user_id, updated_at DESC);
@@ -392,6 +493,8 @@ CREATE INDEX IF NOT EXISTS idx_analysis_artifact_run ON app.analysis_artifact(ru
 CREATE INDEX IF NOT EXISTS idx_usage_event_user_created ON app.usage_event(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_created ON app.credit_ledger_entry(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_reference ON app.credit_ledger_entry(user_id, entry_type, reference_id);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_hash_status ON app.redeem_code(code_hash, status);
+CREATE INDEX IF NOT EXISTS idx_redeem_code_plaintext_batch_created ON app.redeem_code(batch_id, code_plaintext, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_daily_credit_quota_state_quota_date ON app.daily_credit_quota_state(quota_date DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_notification_user_occurred ON app.user_notification(user_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_notification_user_category_read ON app.user_notification(user_id, category, read_at, occurred_at DESC);
@@ -402,15 +505,4 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_operator_created ON app.admin_audit_l
 CREATE INDEX IF NOT EXISTS idx_admin_audit_target_created ON app.admin_audit_log(target_type, target_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_idempotency_request_created ON app.idempotency_request(created_at DESC);
 -- <<< END migrations/app/020_app_indexes.sql
-
--- >>> BEGIN migrations/app/030_site_config.sql
--- Site-level configuration (admin-editable key-value pairs).
-
-CREATE TABLE IF NOT EXISTS app.site_config (
-    config_key    TEXT PRIMARY KEY,
-    config_value  TEXT NOT NULL DEFAULT '',
-    display_name  TEXT NOT NULL DEFAULT '',
-    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
--- <<< END migrations/app/030_site_config.sql
 

@@ -20,6 +20,8 @@ from data_platform.chat_backend.infra.postgres import _run_pg_dict_query
 from data_platform.chat_backend.domains.identity.service import (
     _build_identity_verification_summary,
     _fetch_user,
+    _reconcile_openwebui_user_sources,
+    _reconcile_openwebui_user_sources_for_admin,
 )
 from data_platform.chat_backend.domains.notifications.service import (
     _list_notifications_for_user,
@@ -37,6 +39,7 @@ from data_platform.chat_backend.domains.billing.service import (
     _get_point_cost_by_event,
     _load_event_pricing_from_db,
 )
+from data_platform.chat_backend.domains.device_sessions.service import _list_recent_device_sessions
 
 
 def _audit_admin_action(
@@ -72,12 +75,14 @@ def _build_user_account_overview(
     conn,
     user_id: str,
     *,
+    current_device_session_id: str | None = None,
     ledger_limit: int = 20,
     usage_limit: int = 20,
     order_limit: int = 10,
     session_limit: int = 10,
     run_limit: int = 10,
 ) -> dict[str, Any]:
+    _reconcile_openwebui_user_sources(conn, [user_id])
     user = _fetch_user(conn, user_id)
     _ensure_credit_account(conn, user_id)
     if _is_guest_identity(
@@ -205,6 +210,25 @@ def _build_user_account_overview(
         "notifications": _list_notifications_for_user(conn, user_id, limit=100),
         "recent_sessions": recent_sessions,
         "recent_runs": recent_runs,
+        "current_device_session": next(
+            (
+                session
+                for session in _list_recent_device_sessions(
+                    conn,
+                    user_id,
+                    current_session_id=current_device_session_id,
+                    limit=10,
+                )
+                if session and session.get("is_current")
+            ),
+            None,
+        ),
+        "recent_device_sessions": _list_recent_device_sessions(
+            conn,
+            user_id,
+            current_session_id=current_device_session_id,
+            limit=10,
+        ),
         "pricing_version": POINTS_PRICE_VERSION,
         "point_cost_by_event": _get_point_cost_by_event(),
         "event_pricing_display": {k: v["display_name"] for k, v in _get_event_pricing().items()},
@@ -212,11 +236,13 @@ def _build_user_account_overview(
 
 
 def _build_admin_overview(conn) -> dict[str, Any]:
+    _reconcile_openwebui_user_sources_for_admin(conn, scan_limit=200)
     metrics = _run_pg_dict_query(
         conn,
         """
         SELECT
-            (SELECT COUNT(*) FROM app.app_user) AS total_users,
+            (SELECT COUNT(*) FROM app.app_user WHERE source_state <> 'orphaned') AS total_users,
+            (SELECT COUNT(*) FROM app.app_user WHERE source_state = 'orphaned') AS orphaned_users,
             (SELECT COUNT(*) FROM app.user_api_key WHERE status = 'active') AS active_api_keys,
             (SELECT COUNT(*) FROM app.payment_order WHERE status = 'paid') AS paid_orders,
             (SELECT COUNT(*) FROM app.billing_subscription WHERE status = 'active') AS active_subscriptions,

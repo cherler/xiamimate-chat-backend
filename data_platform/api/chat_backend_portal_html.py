@@ -387,7 +387,7 @@ def render_portal_html() -> str:
     }
     .hero-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+      grid-template-columns: minmax(0, 1.18fr) minmax(340px, 0.82fr);
       gap: 20px;
       align-items: stretch;
     }
@@ -403,6 +403,67 @@ def render_portal_html() -> str:
       padding: 18px;
       display: grid;
       gap: 10px;
+    }
+    .hero-quick-actions {
+      display: grid;
+      gap: 14px;
+      margin-top: 4px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+    .hero-route-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .hero-route-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      padding: 0 14px;
+      border-radius: 14px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.9rem;
+      border: 1px solid rgba(17, 75, 95, 0.16);
+      transition: transform 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
+    }
+    .hero-route-button:hover {
+      transform: translateY(-1px);
+    }
+    .hero-route-button.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .hero-route-button.primary:hover {
+      background: #0f3f50;
+      border-color: #0f3f50;
+    }
+    .hero-route-button.secondary {
+      background: rgba(17, 75, 95, 0.08);
+      color: var(--accent);
+    }
+    .hero-redeem-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.78);
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+    .hero-redeem-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .hero-redeem-title {
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: var(--ink);
     }
     .hero-action-section {
       display: grid;
@@ -789,6 +850,29 @@ def render_portal_html() -> str:
       background: rgba(17, 75, 95, 0.12);
       color: var(--accent);
     }
+    .device-session-list {
+      display: grid;
+      gap: 12px;
+    }
+    .device-session-stable-meta {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+    .device-session-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 2px;
+    }
+    .device-session-action {
+      min-height: auto;
+      padding: 8px 14px;
+      font-size: 0.82rem;
+      border-radius: 999px;
+    }
     .action-stack {
       display: grid;
       gap: 12px;
@@ -871,7 +955,7 @@ def render_portal_html() -> str:
       .topbar-actions, .top-route-nav, .top-utility-actions { justify-content: flex-start; }
       .page-title-row h1 { font-size: 1.5rem; }
       .main { margin: 16px auto 28px; }
-      .split-grid, .hero-grid { grid-template-columns: 1fr; }
+      .split-grid, .hero-grid, .hero-route-grid { grid-template-columns: 1fr; }
       .notifications-shell { grid-template-columns: 1fr; }
       .notifications-side { border-right: none; padding-right: 0; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
       .kpi-row { grid-template-columns: repeat(2, 1fr); }
@@ -947,6 +1031,30 @@ def render_portal_html() -> str:
               <div class="hero-metric-label">当前积分余额</div>
               <div class="hero-metric-value" id="hero-balance">0</div>
               <div class="hero-metric-subtitle" id="hero-balance-policy">消费时优先扣减月包积分；充值包积分永久有效。</div>
+              <div class="hero-quick-actions">
+                <div>
+                  <div class="hero-metric-label">快捷入口</div>
+                  <div class="hero-metric-subtitle">套餐不足或准备补充长期积分时，可直接前往订阅与充值页面。</div>
+                </div>
+                <div class="hero-route-grid">
+                  <a class="hero-route-button primary" href="/portal/products">订阅套餐</a>
+                  <a class="hero-route-button secondary" href="/portal/products#recharge">购买积分</a>
+                </div>
+                <div class="hero-redeem-card">
+                  <div class="hero-redeem-head">
+                    <div>
+                      <div class="hero-redeem-title">兑换码兑积分</div>
+                      <div class="hero-metric-subtitle">适合活动赠码、线下售卡或运营补额。到账后可在完整账单和充值记录里回看。</div>
+                    </div>
+                    <div id="redeem-code-availability">加载中…</div>
+                  </div>
+                  <div class="inline-form">
+                    <input id="redeem-code-input" class="text-input" type="text" maxlength="64" placeholder="输入兑换码，例如 ABCD-EFGH-IJKL" />
+                    <button type="button" id="redeem-code-button">立即兑换</button>
+                  </div>
+                  <div class="helper-text" id="redeem-code-message">兑换码成功使用后会直接写入统一账本，可在完整账单和充值记录里回看。</div>
+                </div>
+              </div>
             </div>
             <div id="hero-metric-verify" style="display:none;">
               <div class="hero-action-section">
@@ -997,6 +1105,14 @@ def render_portal_html() -> str:
             <div class="info-label">验证邮箱</div>
             <div class="info-value" id="verification-email">-</div>
           </div>
+          <div class="info-row">
+            <div class="info-label">当前设备二次验证</div>
+            <div class="info-value" id="security-verification-status">加载中…</div>
+          </div>
+          <div class="info-row">
+            <div class="info-label">验证有效期至</div>
+            <div class="info-value" id="security-verification-expire-at">-</div>
+          </div>
           <div class="action-stack">
             <div class="inline-form">
               <button type="button" id="send-verification-code-button">发送邮箱验证码</button>
@@ -1007,6 +1123,15 @@ def render_portal_html() -> str:
               <button type="button" id="confirm-verification-button">确认验证</button>
             </div>
             <div class="helper-text" id="verification-confirm-message">验证成功后，新用户自动到账 500 积分。</div>
+            <div class="inline-form">
+              <button type="button" id="request-security-code-button">发送安全验证码</button>
+              <span class="helper-text" id="security-request-message">兑换积分、退出设备前，需要先完成当前设备二次验证。</span>
+            </div>
+            <div class="inline-form">
+              <input id="security-code-input" class="text-input" type="text" inputmode="numeric" maxlength="8" placeholder="输入安全验证码" />
+              <button type="button" id="confirm-security-code-button">确认安全验证</button>
+            </div>
+            <div class="helper-text" id="security-confirm-message">安全验证码会发送到当前登录邮箱，验证通过后当前浏览器获得 15 分钟高风险操作权限。</div>
           </div>
         </div>
         <div class="card">
@@ -1027,6 +1152,21 @@ def render_portal_html() -> str:
             <div class="helper-text" id="invite-auto-bind-status"></div>
             <div class="helper-text">新用户绑定邀请码后，你和邀请人都可额外获得 500 积分。</div>
             <div class="helper-text">首次注册请优先使用首屏右侧快捷入口完成邀请码绑定和邮箱验证。</div>
+          </div>
+        </div>
+        <div class="card">
+          <h2>设备管理</h2>
+          <div class="info-row">
+            <div class="info-label">当前设备</div>
+            <div class="info-value" id="current-device-label">加载中…</div>
+          </div>
+          <div class="info-row">
+            <div class="info-label">最近活跃</div>
+            <div class="info-value" id="current-device-last-seen">-</div>
+          </div>
+          <div class="action-stack">
+            <div class="helper-text" id="device-session-message">可按设备单独退出登录，当前浏览器不会受影响。</div>
+            <div id="device-session-list" class="device-session-list"></div>
           </div>
         </div>
       </div>
@@ -1204,14 +1344,29 @@ def render_portal_html() -> str:
   const verificationEmailValue = document.getElementById("verification-email");
   const verificationRequestMessage = document.getElementById("verification-request-message");
   const verificationConfirmMessage = document.getElementById("verification-confirm-message");
+  const securityVerificationStatusValue = document.getElementById("security-verification-status");
+  const securityVerificationExpireAtValue = document.getElementById("security-verification-expire-at");
+  const requestSecurityCodeButton = document.getElementById("request-security-code-button");
+  const confirmSecurityCodeButton = document.getElementById("confirm-security-code-button");
+  const securityCodeInput = document.getElementById("security-code-input");
+  const securityRequestMessage = document.getElementById("security-request-message");
+  const securityConfirmMessage = document.getElementById("security-confirm-message");
   const myInviteCodeValue = document.getElementById("my-invite-code");
   const myInviteLinkValue = document.getElementById("my-invite-link");
   const inviteBindingStatusValue = document.getElementById("invite-binding-status");
   const inviteAutoBindStatusValue = document.getElementById("invite-auto-bind-status");
+  const redeemCodeAvailabilityValue = document.getElementById("redeem-code-availability");
+  const redeemCodeInput = document.getElementById("redeem-code-input");
+  const redeemCodeButton = document.getElementById("redeem-code-button");
+  const redeemCodeMessage = document.getElementById("redeem-code-message");
   const inviteCodeInput = document.getElementById("invite-code-input");
   const bindInviteCodeButton = document.getElementById("bind-invite-code-button");
   const bindInviteCodeMessage = document.getElementById("bind-invite-code-message");
   const portalLogoutButton = document.getElementById("portal-logout-button");
+  const currentDeviceLabelValue = document.getElementById("current-device-label");
+  const currentDeviceLastSeenValue = document.getElementById("current-device-last-seen");
+  const deviceSessionMessage = document.getElementById("device-session-message");
+  const deviceSessionList = document.getElementById("device-session-list");
   const topupViewButtons = document.querySelectorAll("[data-topup-view]");
   const ledgerFilterButtons = document.querySelectorAll("[data-ledger-filter]");
   const notificationsBody = document.getElementById("notifications-body");
@@ -1342,9 +1497,87 @@ def render_portal_html() -> str:
     });
   }
 
+  if (redeemCodeButton) {
+    redeemCodeButton.addEventListener("click", function() {
+      var redeemCode = (redeemCodeInput && redeemCodeInput.value || "").trim();
+      if (!redeemCode) {
+        redeemCodeMessage.textContent = "请先输入兑换码。";
+        return;
+      }
+      redeemCodeMessage.textContent = "兑换中…";
+      apiPost("/portal/api/redeem-codes/redeem", { code: redeemCode }).then(function(data) {
+        if (redeemCodeInput) redeemCodeInput.value = "";
+        renderAccount(data);
+      }).catch(function(error) {
+        redeemCodeMessage.textContent = "兑换失败：" + error.message;
+      });
+    });
+  }
+
   if (portalLogoutButton) {
     portalLogoutButton.addEventListener("click", function() {
       signOutOpenWebUI();
+    });
+  }
+
+  if (requestSecurityCodeButton) {
+    requestSecurityCodeButton.addEventListener("click", function() {
+      securityRequestMessage.textContent = "发送中…";
+      apiPost("/portal/api/account/security-verification/request").then(function(data) {
+        securityRequestMessage.textContent = "安全验证码已发送到 " + (data.email || "当前邮箱") + "。";
+      }).catch(function(error) {
+        securityRequestMessage.textContent = "发送失败：" + error.message;
+      });
+    });
+  }
+
+  if (confirmSecurityCodeButton) {
+    confirmSecurityCodeButton.addEventListener("click", function() {
+      var code = (securityCodeInput && securityCodeInput.value || "").trim();
+      if (!code) {
+        securityConfirmMessage.textContent = "请先输入安全验证码。";
+        return;
+      }
+      securityConfirmMessage.textContent = "验证中…";
+      apiPost("/portal/api/account/security-verification/confirm", { code: code }).then(function(data) {
+        if (securityCodeInput) securityCodeInput.value = "";
+        securityConfirmMessage.textContent = "当前设备已完成安全验证。";
+        renderAccount(data);
+      }).catch(function(error) {
+        securityConfirmMessage.textContent = "验证失败：" + error.message;
+      });
+    });
+  }
+
+  if (deviceSessionList) {
+    deviceSessionList.addEventListener("click", function(event) {
+      var target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      var actionButton = target.closest("[data-revoke-device-session]");
+      if (!actionButton || actionButton.disabled) {
+        return;
+      }
+      var sessionId = actionButton.getAttribute("data-revoke-device-session") || "";
+      if (!sessionId) {
+        return;
+      }
+      var originalText = actionButton.textContent || "退出设备";
+      actionButton.disabled = true;
+      actionButton.textContent = "处理中…";
+      if (deviceSessionMessage) {
+        deviceSessionMessage.textContent = "正在退出指定设备…";
+      }
+      apiPost("/portal/api/account/sessions/" + encodeURIComponent(sessionId) + "/revoke").then(function(data) {
+        renderAccount(data);
+      }).catch(function(error) {
+        actionButton.disabled = false;
+        actionButton.textContent = originalText;
+        if (deviceSessionMessage) {
+          deviceSessionMessage.textContent = "操作失败：" + error.message;
+        }
+      });
     });
   }
 
@@ -1457,7 +1690,7 @@ def render_portal_html() -> str:
   }
 
   function clearOpenWebUICookies() {
-    ["token", "oui-session", "oauth_id_token"].forEach(function(name) {
+    ["token", "oui-session", "oauth_id_token", "xm_device_session"].forEach(function(name) {
       document.cookie = name + '=; Max-Age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax';
     });
   }
@@ -1499,6 +1732,28 @@ def render_portal_html() -> str:
     if (isNaN(d.getTime())) return String(ts).slice(0, 19);
     var pad = function(n) { return String(n).padStart(2, "0"); };
     return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  function summarizeIpSuffix(ip) {
+    var normalized = String(ip || "").trim();
+    if (!normalized || normalized === "unknown") return "";
+    if (normalized.indexOf(",") >= 0) {
+      normalized = normalized.split(",", 1)[0].trim();
+    }
+    if (normalized.indexOf(".") >= 0) {
+      var ipv4Parts = normalized.split(".").filter(Boolean);
+      if (ipv4Parts.length >= 2) {
+        return "*.*." + ipv4Parts.slice(-2).join(".");
+      }
+      return normalized;
+    }
+    if (normalized.indexOf(":") >= 0) {
+      var ipv6Parts = normalized.split(":").filter(Boolean);
+      if (ipv6Parts.length >= 2) {
+        return "…:" + ipv6Parts.slice(-2).join(":");
+      }
+      return normalized;
+    }
+    return normalized;
   }
   function fmtDay(ds) { return ds ? String(ds).slice(5) : ""; }
   function intVal(v) { return parseInt(v, 10) || 0; }
@@ -1559,6 +1814,10 @@ def render_portal_html() -> str:
       fetchOptions.body = JSON.stringify(fetchOptions.body);
     }
     return fetch(withPortalToken(path), fetchOptions).then(function(resp) {
+      if (resp.status === 409) {
+        window.location.href = withPortalToken("/portal/session-expired");
+        throw new Error("当前浏览器会话已失效，请重新登录");
+      }
       if (!resp.ok) {
         return resp.json().catch(function() { return {}; }).then(function(body) {
           throw new Error(body.detail || body.message || resp.statusText);
@@ -1635,7 +1894,13 @@ def render_portal_html() -> str:
     currentAccountData = data;
     var user = data.user || {};
     var identityVerification = data.identity_verification || {};
+    var securityVerification = data.security_verification || {};
+    var currentDeviceSession = data.current_device_session || null;
+    var recentDeviceSessions = Array.isArray(data.recent_device_sessions) ? data.recent_device_sessions : [];
+    var redeemResult = data.redeem_result || null;
+    var sessionAction = data.session_action || null;
     var emailVerified = !!identityVerification.email_verified;
+    var securityVerified = !!securityVerification.current_device_verified;
     var invitedBy = identityVerification.invited_by || null;
     applyVerificationGate(identityVerification);
     syncNotificationItems(data.notifications || []);
@@ -1674,6 +1939,14 @@ def render_portal_html() -> str:
     if (verificationEmailValue) {
       verificationEmailValue.textContent = identityVerification.email || user.email || "-";
     }
+    if (securityVerificationStatusValue) {
+      securityVerificationStatusValue.innerHTML = renderStatusBadge(securityVerified ? "已验证" : "待验证", securityVerified ? "ok" : "pending");
+    }
+    if (securityVerificationExpireAtValue) {
+      securityVerificationExpireAtValue.textContent = securityVerified
+        ? fmtTimeFull(securityVerification.current_device_verified_until)
+        : "完成当前设备安全验证后生效 15 分钟";
+    }
     if (verificationRequestMessage) {
       verificationRequestMessage.textContent = emailVerified
         ? ("已于 " + fmtTimeFull(identityVerification.email_verified_at) + " 完成邮箱验证。")
@@ -1685,6 +1958,12 @@ def render_portal_html() -> str:
       verificationConfirmMessage.textContent = emailVerified
         ? "新用户 500 积分已按注册成功规则处理。"
         : "验证成功后，新用户自动到账 500 积分。";
+    }
+    if (securityRequestMessage && !securityVerified) {
+      securityRequestMessage.textContent = "兑换积分、退出设备前，需要先完成当前设备二次验证。";
+    }
+    if (securityConfirmMessage && securityVerified) {
+      securityConfirmMessage.textContent = "当前浏览器已通过安全验证，可直接执行高风险操作。";
     }
     if (sendVerificationCodeButton) {
       sendVerificationCodeButton.disabled = emailVerified;
@@ -1724,6 +2003,83 @@ def render_portal_html() -> str:
     }
     if (inviteCodeInput) {
       inviteCodeInput.disabled = !identityVerification.can_bind_invite_code;
+    }
+    if (redeemCodeAvailabilityValue) {
+      redeemCodeAvailabilityValue.innerHTML = !emailVerified
+        ? renderStatusBadge("待邮箱验证", "pending")
+        : (securityVerified
+          ? renderStatusBadge("可兑换", "ok")
+          : renderStatusBadge("待安全验证", "pending"));
+    }
+    if (redeemCodeButton) {
+      redeemCodeButton.disabled = !emailVerified || !securityVerified;
+    }
+    if (redeemCodeInput) {
+      redeemCodeInput.disabled = !emailVerified || !securityVerified;
+    }
+    if (redeemCodeMessage) {
+      if (redeemResult && redeemResult.redeem_code) {
+        redeemCodeMessage.textContent = "兑换成功：" + intVal(redeemResult.redeem_code.points_amount) + " 积分已到账，可在完整账单中查看。";
+      } else if (!emailVerified) {
+        redeemCodeMessage.textContent = "完成邮箱验证后才可兑换积分，防止未完成注册的账号绕过统一账本门槛。";
+      } else if (!securityVerified) {
+        redeemCodeMessage.textContent = "兑换码属于高风险入账操作，请先完成当前设备安全验证。";
+      } else {
+        redeemCodeMessage.textContent = "兑换码成功使用后会直接写入统一账本，可在完整账单和充值记录里回看。";
+      }
+    }
+
+    if (currentDeviceLabelValue) {
+      currentDeviceLabelValue.textContent = currentDeviceSession && currentDeviceSession.device_label
+        ? currentDeviceSession.device_label
+        : "当前浏览器未建立设备会话";
+    }
+    if (currentDeviceLastSeenValue) {
+      currentDeviceLastSeenValue.textContent = currentDeviceSession && currentDeviceSession.last_seen_at
+        ? fmtTimeFull(currentDeviceSession.last_seen_at)
+        : "-";
+    }
+    if (deviceSessionMessage && !securityVerified) {
+      deviceSessionMessage.textContent = "退出设备前，请先完成当前浏览器的安全验证码验证。";
+    } else if (deviceSessionMessage && sessionAction && sessionAction.action === "revoke_device_session") {
+      deviceSessionMessage.textContent = "已让设备 “" + (sessionAction.revoked_device_label || "指定设备") + "” 重新登录。";
+    } else if (deviceSessionMessage) {
+      deviceSessionMessage.textContent = "可按设备单独退出登录，当前浏览器不会受影响。";
+    }
+    if (deviceSessionList) {
+      deviceSessionList.innerHTML = recentDeviceSessions.length
+        ? recentDeviceSessions.map(function(session) {
+            var title = session && session.device_label ? session.device_label : "未知设备";
+            var meta = [
+              session && session.is_current ? "当前设备" : "其他设备",
+              session && session.last_seen_at ? ("最近活跃 " + fmtTime(session.last_seen_at)) : "最近活跃 -",
+              session && session.revoked_at ? ("已失效 " + fmtTime(session.revoked_at)) : "仍有效"
+            ];
+            var stableMeta = [];
+            var ipSuffix = summarizeIpSuffix(session && (session.last_seen_ip || session.created_ip));
+            if (session && session.created_at) {
+              stableMeta.push("首次登录 " + fmtTimeFull(session.created_at));
+            }
+            if (ipSuffix) {
+              stableMeta.push("最近 IP 尾段 " + ipSuffix);
+            }
+            var badgeLabel = session && session.is_current ? "当前设备" : (session && session.revoked_at ? "已失效" : "其他设备");
+            var badgeTone = session && session.is_current ? "success" : (session && session.revoked_at ? "warning" : "info");
+            var actionHtml = "";
+            if (session && !session.is_current && !session.revoked_at) {
+              actionHtml = '<button type="button" class="device-session-action" data-revoke-device-session="' + esc(session.session_id || "") + '"' + (securityVerified ? '' : ' disabled') + '>退出设备</button>';
+            }
+            return '<div class="notification-card">' +
+              '<div class="notification-top"><div class="notification-title">' + esc(title) + '</div><span class="notification-tag ' + badgeTone + '">' + esc(badgeLabel) + '</span></div>' +
+              '<div class="notification-desc">' + esc(meta.join(' · ')) + '</div>' +
+              '<div class="device-session-stable-meta">' + esc(stableMeta.join(' · ') || '首次登录信息暂缺') + '</div>' +
+              '<div class="device-session-footer">' +
+                '<div class="helper-text">' + esc(session && session.last_verified_at ? ('最近安全验证 ' + fmtTime(session.last_verified_at)) : '未记录单独安全验证') + '</div>' +
+                actionHtml +
+              '</div>' +
+            '</div>';
+          }).join("")
+        : '<div class="helper-text">当前还没有可展示的设备记录。</div>';
     }
 
     // KPIs (balance page)
@@ -1935,6 +2291,12 @@ def render_portal_html() -> str:
       daily_quota_reset: "每日额度重置"
     };
     var normalized = String(entryType || "").trim().toLowerCase();
+    if (eventType && normalized && (normalized === "promotion_reward" || normalized === "recharge")) {
+      var eventLabel = localizeLedgerEventType(eventType);
+      if (eventLabel) {
+        return eventLabel;
+      }
+    }
     if (mapping[normalized]) {
       return mapping[normalized];
     }
@@ -1958,6 +2320,7 @@ def render_portal_html() -> str:
       signup_gift: "新用户注册赠送",
       referral_invited_reward: "绑定邀请码奖励",
       referral_inviter_reward: "邀请新用户注册奖励",
+      redeem_code_redeem: "兑换码兑换",
       subscription_grant: "订阅积分发放",
       subscription_expire: "套餐到期清零",
       daily_quota_reset: "每日额度重置",

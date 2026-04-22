@@ -24,6 +24,7 @@ from data_platform.chat_backend.infra.postgres import (
 )
 from data_platform.chat_backend.infra.http import _success_response
 from data_platform.chat_backend.infra.settings import (
+    DEVICE_SESSION_ELEVATION_TTL_SECONDS,
     IDEMPOTENCY_KEY_HEADER_NAME,
     INTERNAL_SERVICE_NAME_HEADER_NAME,
     INTERNAL_SERVICE_SECRET,
@@ -35,6 +36,7 @@ from data_platform.chat_backend.infra.settings import (
 from data_platform.chat_backend.domains.portal.service import (
     _backend_base_url,
     _portal_internal_base_url,
+    _portal_public_base_url,
     _require_portal_user,
 )
 from data_platform.chat_backend.domains.admin.service import _build_user_account_overview
@@ -44,6 +46,7 @@ from data_platform.chat_backend.domains.billing.service import (
     _ensure_user_credit_account_state,
     _fetch_billing_package,
     _grant_referral_invited_reward_if_needed,
+    _redeem_code,
     _resolve_referral_invited_reward_points,
     _resolve_signup_gift_points,
 )
@@ -51,11 +54,25 @@ from data_platform.chat_backend.domains.identity.service import (
     _bind_user_referral,
     _confirm_email_verification,
     _confirm_password_reset,
+    _confirm_security_verification,
     _ensure_user_record,
     _fetch_user_by_invite_code,
     _fetch_user,
     _request_password_reset,
     _request_email_verification,
+    _request_security_verification,
+)
+from data_platform.chat_backend.domains.device_sessions.service import (
+    _bootstrap_device_session,
+    _clear_device_session_cookie,
+    _current_device_session_or_raise,
+    _evaluate_device_session_request,
+    _elevate_device_session,
+    _require_elevated_device_session,
+    _revoke_device_session,
+    _revoke_other_device_sessions,
+    _serialize_device_session,
+    _set_device_session_cookie,
 )
 from data_platform.chat_backend.domains.notifications.service import (
     _list_notifications_for_user,
@@ -68,10 +85,13 @@ from data_platform.chat_backend.domains.site_config import (
 )
 
 from data_platform.chat_backend.api.models import (
+    AdminCreateRedeemCodeBatchRequest,
     BindReferralCodeRequest,
     ConfirmPasswordResetRequest,
     ConfirmEmailVerificationRequest,
+    ConfirmSecurityVerificationRequest,
     CreatePaymentOrderRequest,
+    RedeemCodeRedeemRequest,
     RequestPasswordResetRequest,
     UpdateNotificationReadStateRequest,
 )
@@ -172,17 +192,15 @@ def _build_portal_ledger_row(row: dict[str, Any]) -> dict[str, Any]:
     return enriched
 
 
-def _resolve_openwebui_session_user(request: Request) -> tuple[str, str, str] | None:
-    cookie = (request.headers.get("cookie") or "").strip()
-    if not cookie:
-        return None
+def _extract_openwebui_access_token(request: Request) -> str:
+    auth_header = (request.headers.get("authorization") or "").strip()
+    if auth_header.lower().startswith("bearer "):
+        return auth_header.split(" ", 1)[1].strip()
+    return str(request.cookies.get("token") or "").strip()
 
-    token_value = ""
-    for part in cookie.split(";"):
-        k_v = part.strip().split("=", 1)
-        if len(k_v) == 2 and k_v[0].strip() == "token":
-            token_value = k_v[1].strip()
-            break
+
+def _resolve_openwebui_session_user(request: Request) -> tuple[str, str, str] | None:
+    token_value = _extract_openwebui_access_token(request)
     if not token_value:
         return None
 
@@ -210,6 +228,63 @@ def _resolve_openwebui_session_user(request: Request) -> tuple[str, str, str] | 
     email = str(user_data.get("email") or "").strip()
     name = str(user_data.get("name") or "").strip()
     return user_id, email, name
+
+
+def _apply_security_verification_summary(overview: dict[str, Any]) -> dict[str, Any]:
+        current_session = overview.get("current_device_session") or {}
+        overview["security_verification"] = {
+        "required_actions": ["redeem_code", "revoke_device_session"],
+                "current_device_verified": bool(current_session.get("is_elevated")),
+                "current_device_verified_until": current_session.get("elevated_until"),
+                "current_device_last_verified_at": current_session.get("last_verified_at"),
+                "verification_ttl_seconds": DEVICE_SESSION_ELEVATION_TTL_SECONDS,
+        }
+        return overview
+
+
+def _render_portal_session_expired_html() -> str:
+        home_url = _portal_public_base_url()
+        return f"""
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>会话已失效</title>
+    <style>
+        body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #f4efe6, #dfe8ec); color: #16323a; }}
+        .shell {{ min-height: 100vh; display: grid; place-items: center; padding: 24px; }}
+        .card {{ width: min(560px, 100%); background: rgba(255,255,255,0.92); border-radius: 24px; padding: 32px; box-shadow: 0 24px 60px rgba(22, 50, 58, 0.12); }}
+        h1 {{ margin: 0 0 12px; font-size: 2rem; }}
+        p {{ margin: 0 0 14px; line-height: 1.7; }}
+        .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px; }}
+        a {{ text-decoration: none; }}
+        .primary {{ background: #114b5f; color: #fff; padding: 12px 18px; border-radius: 999px; }}
+        .secondary {{ background: #fff; color: #114b5f; padding: 12px 18px; border-radius: 999px; border: 1px solid rgba(17, 75, 95, 0.18); }}
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <div class="card">
+            <h1>当前浏览器会话已失效</h1>
+            <p>这通常发生在密码刚被重置，或者你主动在另一台设备上执行了安全操作。为了保护账户安全，当前浏览器需要重新登录。</p>
+            <p>页面加载时会自动清理本地登录态；如果仍然看到旧状态，直接点下面按钮重新回到首页登录即可。</p>
+            <div class="actions">
+                <a class="primary" href="{home_url}/">回到首页重新登录</a>
+                <a class="secondary" href="{home_url}/portal/guide">查看使用指南</a>
+            </div>
+        </div>
+    </div>
+    <script>
+        try {{ localStorage.removeItem('token'); }} catch (error) {{}}
+        ['token', 'oui-session', 'oauth_id_token', 'xm_device_session'].forEach(function(name) {{
+            document.cookie = name + '=; Max-Age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax';
+        }});
+        fetch('/api/v1/auths/signout', {{ method: 'GET', credentials: 'same-origin', cache: 'no-store' }}).catch(function() {{ return null; }});
+    </script>
+</body>
+</html>
+"""
 
 
 def _request_client_ip(request: Request) -> str:
@@ -332,6 +407,9 @@ def portal_validate_session(request: Request) -> Response:
     try:
         with _postgres_conn() as conn:
             _ensure_user_record(conn, user_id=user_id, email=email, display_name=name)
+            device_session_state = _evaluate_device_session_request(conn, user_id, request, touch=True)
+            if device_session_state["status"] == "invalid":
+                return Response(status_code=409)
     except Exception:
         pass
 
@@ -371,6 +449,9 @@ def openwebui_verified_user_check(request: Request) -> Response:
     try:
         with _postgres_conn() as conn:
             _ensure_user_record(conn, user_id=user_id, email=email, display_name=name)
+            device_session_state = _evaluate_device_session_request(conn, user_id, request, touch=True)
+            if device_session_state["status"] == "invalid":
+                return Response(status_code=409)
             if _portal_user_requires_email_verification(conn, user_id):
                 return Response(status_code=403)
     except Exception:
@@ -412,6 +493,34 @@ def portal_password_reset_page(request: Request) -> Response:
             redirect_target += f"?t={portal_token}"
         return RedirectResponse(redirect_target, status_code=303, headers={"Cache-Control": "no-store"})
     return HTMLResponse(render_portal_password_reset_html(), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/portal/session-expired")
+def portal_session_expired_page() -> HTMLResponse:
+    return HTMLResponse(_render_portal_session_expired_html(), headers={"Cache-Control": "no-store"})
+
+
+@router.post("/_xm/session/bootstrap")
+def bootstrap_openwebui_device_session(request: Request, response: Response) -> dict[str, Any]:
+    resolved_user = _resolve_openwebui_session_user(request)
+    if resolved_user is None:
+        raise HTTPException(status_code=401, detail="not authenticated")
+
+    user_id, email, display_name = resolved_user
+    with _postgres_conn() as conn:
+        _ensure_user_record(conn, user_id=user_id, email=email, display_name=display_name)
+        session_row, raw_token, created = _bootstrap_device_session(conn, user_id, request)
+        if session_row is None or raw_token is None:
+            raise HTTPException(status_code=409, detail="current device session expired")
+        _set_device_session_cookie(response, raw_token)
+    return _success_response(
+        "/_xm/session/bootstrap",
+        {
+            "created": created,
+            "session": _serialize_device_session(session_row, current_session_id=session_row.get("session_id")),
+        },
+        "device session ready",
+    )
 
 
 @router.get("/portal/api/public/site-contact-config")
@@ -530,11 +639,68 @@ def portal_checkout_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/portal/api/account")
-def portal_get_account(request: Request) -> dict[str, Any]:
+def portal_get_account(request: Request, response: Response) -> dict[str, Any]:
     user_id = _require_portal_user(request)
     with _postgres_conn() as conn:
-        overview = _build_user_account_overview(conn, user_id, ledger_limit=50, usage_limit=50)
+        session_row, raw_token, _created = _bootstrap_device_session(conn, user_id, request)
+        if session_row is None or raw_token is None:
+            raise HTTPException(status_code=409, detail="current device session expired")
+        _set_device_session_cookie(response, raw_token)
+        overview = _build_user_account_overview(
+            conn,
+            user_id,
+            current_device_session_id=str(session_row.get("session_id") or "") or None,
+            ledger_limit=50,
+            usage_limit=50,
+        )
+        overview = _apply_security_verification_summary(overview)
     return _success_response("/portal/api/account", overview, "account loaded")
+
+
+@router.post("/portal/api/account/security-verification/request")
+def portal_request_security_verification(request: Request, response: Response) -> dict[str, Any]:
+    user_id = _require_portal_user(request)
+    with _postgres_conn() as conn:
+        session_row, raw_token, _created = _bootstrap_device_session(conn, user_id, request)
+        if session_row is None or raw_token is None:
+            raise HTTPException(status_code=409, detail="current device session expired")
+        _set_device_session_cookie(response, raw_token)
+        result = _request_security_verification(conn, user_id)
+    return _success_response(
+        "/portal/api/account/security-verification/request",
+        result,
+        "security verification code sent",
+    )
+
+
+@router.post("/portal/api/account/security-verification/confirm")
+def portal_confirm_security_verification(
+    request: Request,
+    response: Response,
+    payload: ConfirmSecurityVerificationRequest,
+) -> dict[str, Any]:
+    user_id = _require_portal_user(request)
+    with _postgres_conn() as conn:
+        session_row = _current_device_session_or_raise(conn, user_id, request)
+        _confirm_security_verification(conn, user_id, payload.code)
+        elevated_session = _elevate_device_session(conn, str(session_row["session_id"]))
+        session_check = _evaluate_device_session_request(conn, user_id, request, touch=False)
+        raw_token = session_check.get("raw_token")
+        if raw_token:
+            _set_device_session_cookie(response, raw_token)
+        overview = _build_user_account_overview(
+            conn,
+            user_id,
+            current_device_session_id=str(elevated_session.get("session_id") or "") or None,
+            ledger_limit=50,
+            usage_limit=50,
+        )
+        overview = _apply_security_verification_summary(overview)
+    return _success_response(
+        "/portal/api/account/security-verification/confirm",
+        overview,
+        "security verification confirmed",
+    )
 
 
 @router.post("/portal/api/account/email-verification/request")
@@ -553,9 +719,17 @@ def portal_request_email_verification(request: Request) -> dict[str, Any]:
 def portal_confirm_email_verification(request: Request, payload: ConfirmEmailVerificationRequest) -> dict[str, Any]:
     user_id = _require_portal_user(request)
     with _postgres_conn() as conn:
+        current_session = _current_device_session_or_raise(conn, user_id, request)
         verified_user = _confirm_email_verification(conn, user_id, payload.code)
         _ensure_user_credit_account_state(conn, verified_user)
-        overview = _build_user_account_overview(conn, user_id, ledger_limit=50, usage_limit=50)
+        overview = _build_user_account_overview(
+            conn,
+            user_id,
+            current_device_session_id=str(current_session.get("session_id") or "") or None,
+            ledger_limit=50,
+            usage_limit=50,
+        )
+        overview = _apply_security_verification_summary(overview)
     return _success_response(
         "/portal/api/account/email-verification/confirm",
         overview,
@@ -567,15 +741,112 @@ def portal_confirm_email_verification(request: Request, payload: ConfirmEmailVer
 def portal_bind_referral_code(request: Request, payload: BindReferralCodeRequest) -> dict[str, Any]:
     user_id = _require_portal_user(request)
     with _postgres_conn() as conn:
+        current_session = _current_device_session_or_raise(conn, user_id, request)
         _bind_user_referral(conn, user_id, payload.invite_code)
         _grant_referral_invited_reward_if_needed(conn, user_id)
         verified_user = _fetch_user(conn, user_id)
         _ensure_user_credit_account_state(conn, verified_user)
-        overview = _build_user_account_overview(conn, user_id, ledger_limit=50, usage_limit=50)
+        overview = _build_user_account_overview(
+            conn,
+            user_id,
+            current_device_session_id=str(current_session.get("session_id") or "") or None,
+            ledger_limit=50,
+            usage_limit=50,
+        )
+        overview = _apply_security_verification_summary(overview)
     return _success_response(
         "/portal/api/account/referral/bind",
         overview,
         "invite code bound",
+    )
+
+
+@router.post("/portal/api/account/sessions/revoke-others")
+def portal_revoke_other_sessions(request: Request) -> dict[str, Any]:
+    user_id = _require_portal_user(request)
+    with _postgres_conn() as conn:
+        current_session = _require_elevated_device_session(conn, user_id, request)
+        revoked_count = _revoke_other_device_sessions(
+            conn,
+            user_id,
+            str(current_session["session_id"]),
+            "self_service_revoke_others",
+        )
+        overview = _build_user_account_overview(
+            conn,
+            user_id,
+            current_device_session_id=str(current_session.get("session_id") or "") or None,
+            ledger_limit=50,
+            usage_limit=50,
+        )
+        overview["session_action"] = {"revoked_other_device_count": revoked_count}
+        overview = _apply_security_verification_summary(overview)
+    return _success_response(
+        "/portal/api/account/sessions/revoke-others",
+        overview,
+        "other device sessions revoked",
+    )
+
+
+@router.post("/portal/api/account/sessions/{session_id}/revoke")
+def portal_revoke_device_session(session_id: str, request: Request) -> dict[str, Any]:
+    user_id = _require_portal_user(request)
+    normalized_session_id = str(session_id or "").strip()
+    if not normalized_session_id:
+        raise HTTPException(status_code=400, detail="device session id is required")
+    with _postgres_conn() as conn:
+        current_session = _require_elevated_device_session(conn, user_id, request)
+        current_session_id = str(current_session.get("session_id") or "")
+        if normalized_session_id == current_session_id:
+            raise HTTPException(status_code=400, detail="current device cannot be revoked from this action")
+        revoked_session = _revoke_device_session(
+            conn,
+            user_id,
+            normalized_session_id,
+            "self_service_revoke_device",
+        )
+        if revoked_session is None:
+            raise HTTPException(status_code=404, detail="device session not found or already revoked")
+        overview = _build_user_account_overview(
+            conn,
+            user_id,
+            current_device_session_id=current_session_id or None,
+            ledger_limit=50,
+            usage_limit=50,
+        )
+        overview["session_action"] = {
+            "action": "revoke_device_session",
+            "revoked_session_id": normalized_session_id,
+            "revoked_device_label": revoked_session.get("device_label") or "设备",
+        }
+        overview = _apply_security_verification_summary(overview)
+    return _success_response(
+        f"/portal/api/account/sessions/{normalized_session_id}/revoke",
+        overview,
+        "device session revoked",
+    )
+
+
+@router.post("/portal/api/redeem-codes/redeem")
+def portal_redeem_code(request: Request, payload: RedeemCodeRedeemRequest) -> dict[str, Any]:
+    user_id = _require_portal_user(request)
+    with _postgres_conn() as conn:
+        _enforce_verified_portal_user(conn, user_id)
+        current_session = _require_elevated_device_session(conn, user_id, request)
+        redeem_result = _redeem_code(conn, user_id=user_id, redeem_code=payload.code)
+        overview = _build_user_account_overview(
+            conn,
+            user_id,
+            current_device_session_id=str(current_session.get("session_id") or "") or None,
+            ledger_limit=50,
+            usage_limit=50,
+        )
+        overview["redeem_result"] = redeem_result
+        overview = _apply_security_verification_summary(overview)
+    return _success_response(
+        "/portal/api/redeem-codes/redeem",
+        overview,
+        "redeem code applied",
     )
 
 

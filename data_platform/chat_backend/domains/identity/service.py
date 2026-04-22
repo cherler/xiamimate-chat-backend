@@ -49,19 +49,26 @@ from data_platform.chat_backend.domains.api_keys.models import UserAPIKey
 from data_platform.chat_backend.domains.api_keys.service import _ensure_user_api_key
 from data_platform.chat_backend.domains.billing.models import UserCreditAccount
 from data_platform.chat_backend.domains.billing.service import _ensure_user_credit_account_state
+from data_platform.chat_backend.domains.device_sessions.service import (
+    _revoke_all_device_sessions,
+    _rotate_user_auth_session_version,
+)
 from data_platform.chat_backend.domains.site_config import _get_email_verification_security_config
 from data_platform.chat_backend.domains.portal.service import _portal_public_base_url
 
 
 _APP_USER_SELECT = """
     SELECT user_id, email, display_name, status, plan_tier,
-           created_at, updated_at, invite_code, email_verified_at
+           created_at, updated_at, source_state, source_last_seen_at,
+           source_orphaned_at, source_recovered_at, auth_session_version,
+           last_password_reset_at, invite_code, email_verified_at
     FROM app.app_user
 """
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _EMAIL_CHALLENGE_PURPOSE_SIGNUP = "signup_email_verify"
 _EMAIL_CHALLENGE_PURPOSE_PASSWORD_RESET = "password_reset"
+_EMAIL_CHALLENGE_PURPOSE_SECURITY_VERIFY = "security_verify"
 _OPENWEBUI_DB_LOCK = threading.Lock()
 _LOGGER = logging.getLogger(__name__)
 
@@ -252,21 +259,36 @@ def _upsert_user_row(
         conn,
         """
         INSERT INTO app.app_user (
-            user_id, email, display_name, status, plan_tier, invite_code, email_verified_at, created_at, updated_at
+            user_id, email, display_name, status, plan_tier, invite_code,
+            source_state, source_last_seen_at, source_orphaned_at, source_recovered_at,
+            auth_session_version, last_password_reset_at,
+            email_verified_at, created_at, updated_at
         ) VALUES (
-            %s, %s, %s, 'active', %s, %s, NULL, NOW(), NOW()
+            %s, %s, %s, 'active', %s, %s,
+            'active', NOW(), NULL, NULL,
+            1, NULL,
+            NULL, NOW(), NOW()
         )
         ON CONFLICT (user_id) DO UPDATE SET
             email = EXCLUDED.email,
             display_name = EXCLUDED.display_name,
             invite_code = COALESCE(app.app_user.invite_code, EXCLUDED.invite_code),
+            source_state = 'active',
+            source_last_seen_at = NOW(),
+            source_orphaned_at = NULL,
+            source_recovered_at = CASE
+                WHEN app.app_user.source_state = 'orphaned' THEN NOW()
+                ELSE app.app_user.source_recovered_at
+            END,
             email_verified_at = CASE
                 WHEN app.app_user.email IS DISTINCT FROM EXCLUDED.email THEN NULL
                 ELSE app.app_user.email_verified_at
             END,
             updated_at = NOW()
         RETURNING user_id, email, display_name, status, plan_tier,
-                  created_at, updated_at, invite_code, email_verified_at
+                  created_at, updated_at, source_state, source_last_seen_at,
+                  source_orphaned_at, source_recovered_at, auth_session_version,
+                  last_password_reset_at, invite_code, email_verified_at
         """,
         [user_id, normalized_email, display_name, effective_plan_tier, invite_code],
     )
@@ -363,6 +385,106 @@ def _resolve_openwebui_db_path() -> Path:
     if not path.exists():
         raise HTTPException(status_code=503, detail="Open WebUI 账号库不存在，暂时无法找回密码")
     return path
+
+
+def _fetch_openwebui_user_identity_map_by_user_ids(user_ids: list[str]) -> dict[str, tuple[str, str, str]]:
+    normalized_user_ids = [str(user_id or "").strip() for user_id in user_ids if str(user_id or "").strip()]
+    if not normalized_user_ids:
+        return {}
+    db_path = _resolve_openwebui_db_path()
+    placeholders = ", ".join(["?"] * len(normalized_user_ids))
+    with _OPENWEBUI_DB_LOCK:
+        conn = sqlite3.connect(str(db_path), timeout=5)
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA busy_timeout = 5000")
+            rows = conn.execute(
+                f"""
+                SELECT auth.id AS user_id,
+                       LOWER(auth.email) AS email,
+                       COALESCE(user.name, user.email, auth.email) AS display_name,
+                       auth.active AS active
+                FROM auth
+                LEFT JOIN user ON user.id = auth.id
+                WHERE auth.id IN ({placeholders})
+                """,
+                normalized_user_ids,
+            ).fetchall()
+        finally:
+            conn.close()
+    identities: dict[str, tuple[str, str, str]] = {}
+    for row in rows:
+        if not int(row["active"] or 0):
+            continue
+        user_id = str(row["user_id"] or "").strip()
+        if not user_id:
+            continue
+        email = str(row["email"] or "").strip().lower()
+        display_name = str(row["display_name"] or row["email"] or user_id)
+        identities[user_id] = (user_id, email, display_name)
+    return identities
+
+
+def _reconcile_openwebui_user_sources(conn, user_ids: list[str]) -> dict[str, int]:
+    normalized_user_ids = [str(user_id or "").strip() for user_id in user_ids if str(user_id or "").strip()]
+    if not normalized_user_ids:
+        return {"revived": 0, "orphaned": 0}
+
+    identities = _fetch_openwebui_user_identity_map_by_user_ids(normalized_user_ids)
+    revived = 0
+    for user_id, email, display_name in identities.values():
+        _ensure_user_record(conn, user_id=user_id, email=email, display_name=display_name)
+        revived += 1
+
+    orphaned_user_ids = [user_id for user_id in normalized_user_ids if user_id not in identities]
+    orphaned = 0
+    if orphaned_user_ids:
+        orphaned = len(
+            _run_pg_dict_query(
+                conn,
+                """
+                UPDATE app.app_user
+                SET source_state = 'orphaned',
+                    source_orphaned_at = COALESCE(source_orphaned_at, NOW()),
+                    updated_at = NOW()
+                WHERE user_id = ANY(%s)
+                  AND source_state <> 'orphaned'
+                RETURNING user_id
+                """,
+                [orphaned_user_ids],
+            )
+        )
+    return {"revived": revived, "orphaned": orphaned}
+
+
+def _reconcile_openwebui_user_sources_for_admin(conn, *, query: str | None = None, scan_limit: int = 100) -> dict[str, int]:
+    normalized_scan_limit = max(1, int(scan_limit or 100))
+    normalized_query = (query or "").strip()
+    if normalized_query:
+        like_query = f"%{normalized_query}%"
+        candidate_rows = _run_pg_dict_query(
+            conn,
+            """
+            SELECT user_id
+            FROM app.app_user
+            WHERE user_id ILIKE %s OR email ILIKE %s OR display_name ILIKE %s
+            ORDER BY updated_at DESC, user_id DESC
+            LIMIT %s
+            """,
+            [like_query, like_query, like_query, normalized_scan_limit],
+        )
+    else:
+        candidate_rows = _run_pg_dict_query(
+            conn,
+            """
+            SELECT user_id
+            FROM app.app_user
+            ORDER BY updated_at DESC, user_id DESC
+            LIMIT %s
+            """,
+            [normalized_scan_limit],
+        )
+    return _reconcile_openwebui_user_sources(conn, [row["user_id"] for row in candidate_rows])
 
 
 def _fetch_openwebui_user_identity_by_email(email: str) -> tuple[str, str, str] | None:
@@ -550,6 +672,200 @@ def _request_password_reset(conn, email: str) -> dict[str, Any]:
     }
 
 
+def _request_security_verification(conn, user_id: str) -> dict[str, Any]:
+    user = _fetch_user(conn, user_id)
+    email = _validate_email_address(user.email)
+
+    latest = _fetch_optional_one(
+        conn,
+        """
+        SELECT challenge_id, user_id, email, expires_at, consumed_at, last_sent_at, created_at,
+               failed_attempt_count, locked_until, last_failed_at
+        FROM app.email_verification_challenge
+        WHERE user_id = %s
+          AND email = %s
+          AND purpose = %s
+          AND consumed_at IS NULL
+          AND expires_at >= NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        [user_id, email, _EMAIL_CHALLENGE_PURPOSE_SECURITY_VERIFY],
+    )
+    now = _utc_now()
+    if latest and latest.get("locked_until") is not None and latest["locked_until"] > now:
+        remaining = int((latest["locked_until"] - now).total_seconds())
+        raise HTTPException(
+            status_code=429,
+            detail=f"验证码已被锁定，请在{_format_retry_after_seconds(remaining)}后重新获取",
+        )
+
+    _enforce_email_challenge_send_quota(
+        conn,
+        purpose=_EMAIL_CHALLENGE_PURPOSE_SECURITY_VERIFY,
+        user_id=user_id,
+        email=email,
+        now=now,
+    )
+    if latest and latest.get("last_sent_at") is not None:
+        cooldown = (now - latest["last_sent_at"]).total_seconds()
+        if cooldown < EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS:
+            remaining = int(EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS - cooldown)
+            raise HTTPException(status_code=429, detail=f"请在 {remaining} 秒后再重新发送验证码")
+
+    code = _generate_numeric_code(6)
+    challenge_id = _generate_id("security_verify")
+    expires_at = now + timedelta(seconds=EMAIL_VERIFICATION_CODE_TTL_SECONDS)
+    _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.email_verification_challenge
+        SET consumed_at = NOW(),
+            updated_at = NOW()
+        WHERE user_id = %s
+          AND purpose = %s
+          AND consumed_at IS NULL
+        RETURNING challenge_id
+        """,
+        [user_id, _EMAIL_CHALLENGE_PURPOSE_SECURITY_VERIFY],
+    )
+    _run_pg_dict_query(
+        conn,
+        """
+        INSERT INTO app.email_verification_challenge (
+            challenge_id, user_id, email, purpose, code_hash, failed_attempt_count,
+            locked_until, last_failed_at, expires_at,
+            consumed_at, last_sent_at, created_at, updated_at
+        ) VALUES (%s, %s, %s, %s, %s, 0, NULL, NULL, %s, NULL, NOW(), NOW(), NOW())
+        RETURNING challenge_id
+        """,
+        [
+            challenge_id,
+            user_id,
+            email,
+            _EMAIL_CHALLENGE_PURPOSE_SECURITY_VERIFY,
+            _build_email_challenge_code_hash(user_id, email, code, _EMAIL_CHALLENGE_PURPOSE_SECURITY_VERIFY),
+            expires_at,
+        ],
+    )
+    try:
+        _send_email_message(
+            email,
+            "虾密小助手安全验证验证码",
+            (
+                f"你好，{user.display_name or user.user_id}。\n\n"
+                f"你正在执行账户安全敏感操作，验证码是：{code}\n"
+                f"验证码 {EMAIL_VERIFICATION_CODE_TTL_SECONDS // 60} 分钟内有效。\n\n"
+                "如果这不是你本人操作，请忽略此邮件。"
+            ),
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"failed to send verification email: {exc}") from exc
+    return {
+        "email": email,
+        "challenge_id": challenge_id,
+        "expires_in_seconds": EMAIL_VERIFICATION_CODE_TTL_SECONDS,
+    }
+
+
+def _confirm_security_verification(conn, user_id: str, code: str) -> dict[str, Any]:
+    user = _fetch_user(conn, user_id)
+    email = _validate_email_address(user.email)
+    normalized_code = (code or "").strip()
+    if not normalized_code:
+        raise HTTPException(status_code=400, detail="missing security verification code")
+
+    limits = _get_email_verification_security_config(conn)
+    max_failed_attempts = max(1, int(limits.get("max_failed_attempts") or 1))
+    lock_seconds = max(0, int(limits.get("lock_seconds") or 0))
+    now = _utc_now()
+
+    challenge = _fetch_optional_one(
+        conn,
+        """
+        SELECT challenge_id, user_id, email, code_hash, expires_at, consumed_at, created_at,
+               failed_attempt_count, locked_until, last_failed_at
+        FROM app.email_verification_challenge
+        WHERE user_id = %s
+          AND email = %s
+          AND purpose = %s
+          AND consumed_at IS NULL
+          AND expires_at >= NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        [user_id, email, _EMAIL_CHALLENGE_PURPOSE_SECURITY_VERIFY],
+    )
+    if challenge is None:
+        raise HTTPException(status_code=400, detail="验证码不存在或已过期，请重新获取")
+    if challenge.get("locked_until") is not None and challenge["locked_until"] > now:
+        remaining = int((challenge["locked_until"] - now).total_seconds())
+        raise HTTPException(
+            status_code=429,
+            detail=f"验证码已被锁定，请在{_format_retry_after_seconds(remaining)}后重新获取",
+        )
+    expected_hash = _build_email_challenge_code_hash(
+        user_id,
+        email,
+        normalized_code,
+        _EMAIL_CHALLENGE_PURPOSE_SECURITY_VERIFY,
+    )
+    if not challenge.get("code_hash") or challenge["code_hash"] != expected_hash:
+        failed_attempt_count = int(challenge.get("failed_attempt_count") or 0) + 1
+        locked_until = None
+        if failed_attempt_count >= max_failed_attempts and lock_seconds > 0:
+            locked_until = now + timedelta(seconds=lock_seconds)
+        _run_pg_dict_query(
+            conn,
+            """
+            UPDATE app.email_verification_challenge
+            SET failed_attempt_count = %s,
+                locked_until = %s,
+                last_failed_at = NOW(),
+                updated_at = NOW()
+            WHERE challenge_id = %s
+            RETURNING challenge_id
+            """,
+            [failed_attempt_count, locked_until, challenge["challenge_id"]],
+        )
+        if failed_attempt_count >= max_failed_attempts:
+            raise HTTPException(
+                status_code=429,
+                detail=f"验证码尝试次数过多，请在{_format_retry_after_seconds(lock_seconds or 1)}后重新获取",
+            )
+        remaining_attempts = max_failed_attempts - failed_attempt_count
+        raise HTTPException(status_code=400, detail=f"验证码错误，还可尝试 {remaining_attempts} 次")
+
+    _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.email_verification_challenge
+        SET consumed_at = NOW(),
+            updated_at = NOW()
+        WHERE challenge_id = %s
+        RETURNING challenge_id
+        """,
+        [challenge["challenge_id"]],
+    )
+    _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.app_user
+        SET updated_at = NOW()
+        WHERE user_id = %s
+        RETURNING user_id
+        """,
+        [user_id],
+    )
+    return {
+        "email": email,
+        "verified": True,
+        "verified_at": now,
+    }
+
+
 def _confirm_password_reset(conn, email: str, code: str, new_password: str) -> dict[str, Any]:
     normalized_email = _validate_email_address(email)
     normalized_code = (code or "").strip()
@@ -647,6 +963,8 @@ def _confirm_password_reset(conn, email: str, code: str, new_password: str) -> d
         """,
         [user.user_id],
     )
+    _rotate_user_auth_session_version(conn, user.user_id, password_reset=True)
+    _revoke_all_device_sessions(conn, user.user_id, "password_reset")
     return {
         "email": normalized_email,
         "password_reset": True,

@@ -178,6 +178,45 @@ CREATE TABLE IF NOT EXISTS app.promotion_claim (
     UNIQUE (rule_code, claim_key)
 );
 
+CREATE TABLE IF NOT EXISTS app.redeem_code_batch (
+    batch_id       TEXT PRIMARY KEY,
+    batch_name     TEXT NOT NULL,
+    code_type      TEXT NOT NULL DEFAULT 'promotion',
+    points_amount  INTEGER NOT NULL,
+    code_count     INTEGER NOT NULL DEFAULT 1,
+    status         TEXT NOT NULL DEFAULT 'active',
+    created_by     TEXT NOT NULL,
+    note           TEXT,
+    meta_json      JSONB NOT NULL DEFAULT '{}'::JSONB,
+    valid_from     TIMESTAMPTZ,
+    valid_until    TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.redeem_code (
+    code_id               TEXT PRIMARY KEY,
+    batch_id              TEXT REFERENCES app.redeem_code_batch(batch_id) ON DELETE SET NULL,
+    code_hash             TEXT NOT NULL UNIQUE,
+    code_plaintext        TEXT,
+    code_mask             TEXT NOT NULL,
+    code_type             TEXT NOT NULL DEFAULT 'promotion',
+    points_amount         INTEGER NOT NULL,
+    status                TEXT NOT NULL DEFAULT 'active',
+    created_by            TEXT NOT NULL,
+    note                  TEXT,
+    meta_json             JSONB NOT NULL DEFAULT '{}'::JSONB,
+    valid_from            TIMESTAMPTZ,
+    valid_until           TIMESTAMPTZ,
+    redeemed_by_user_id   TEXT REFERENCES app.app_user(user_id) ON DELETE SET NULL,
+    redeemed_at           TIMESTAMPTZ,
+    ledger_entry_id       TEXT REFERENCES app.credit_ledger_entry(entry_id) ON DELETE SET NULL,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE app.redeem_code ADD COLUMN IF NOT EXISTS code_plaintext TEXT;
+
 CREATE TABLE IF NOT EXISTS app.email_verification_challenge (
     challenge_id      TEXT PRIMARY KEY,
     user_id           TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,

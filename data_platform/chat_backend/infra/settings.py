@@ -88,6 +88,9 @@ EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS = max(30, int(os.environ.get("CHAT_BA
 REFERRAL_INVITER_REWARD_POINTS = max(0, int(os.environ.get("CHAT_BACKEND_REFERRAL_INVITER_REWARD_POINTS", "500")))
 PORTAL_REQUIRE_EMAIL_VERIFICATION = os.environ.get("CHAT_BACKEND_PORTAL_REQUIRE_EMAIL_VERIFICATION", "false").strip().lower() in {"1", "true", "yes", "on"}
 PASSWORD_RESET_MIN_LENGTH = max(1, int(os.environ.get("CHAT_BACKEND_PASSWORD_RESET_MIN_LENGTH", "8")))
+DEVICE_SESSION_COOKIE_NAME = os.environ.get("CHAT_BACKEND_DEVICE_SESSION_COOKIE_NAME", "xm_device_session").strip() or "xm_device_session"
+DEVICE_SESSION_TTL_SECONDS = max(3600, int(os.environ.get("CHAT_BACKEND_DEVICE_SESSION_TTL_SECONDS", "2592000")))
+DEVICE_SESSION_ELEVATION_TTL_SECONDS = max(300, int(os.environ.get("CHAT_BACKEND_DEVICE_SESSION_ELEVATION_TTL_SECONDS", "900")))
 
 _default_openwebui_db_path = PROJECT_ROOT.parent / "xiamimate-openwebui-bridge" / "data" / "open-webui" / "webui.db"
 OPENWEBUI_DB_PATH = os.environ.get("CHAT_BACKEND_OPENWEBUI_DB_PATH", "").strip() or (

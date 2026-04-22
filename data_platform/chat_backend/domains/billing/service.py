@@ -30,6 +30,8 @@ from data_platform.chat_backend.infra.settings import (
     SIGNUP_GIFT_POINTS,
     _current_quota_date,
     _generate_id,
+    _generate_invite_code,
+    _hash_text,
     _is_guest_identity,
     _utc_now,
 )
@@ -46,6 +48,13 @@ from data_platform.chat_backend.domains.notifications.service import _upsert_use
 # ---------------------------------------------------------------------------
 # Event-pricing cache (DB-backed with in-memory TTL)
 # ---------------------------------------------------------------------------
+
+
+def _fetch_one(conn, query: str, params: list[Any] | None = None) -> dict[str, Any]:
+    rows = _run_pg_dict_query(conn, query, params or [])
+    if not rows:
+        raise HTTPException(status_code=404, detail="record not found")
+    return rows[0]
 
 _EVENT_PRICING_CACHE: dict[str, dict[str, Any]] = {}
 _EVENT_PRICING_CACHE_LOCK = threading.Lock()
@@ -656,6 +665,573 @@ def _grant_points_with_ledger(
         meta_json=meta_json,
     )
     return updated_account, ledger_entry
+
+
+# ---------------------------------------------------------------------------
+# Redeem codes
+# ---------------------------------------------------------------------------
+
+def _normalize_redeem_code(raw_code: str) -> str:
+    normalized = "".join(ch for ch in str(raw_code or "").strip().upper() if ch.isalnum())
+    if len(normalized) < 6:
+        raise HTTPException(status_code=400, detail="invalid redeem code")
+    return normalized
+
+
+def _build_redeem_code_hash(raw_code: str) -> str:
+    return _hash_text(f"redeem_code:{_normalize_redeem_code(raw_code)}")
+
+
+def _mask_redeem_code(raw_code: str) -> str:
+    normalized = _normalize_redeem_code(raw_code)
+    if len(normalized) <= 8:
+        return normalized[:2] + "****" + normalized[-2:]
+    return normalized[:4] + "****" + normalized[-4:]
+
+
+def _format_generated_redeem_code(raw_code: str) -> str:
+    normalized = _normalize_redeem_code(raw_code)
+    return "-".join(normalized[index:index + 4] for index in range(0, len(normalized), 4))
+
+
+def _normalize_redeem_code_type(code_type: str | None) -> str:
+    normalized = str(code_type or "promotion").strip().lower() or "promotion"
+    if normalized in {"promotion", "promotion_reward", "gift", "bonus"}:
+        return "promotion"
+    if normalized in {"recharge", "sold", "paid", "cash"}:
+        return "recharge"
+    raise HTTPException(status_code=400, detail=f"unsupported redeem code type: {code_type}")
+
+
+def _coerce_redeem_datetime(value: Any, field_name: str) -> datetime | None:
+    if value is None or value == "":
+        return None
+    parsed = _parse_optional_utc_datetime(value)
+    if parsed is None:
+        raise HTTPException(status_code=400, detail=f"invalid {field_name}")
+    return parsed
+
+
+def _serialize_redeem_code_row(row: dict[str, Any], *, include_plain_code: bool = False) -> dict[str, Any]:
+    serialized = {
+        "code_id": row.get("code_id"),
+        "batch_id": row.get("batch_id"),
+        "batch_name": row.get("batch_name"),
+        "code_mask": row.get("code_mask"),
+        "code_type": _normalize_redeem_code_type(row.get("code_type")),
+        "points_amount": int(row.get("points_amount") or 0),
+        "status": str(row.get("status") or "active"),
+        "created_by": row.get("created_by"),
+        "note": row.get("note"),
+        "meta_json": dict(row.get("meta_json") or {}),
+        "valid_from": row.get("valid_from"),
+        "valid_until": row.get("valid_until"),
+        "redeemed_by_user_id": row.get("redeemed_by_user_id"),
+        "redeemed_by_display_name": row.get("redeemed_by_display_name"),
+        "ledger_entry_id": row.get("ledger_entry_id"),
+        "redeemed_at": row.get("redeemed_at"),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+    if include_plain_code:
+        serialized["plain_code"] = row.get("plain_code")
+        serialized["plain_code_available"] = bool(row.get("plain_code"))
+    return serialized
+
+
+def _serialize_redeem_code_batch_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "batch_id": row.get("batch_id"),
+        "batch_name": row.get("batch_name"),
+        "code_type": _normalize_redeem_code_type(row.get("code_type")),
+        "points_amount": int(row.get("points_amount") or 0),
+        "code_count": int(row.get("code_count") or 0),
+        "status": str(row.get("status") or "active"),
+        "created_by": row.get("created_by"),
+        "note": row.get("note"),
+        "meta_json": dict(row.get("meta_json") or {}),
+        "valid_from": row.get("valid_from"),
+        "valid_until": row.get("valid_until"),
+        "redeemed_count": int(row.get("redeemed_count") or 0),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def _generate_redeem_code_value(length: int = 12) -> str:
+    return _format_generated_redeem_code(_generate_invite_code(length=max(8, length)))
+
+
+def _create_redeem_code_batch(
+    conn,
+    *,
+    operator_id: str,
+    points: int,
+    code_count: int,
+    code_type: str = "promotion",
+    batch_name: str | None = None,
+    note: str | None = None,
+    valid_from: Any | None = None,
+    valid_until: Any | None = None,
+    meta_json: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_code_type = _normalize_redeem_code_type(code_type)
+    points_amount = max(0, int(points or 0))
+    if points_amount <= 0:
+        raise HTTPException(status_code=400, detail="points must be greater than 0")
+    normalized_code_count = max(1, int(code_count or 0))
+    if normalized_code_count > 500:
+        raise HTTPException(status_code=400, detail="code_count must be <= 500")
+
+    normalized_valid_from = _coerce_redeem_datetime(valid_from, "valid_from")
+    normalized_valid_until = _coerce_redeem_datetime(valid_until, "valid_until")
+    if normalized_valid_from and normalized_valid_until and normalized_valid_until <= normalized_valid_from:
+        raise HTTPException(status_code=400, detail="valid_until must be later than valid_from")
+
+    batch_id = _generate_id("redeem_batch")
+    batch_label = str(batch_name or "").strip() or (
+        f"{'充值' if normalized_code_type == 'recharge' else '赠送'}兑换码 {batch_id[-6:]}"
+    )
+    batch_row = _run_pg_dict_query(
+        conn,
+        """
+        INSERT INTO app.redeem_code_batch (
+            batch_id, batch_name, code_type, points_amount, code_count, status,
+            created_by, note, meta_json, valid_from, valid_until, created_at, updated_at
+        ) VALUES (%s, %s, %s, %s, %s, 'active', %s, %s, %s, %s, %s, NOW(), NOW())
+        RETURNING batch_id, batch_name, code_type, points_amount, code_count, status,
+                  created_by, note, meta_json, valid_from, valid_until, created_at, updated_at
+        """,
+        [
+            batch_id,
+            batch_label,
+            normalized_code_type,
+            points_amount,
+            normalized_code_count,
+            operator_id,
+            str(note or "").strip() or None,
+            psycopg2.extras.Json(meta_json or {}),
+            normalized_valid_from,
+            normalized_valid_until,
+        ],
+    )[0]
+
+    generated_codes: list[dict[str, Any]] = []
+    attempts = 0
+    max_attempts = normalized_code_count * 20
+    while len(generated_codes) < normalized_code_count and attempts < max_attempts:
+        attempts += 1
+        plain_code = _generate_redeem_code_value()
+        code_row = _run_pg_dict_query(
+            conn,
+            """
+            INSERT INTO app.redeem_code (
+                code_id, batch_id, code_hash, code_plaintext, code_mask, code_type, points_amount, status,
+                created_by, note, meta_json, valid_from, valid_until, created_at, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'active', %s, %s, %s, %s, %s, NOW(), NOW())
+            ON CONFLICT (code_hash) DO NOTHING
+            RETURNING code_id, batch_id, code_plaintext AS plain_code, code_mask, code_type, points_amount, status,
+                      created_by, note, meta_json, valid_from, valid_until,
+                      redeemed_by_user_id, redeemed_at, ledger_entry_id, created_at, updated_at
+            """,
+            [
+                _generate_id("redeem_code"),
+                batch_id,
+                _build_redeem_code_hash(plain_code),
+                plain_code,
+                _mask_redeem_code(plain_code),
+                normalized_code_type,
+                points_amount,
+                operator_id,
+                str(note or "").strip() or None,
+                psycopg2.extras.Json(meta_json or {}),
+                normalized_valid_from,
+                normalized_valid_until,
+            ],
+        )
+        if not code_row:
+            continue
+        created_row = dict(code_row[0])
+        created_row["plain_code"] = plain_code
+        created_row["batch_name"] = batch_label
+        generated_codes.append(_serialize_redeem_code_row(created_row, include_plain_code=True))
+
+    if len(generated_codes) != normalized_code_count:
+        raise HTTPException(status_code=500, detail="failed to generate redeem codes")
+
+    return {
+        "batch": _serialize_redeem_code_batch_row({**batch_row, "redeemed_count": 0}),
+        "codes": generated_codes,
+    }
+
+
+def _list_redeem_codes(
+    conn,
+    *,
+    limit: int = 50,
+    offset: int = 0,
+    batch_limit: int = 20,
+    batch_offset: int = 0,
+    status: str | None = None,
+    batch_id: str | None = None,
+    batch_keyword: str | None = None,
+    selected_batch_offset: int = 0,
+    include_plain_codes: bool = False,
+) -> dict[str, Any]:
+    normalized_limit = max(1, min(int(limit or 50), 200))
+    normalized_offset = max(0, int(offset or 0))
+    normalized_batch_limit = max(1, min(int(batch_limit or 20), 100))
+    normalized_batch_offset = max(0, int(batch_offset or 0))
+    normalized_selected_batch_offset = max(0, int(selected_batch_offset or 0))
+    params: list[Any] = []
+    filters: list[str] = []
+    if status:
+        filters.append("c.status = %s")
+        params.append(str(status).strip().lower())
+    if batch_id:
+        filters.append("c.batch_id = %s")
+        params.append(str(batch_id).strip())
+    normalized_batch_keyword = str(batch_keyword or "").strip()
+    if normalized_batch_keyword:
+        keyword_like = f"%{normalized_batch_keyword}%"
+        filters.append("(COALESCE(b.batch_name, '') ILIKE %s OR c.batch_id ILIKE %s)")
+        params.extend([keyword_like, keyword_like])
+    where_clause = f" WHERE {' AND '.join(filters)}" if filters else ""
+
+    code_total_row = _fetch_one(
+        conn,
+        """
+        SELECT COUNT(*)::INT AS total_count
+        FROM app.redeem_code c
+        LEFT JOIN app.redeem_code_batch b ON b.batch_id = c.batch_id
+        """
+        + where_clause,
+        params,
+    )
+    code_total = int(code_total_row.get("total_count") or 0)
+
+    code_rows = _run_pg_dict_query(
+        conn,
+        """
+        SELECT c.code_id, c.batch_id, b.batch_name, c.code_mask, c.code_type, c.points_amount,
+               c.status, c.created_by, c.note, c.meta_json, c.valid_from, c.valid_until,
+               c.redeemed_by_user_id, u.display_name AS redeemed_by_display_name,
+               c.ledger_entry_id, c.redeemed_at, c.created_at, c.updated_at
+        FROM app.redeem_code c
+        LEFT JOIN app.redeem_code_batch b ON b.batch_id = c.batch_id
+        LEFT JOIN app.app_user u ON u.user_id = c.redeemed_by_user_id
+        """
+         + where_clause
+        + " ORDER BY c.created_at DESC, c.code_id DESC LIMIT %s OFFSET %s",
+        [*params, normalized_limit, normalized_offset],
+    )
+    batch_filters: list[str] = []
+    batch_params: list[Any] = []
+    if normalized_batch_keyword:
+        keyword_like = f"%{normalized_batch_keyword}%"
+        batch_filters.append("(COALESCE(b.batch_name, '') ILIKE %s OR b.batch_id ILIKE %s)")
+        batch_params.extend([keyword_like, keyword_like])
+    batch_where_clause = f" WHERE {' AND '.join(batch_filters)}" if batch_filters else ""
+    batch_total_row = _fetch_one(
+        conn,
+        """
+        SELECT COUNT(*)::INT AS total_count
+        FROM app.redeem_code_batch b
+        """
+        + batch_where_clause,
+        batch_params,
+    )
+    batch_total = int(batch_total_row.get("total_count") or 0)
+    batch_rows = _run_pg_dict_query(
+        conn,
+        """
+        SELECT b.batch_id, b.batch_name, b.code_type, b.points_amount, b.code_count, b.status,
+               b.created_by, b.note, b.meta_json, b.valid_from, b.valid_until,
+               COUNT(c.code_id)::INT AS redeemed_count,
+               b.created_at, b.updated_at
+        FROM app.redeem_code_batch b
+        LEFT JOIN app.redeem_code c
+          ON c.batch_id = b.batch_id
+         AND c.status = 'redeemed'
+        """
+        + batch_where_clause
+        + """
+        GROUP BY b.batch_id, b.batch_name, b.code_type, b.points_amount, b.code_count, b.status,
+                 b.created_by, b.note, b.meta_json, b.valid_from, b.valid_until, b.created_at, b.updated_at
+        ORDER BY b.created_at DESC, b.batch_id DESC
+        LIMIT %s OFFSET %s
+        """,
+        [*batch_params, normalized_batch_limit, normalized_batch_offset],
+    )
+    selected_batch = None
+    selected_batch_codes: list[dict[str, Any]] = []
+    selected_batch_total = 0
+    normalized_batch_id = str(batch_id or "").strip()
+    if normalized_batch_id:
+        batch_row = _fetch_optional_one(
+            conn,
+            """
+            SELECT b.batch_id, b.batch_name, b.code_type, b.points_amount, b.code_count, b.status,
+                   b.created_by, b.note, b.meta_json, b.valid_from, b.valid_until,
+                   COUNT(c.code_id) FILTER (WHERE c.status = 'redeemed')::INT AS redeemed_count,
+                   b.created_at, b.updated_at
+            FROM app.redeem_code_batch b
+            LEFT JOIN app.redeem_code c ON c.batch_id = b.batch_id
+            WHERE b.batch_id = %s
+            GROUP BY b.batch_id, b.batch_name, b.code_type, b.points_amount, b.code_count, b.status,
+                     b.created_by, b.note, b.meta_json, b.valid_from, b.valid_until, b.created_at, b.updated_at
+            LIMIT 1
+            """,
+            [normalized_batch_id],
+        )
+        if batch_row is None:
+            raise HTTPException(status_code=404, detail="redeem code batch not found")
+        selected_batch = _serialize_redeem_code_batch_row(batch_row)
+        selected_batch_total_row = _fetch_one(
+            conn,
+            """
+            SELECT COUNT(*)::INT AS total_count
+            FROM app.redeem_code c
+            WHERE c.batch_id = %s
+            """,
+            [normalized_batch_id],
+        )
+        selected_batch_total = int(selected_batch_total_row.get("total_count") or 0)
+        selected_batch_rows = _run_pg_dict_query(
+            conn,
+            """
+            SELECT c.code_id, c.batch_id, b.batch_name, c.code_plaintext AS plain_code,
+                   c.code_mask, c.code_type, c.points_amount, c.status,
+                   c.created_by, c.note, c.meta_json, c.valid_from, c.valid_until,
+                   c.redeemed_by_user_id, u.display_name AS redeemed_by_display_name,
+                   c.ledger_entry_id, c.redeemed_at, c.created_at, c.updated_at
+            FROM app.redeem_code c
+            LEFT JOIN app.redeem_code_batch b ON b.batch_id = c.batch_id
+            LEFT JOIN app.app_user u ON u.user_id = c.redeemed_by_user_id
+            WHERE c.batch_id = %s
+            ORDER BY c.created_at DESC, c.code_id DESC
+            LIMIT %s OFFSET %s
+            """,
+            [normalized_batch_id, normalized_limit, normalized_selected_batch_offset],
+        )
+        selected_batch_codes = [
+            _serialize_redeem_code_row(row, include_plain_code=include_plain_codes)
+            for row in selected_batch_rows
+        ]
+    return {
+        "redeem_codes": [_serialize_redeem_code_row(row) for row in code_rows],
+        "redeem_batches": [_serialize_redeem_code_batch_row(row) for row in batch_rows],
+        "selected_batch": selected_batch,
+        "selected_batch_codes": selected_batch_codes,
+        "redeem_code_pagination": {
+            "limit": normalized_limit,
+            "offset": normalized_offset,
+            "total": code_total,
+        },
+        "redeem_batch_pagination": {
+            "limit": normalized_batch_limit,
+            "offset": normalized_batch_offset,
+            "total": batch_total,
+            "keyword": normalized_batch_keyword,
+        },
+        "selected_batch_pagination": {
+            "limit": normalized_limit,
+            "offset": normalized_selected_batch_offset,
+            "total": selected_batch_total,
+        },
+    }
+
+
+def _disable_redeem_code(conn, *, code_id: str) -> dict[str, Any]:
+    updated_rows = _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.redeem_code
+        SET status = 'disabled',
+            updated_at = NOW()
+        WHERE code_id = %s
+          AND status = 'active'
+          AND redeemed_at IS NULL
+        RETURNING code_id, batch_id, code_mask, code_type, points_amount, status,
+                  created_by, note, meta_json, valid_from, valid_until,
+                  redeemed_by_user_id, redeemed_at, ledger_entry_id, created_at, updated_at
+        """,
+        [code_id],
+    )
+    if updated_rows:
+        return _serialize_redeem_code_row(updated_rows[0])
+
+    existing_row = _fetch_optional_one(
+        conn,
+        """
+        SELECT c.code_id, c.batch_id, b.batch_name, c.code_mask, c.code_type, c.points_amount,
+               c.status, c.created_by, c.note, c.meta_json, c.valid_from, c.valid_until,
+               c.redeemed_by_user_id, u.display_name AS redeemed_by_display_name,
+               c.ledger_entry_id, c.redeemed_at, c.created_at, c.updated_at
+        FROM app.redeem_code c
+        LEFT JOIN app.redeem_code_batch b ON b.batch_id = c.batch_id
+        LEFT JOIN app.app_user u ON u.user_id = c.redeemed_by_user_id
+        WHERE c.code_id = %s
+        LIMIT 1
+        """,
+        [code_id],
+    )
+    if existing_row is None:
+        raise HTTPException(status_code=404, detail="redeem code not found")
+    if existing_row.get("redeemed_at") is not None or existing_row.get("status") == "redeemed":
+        raise HTTPException(status_code=400, detail="redeem code already redeemed")
+    if existing_row.get("status") == "disabled":
+        return _serialize_redeem_code_row(existing_row)
+    raise HTTPException(status_code=400, detail="redeem code cannot be disabled")
+
+
+def _redeem_code(conn, *, user_id: str, redeem_code: str) -> dict[str, Any]:
+    normalized_code = _normalize_redeem_code(redeem_code)
+    code_row = _fetch_optional_one(
+        conn,
+        """
+        SELECT c.code_id, c.batch_id, c.code_hash, c.code_mask, c.code_type,
+               c.points_amount, c.status, c.created_by, c.note, c.meta_json,
+               c.valid_from, c.valid_until, c.redeemed_by_user_id, c.redeemed_at,
+               c.ledger_entry_id, c.created_at, c.updated_at
+        FROM app.redeem_code c
+        WHERE c.code_hash = %s
+        LIMIT 1 FOR UPDATE
+        """,
+        [_build_redeem_code_hash(normalized_code)],
+    )
+    if code_row is None:
+        raise HTTPException(status_code=404, detail="redeem code not found")
+
+    if code_row.get("batch_id"):
+        batch_row = _fetch_optional_one(
+            conn,
+            """
+            SELECT batch_name
+            FROM app.redeem_code_batch
+            WHERE batch_id = %s
+            LIMIT 1
+            """,
+            [code_row["batch_id"]],
+        )
+        if batch_row is not None:
+            code_row["batch_name"] = batch_row.get("batch_name")
+
+    if code_row.get("status") == "disabled":
+        raise HTTPException(status_code=400, detail="redeem code disabled")
+    if code_row.get("redeemed_at") is not None or code_row.get("status") == "redeemed":
+        raise HTTPException(status_code=400, detail="redeem code already redeemed")
+    if code_row.get("batch_id"):
+        existing_batch_redeem = _fetch_optional_one(
+            conn,
+            """
+            SELECT code_id
+            FROM app.redeem_code
+            WHERE batch_id = %s
+              AND redeemed_by_user_id = %s
+              AND code_id <> %s
+              AND redeemed_at IS NOT NULL
+            LIMIT 1
+            """,
+            [code_row["batch_id"], user_id, code_row["code_id"]],
+        )
+        if existing_batch_redeem is not None:
+            raise HTTPException(status_code=400, detail="same account can redeem only one code from the same batch")
+
+    now = _utc_now()
+    valid_from = _parse_optional_utc_datetime(code_row.get("valid_from"))
+    valid_until = _parse_optional_utc_datetime(code_row.get("valid_until"))
+    if valid_from is not None and now < valid_from:
+        raise HTTPException(status_code=400, detail="redeem code not active yet")
+    if valid_until is not None and now > valid_until:
+        _run_pg_dict_query(
+            conn,
+            """
+            UPDATE app.redeem_code
+            SET status = 'expired',
+                updated_at = NOW()
+            WHERE code_id = %s
+            RETURNING code_id
+            """,
+            [code_row["code_id"]],
+        )
+        raise HTTPException(status_code=400, detail="redeem code expired")
+
+    points_amount = max(0, int(code_row.get("points_amount") or 0))
+    if points_amount <= 0:
+        raise HTTPException(status_code=400, detail="invalid redeem code points")
+
+    normalized_code_type = _normalize_redeem_code_type(code_row.get("code_type"))
+    ledger_entry_type = "recharge" if normalized_code_type == "recharge" else "promotion_reward"
+    granted_points = points_amount if ledger_entry_type == "promotion_reward" else 0
+    purchased_points = points_amount if ledger_entry_type == "recharge" else 0
+    description = "兑换码充值到账" if ledger_entry_type == "recharge" else "兑换码兑换积分到账"
+    reference_id = f"redeem_code:{code_row['code_id']}"
+    ledger_meta_json = {
+        **dict(code_row.get("meta_json") or {}),
+        "points_price_version": POINTS_PRICE_VERSION,
+        "redeem_code_id": code_row.get("code_id"),
+        "redeem_code_batch_id": code_row.get("batch_id"),
+        "redeem_code_type": normalized_code_type,
+        "redeem_code_mask": code_row.get("code_mask"),
+    }
+    updated_account, ledger_entry = _grant_points_with_ledger(
+        conn=conn,
+        user_id=user_id,
+        points=points_amount,
+        entry_type=ledger_entry_type,
+        event_type="redeem_code_redeem",
+        reference_id=reference_id,
+        description=description,
+        meta_json=ledger_meta_json,
+        granted_points=granted_points,
+        purchased_points=purchased_points,
+    )
+
+    try:
+        redeemed_row = _run_pg_dict_query(
+            conn,
+            """
+            UPDATE app.redeem_code
+            SET status = 'redeemed',
+                redeemed_by_user_id = %s,
+                redeemed_at = NOW(),
+                ledger_entry_id = %s,
+                updated_at = NOW()
+            WHERE code_id = %s
+            RETURNING code_id, batch_id, code_mask, code_type, points_amount, status,
+                      created_by, note, meta_json, valid_from, valid_until,
+                      redeemed_by_user_id, redeemed_at, ledger_entry_id, created_at, updated_at
+            """,
+            [user_id, ledger_entry["entry_id"], code_row["code_id"]],
+        )[0]
+    except Exception as exc:
+        if getattr(exc, "pgcode", "") == "23505" and code_row.get("batch_id"):
+            raise HTTPException(status_code=400, detail="same account can redeem only one code from the same batch") from exc
+        raise
+    redeemed_row["batch_name"] = code_row.get("batch_name")
+
+    _upsert_user_notification(
+        conn,
+        user_id=user_id,
+        notification_key=f"redeem_code_redeem:{code_row['code_id']}",
+        category="user",
+        tag="兑换码",
+        level="success",
+        title="兑换码兑换成功",
+        body=f"你已成功兑换 {points_amount} 积分，系统已自动到账。",
+        event_type="redeem_code_redeem",
+        resource_type="redeem_code",
+        resource_id=code_row["code_id"],
+        action_url="/portal/account",
+        occurred_at=now,
+    )
+
+    return {
+        "redeem_code": _serialize_redeem_code_row(redeemed_row),
+        "points_account": updated_account,
+        "ledger_entry": ledger_entry,
+    }
 
 
 # ---------------------------------------------------------------------------

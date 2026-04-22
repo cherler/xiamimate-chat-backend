@@ -112,6 +112,28 @@ class BindReferralCodeRequest(BaseModel):
     invite_code: str = Field(..., min_length=4, max_length=32)
 
 
+class RedeemCodeRedeemRequest(BaseModel):
+    code: str = Field(..., min_length=4, max_length=64)
+
+
+class AdminCreateRedeemCodeBatchRequest(BaseModel):
+    points: int = Field(..., ge=1)
+    code_count: int = Field(default=1, ge=1, le=500)
+    code_type: str = Field(default="promotion", min_length=1, max_length=32)
+    batch_name: str | None = Field(default=None, max_length=120)
+    note: str | None = Field(default=None, max_length=500)
+    valid_from: Any | None = None
+    valid_until: Any | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+    @validator("code_type")
+    def _validate_code_type(cls, value: str) -> str:  # noqa: N805
+        normalized = value.strip().lower()
+        if normalized not in {"promotion", "promotion_reward", "gift", "bonus", "recharge", "sold", "paid", "cash"}:
+            raise ValueError(f"unsupported code_type: {value}")
+        return normalized
+
+
 class UpdateNotificationReadStateRequest(BaseModel):
     read: bool = True
     category: str | None = None
@@ -125,6 +147,10 @@ class UpdateNotificationReadStateRequest(BaseModel):
         if normalized not in {"system", "user"}:
             raise ValueError(f"unsupported notification category: {value}")
         return normalized
+
+
+class ConfirmSecurityVerificationRequest(BaseModel):
+    code: str = Field(..., min_length=4, max_length=8)
 
 
 class ChargePointsEvent(BaseModel):

@@ -1,6 +1,7 @@
 """Admin API routes — /admin/*."""
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -9,6 +10,11 @@ from fastapi.responses import HTMLResponse
 
 from data_platform.chat_backend.infra.settings import (
     POINTS_PRICE_VERSION,
+    INTERNAL_SERVICE_SECRET,
+    INTERNAL_SERVICE_SECRET_HEADER_NAME,
+    INTERNAL_SERVICE_NAME_HEADER_NAME,
+    TRUSTED_ADMIN_SERVICE_NAME,
+    TRUSTED_ADMIN_SESSION_HEADER_NAME,
     _generate_id,
 )
 from data_platform.chat_backend.infra.postgres import (
@@ -20,9 +26,13 @@ from data_platform.chat_backend.infra.http import (
     _success_response,
 )
 from data_platform.chat_backend.domains.identity.service import _ensure_user_record
+from data_platform.chat_backend.domains.identity.service import _reconcile_openwebui_user_sources_for_admin
 from data_platform.chat_backend.domains.billing.service import (
+    _create_redeem_code_batch,
+    _disable_redeem_code,
     _grant_points_with_ledger,
     _invalidate_event_pricing_cache,
+    _list_redeem_codes,
 )
 from data_platform.chat_backend.domains.admin.service import (
     _audit_admin_action,
@@ -40,6 +50,7 @@ from data_platform.chat_backend.domains.site_config import (
     _invalidate_site_config_cache,
 )
 from data_platform.chat_backend.api.models import (
+    AdminCreateRedeemCodeBatchRequest,
     AdminGrantPointsRequest,
     CreateSystemNotificationBroadcastRequest,
     UpdateEventPricingRequest,
@@ -53,8 +64,19 @@ router = APIRouter()
 
 
 @router.get("/admin/backoffice")
-def admin_backoffice_page() -> HTMLResponse:
-    return HTMLResponse(render_admin_backoffice_html())
+def admin_backoffice_page(request: Request) -> HTMLResponse:
+    trusted_openwebui_admin = False
+    if INTERNAL_SERVICE_SECRET:
+        provided_secret = (request.headers.get(INTERNAL_SERVICE_SECRET_HEADER_NAME) or "").strip()
+        service_name = (request.headers.get(INTERNAL_SERVICE_NAME_HEADER_NAME) or "").strip()
+        trusted_admin_verified = (request.headers.get(TRUSTED_ADMIN_SESSION_HEADER_NAME) or "").strip()
+        trusted_openwebui_admin = (
+            provided_secret
+            and secrets.compare_digest(provided_secret, INTERNAL_SERVICE_SECRET)
+            and service_name == TRUSTED_ADMIN_SERVICE_NAME
+            and trusted_admin_verified == "1"
+        )
+    return HTMLResponse(render_admin_backoffice_html(trusted_openwebui_admin=bool(trusted_openwebui_admin)))
 
 
 @router.get("/admin/api/overview")
@@ -73,6 +95,7 @@ def admin_backoffice_overview(request: Request) -> dict[str, Any]:
 def admin_backoffice_users(request: Request) -> dict[str, Any]:
     _require_admin_operator(request)
     query = (request.query_params.get("query") or "").strip()
+    include_orphaned = (request.query_params.get("include_orphaned") or "").strip().lower() in {"1", "true", "yes", "on"}
     raw_limit = (request.query_params.get("limit") or "20").strip()
     try:
         limit = max(1, min(int(raw_limit), 100))
@@ -80,35 +103,42 @@ def admin_backoffice_users(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="limit must be an integer")
 
     with _postgres_conn() as conn:
+        _reconcile_openwebui_user_sources_for_admin(conn, query=query, scan_limit=max(limit * 5, 100))
         if query:
             like_query = f"%{query}%"
+            source_filter_sql = "" if include_orphaned else "AND u.source_state <> 'orphaned'"
             rows = _run_pg_dict_query(
                 conn,
-                """
+                f"""
                 SELECT u.user_id, u.email, u.display_name, u.status, u.plan_tier,
-                       u.created_at, u.updated_at,
+                       u.created_at, u.updated_at, u.source_state, u.source_last_seen_at,
+                       u.source_orphaned_at, u.source_recovered_at,
                        COALESCE(a.balance_points, 0) AS balance_points,
                        k.last_used_at AS api_key_last_used_at
                 FROM app.app_user u
                 LEFT JOIN app.user_credit_account a ON u.user_id = a.user_id
                 LEFT JOIN app.user_api_key k ON u.user_id = k.user_id
-                WHERE u.user_id ILIKE %s OR u.email ILIKE %s OR u.display_name ILIKE %s
+                WHERE (u.user_id ILIKE %s OR u.email ILIKE %s OR u.display_name ILIKE %s)
+                {source_filter_sql}
                 ORDER BY u.updated_at DESC, u.user_id DESC
                 LIMIT %s
                 """,
                 [like_query, like_query, like_query, limit],
             )
         else:
+            source_filter_sql = "" if include_orphaned else "WHERE u.source_state <> 'orphaned'"
             rows = _run_pg_dict_query(
                 conn,
-                """
+                f"""
                 SELECT u.user_id, u.email, u.display_name, u.status, u.plan_tier,
-                       u.created_at, u.updated_at,
+                       u.created_at, u.updated_at, u.source_state, u.source_last_seen_at,
+                       u.source_orphaned_at, u.source_recovered_at,
                        COALESCE(a.balance_points, 0) AS balance_points,
                        k.last_used_at AS api_key_last_used_at
                 FROM app.app_user u
                 LEFT JOIN app.user_credit_account a ON u.user_id = a.user_id
                 LEFT JOIN app.user_api_key k ON u.user_id = k.user_id
+                {source_filter_sql}
                 ORDER BY u.updated_at DESC, u.user_id DESC
                 LIMIT %s
                 """,
@@ -116,7 +146,7 @@ def admin_backoffice_users(request: Request) -> dict[str, Any]:
             )
     return _success_response(
         "/admin/api/users",
-        {"query": query, "users": rows},
+        {"query": query, "include_orphaned": include_orphaned, "users": rows},
         "admin users loaded",
     )
 
@@ -184,6 +214,109 @@ def admin_backoffice_grant_points(user_id: str, request: Request, payload: Admin
             "audit_log": audit_log,
         },
         "admin points granted",
+    )
+
+
+@router.get("/admin/api/redeem-codes")
+def admin_list_redeem_codes(request: Request) -> dict[str, Any]:
+    _require_admin_operator(request)
+    raw_limit = (request.query_params.get("limit") or "50").strip()
+    raw_offset = (request.query_params.get("offset") or "0").strip()
+    raw_batch_limit = (request.query_params.get("batch_limit") or "20").strip()
+    raw_batch_offset = (request.query_params.get("batch_offset") or "0").strip()
+    raw_selected_batch_offset = (request.query_params.get("selected_batch_offset") or "0").strip()
+    status = (request.query_params.get("status") or "").strip().lower() or None
+    batch_id = (request.query_params.get("batch_id") or "").strip() or None
+    batch_keyword = (request.query_params.get("batch_keyword") or "").strip() or None
+    include_plain_codes = (request.query_params.get("include_plain_codes") or "").strip().lower() in {"1", "true", "yes"}
+    try:
+        limit = max(1, min(int(raw_limit), 200))
+        offset = max(0, int(raw_offset))
+        batch_limit = max(1, min(int(raw_batch_limit), 100))
+        batch_offset = max(0, int(raw_batch_offset))
+        selected_batch_offset = max(0, int(raw_selected_batch_offset))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="limit, offset, batch_limit, batch_offset and selected_batch_offset must be integers")
+
+    with _postgres_conn() as conn:
+        result = _list_redeem_codes(
+            conn,
+            limit=limit,
+            offset=offset,
+            batch_limit=batch_limit,
+            batch_offset=batch_offset,
+            status=status,
+            batch_id=batch_id,
+            batch_keyword=batch_keyword,
+            selected_batch_offset=selected_batch_offset,
+            include_plain_codes=include_plain_codes,
+        )
+    return _success_response(
+        "/admin/api/redeem-codes",
+        result,
+        "redeem codes loaded",
+    )
+
+
+@router.post("/admin/api/redeem-codes/batches")
+def admin_create_redeem_code_batch(
+    request: Request,
+    payload: AdminCreateRedeemCodeBatchRequest,
+) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    with _postgres_conn() as conn:
+        result = _create_redeem_code_batch(
+            conn,
+            operator_id=operator_id,
+            points=payload.points,
+            code_count=payload.code_count,
+            code_type=payload.code_type,
+            batch_name=payload.batch_name,
+            note=payload.note,
+            valid_from=payload.valid_from,
+            valid_until=payload.valid_until,
+            meta_json=payload.meta,
+        )
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="create_redeem_code_batch",
+            target_type="redeem_code_batch",
+            target_id=str((result.get("batch") or {}).get("batch_id") or "") or None,
+            request_json=jsonable_encoder(payload),
+            result_json={
+                "batch": result.get("batch") or {},
+                "generated_code_count": len(result.get("codes") or []),
+            },
+        )
+    return _success_response(
+        "/admin/api/redeem-codes/batches",
+        {
+            **result,
+            "audit_log": audit_log,
+        },
+        "redeem code batch created",
+    )
+
+
+@router.post("/admin/api/redeem-codes/{code_id}/disable")
+def admin_disable_redeem_code(code_id: str, request: Request) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    with _postgres_conn() as conn:
+        redeem_code = _disable_redeem_code(conn, code_id=code_id)
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="disable_redeem_code",
+            target_type="redeem_code",
+            target_id=code_id,
+            request_json={"code_id": code_id},
+            result_json={"redeem_code": redeem_code},
+        )
+    return _success_response(
+        f"/admin/api/redeem-codes/{code_id}/disable",
+        {"redeem_code": redeem_code, "audit_log": audit_log},
+        "redeem code disabled",
     )
 
 
