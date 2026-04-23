@@ -787,7 +787,7 @@ def _portal_chatbot_token() -> str:
 def _render_portal_chatbot_snippet() -> str:
   chatbot_base_url = _portal_chatbot_base_url()
   chatbot_token = _portal_chatbot_token()
-  chatbot_cache_revision = "20260423-dify-chatbot-v2"
+  chatbot_cache_revision = "20260423-dify-chatbot-v3"
   chatbot_base_url_json = json.dumps(chatbot_base_url)
   chatbot_embed_src_json = json.dumps(f"{chatbot_base_url}/embed.min.js?v={chatbot_cache_revision}")
   chatbot_page_src_json = json.dumps(f"{chatbot_base_url}/chatbot/{chatbot_token}?v={chatbot_cache_revision}")
@@ -879,10 +879,16 @@ def _render_portal_chatbot_snippet() -> str:
    scheduleIdleWork(async () => {{
     try {{
     appendHintLink('preload', chatbotEmbedUrl, 'script');
+    fetch(chatbotEmbedUrl, {{
+    credentials: 'include',
+    cache: 'reload',
+    }}).catch((error) => {{
+    console.debug('portal chatbot embed reload skipped', error);
+    }});
      appendHintLink('prefetch', chatbotPageUrl, 'document');
      const response = await fetch(chatbotPageUrl, {{
       credentials: 'include',
-    cache: 'force-cache',
+    cache: 'reload',
      }});
      if (!response.ok) {{
       throw new Error(`chatbot warmup failed: ${{response.status}}`);
@@ -899,6 +905,14 @@ def _render_portal_chatbot_snippet() -> str:
          assetUrl,
          assetUrl.endsWith('.css') ? 'style' : 'script',
         );
+      if (index < 6) {{
+       fetch(assetUrl, {{
+        credentials: 'include',
+        cache: 'reload',
+       }}).catch((error) => {{
+        console.debug('portal chatbot asset reload skipped', assetUrl, error);
+       }});
+      }}
      }});
     }} catch (error) {{
      console.debug('portal chatbot warmup skipped', error);
