@@ -9,10 +9,11 @@ from typing import Any
 
 from data_platform.chat_backend.domains.portal.service import _portal_public_base_url
 from data_platform.chat_backend.domains.site_config import _get_contact_config
-from data_platform.chat_backend.infra.postgres import _postgres_conn
+from data_platform.chat_backend.infra.postgres import _postgres_conn, _run_pg_dict_query
 from data_platform.chat_backend.infra.settings import (
     DEFAULT_BILLING_PACKAGES,
     DEFAULT_PROMOTION_RULES,
+  _resolve_promotion_rule_seed_status,
 )
 
 
@@ -1016,7 +1017,37 @@ def _cny(cents: int) -> str:
     return f"{amount:.2f}元"
 
 
+def _fallback_catalog_promotion_rules() -> list[dict[str, Any]]:
+    return [
+        rule
+        for rule in DEFAULT_PROMOTION_RULES
+        if _resolve_promotion_rule_seed_status(rule) == "active"
+    ]
+
+
+def _load_catalog_promotion_rules() -> list[dict[str, Any]]:
+    try:
+        with _postgres_conn() as conn:
+            return _run_pg_dict_query(
+                conn,
+                """
+                SELECT rule_code, rule_name, rule_type, status, target_product_type,
+                       target_package_codes, benefit_type, benefit_value, criteria_json,
+                       meta_json, display_order, start_at, end_at, created_at, updated_at
+                FROM app.promotion_rule
+                WHERE status = 'active'
+                  AND (start_at IS NULL OR start_at <= NOW())
+                  AND (end_at IS NULL OR end_at >= NOW())
+                ORDER BY display_order ASC, rule_code ASC
+                """,
+                [],
+            )
+    except Exception:
+        return _fallback_catalog_promotion_rules()
+
+
 def _split_catalog() -> tuple[list[dict], list[dict], dict, dict, list[dict]]:
+    promotion_rules = _load_catalog_promotion_rules()
     monthly_packages = sorted(
         [pkg for pkg in DEFAULT_BILLING_PACKAGES if pkg.get("product_type") == "monthly_subscription"],
         key=lambda item: int(item.get("display_order") or 0),
@@ -1025,14 +1056,14 @@ def _split_catalog() -> tuple[list[dict], list[dict], dict, dict, list[dict]]:
         [pkg for pkg in DEFAULT_BILLING_PACKAGES if pkg.get("product_type") == "credit_pack"],
         key=lambda item: int(item.get("display_order") or 0),
     )
-    signup_rule = next((rule for rule in DEFAULT_PROMOTION_RULES if rule.get("rule_code") == "signup_bonus_500"), {})
-    first_discount_rule = next((rule for rule in DEFAULT_PROMOTION_RULES if rule.get("rule_code") == "first_subscription_monthly_90_off"), {})
+    signup_rule = next((rule for rule in promotion_rules if rule.get("rule_code") == "signup_bonus_500"), {})
+    first_discount_rule = next((rule for rule in promotion_rules if rule.get("rule_code") == "first_subscription_monthly_90_off"), {})
     cumulative_rules = sorted(
-        [rule for rule in DEFAULT_PROMOTION_RULES if rule.get("rule_type") == "recharge_bonus_cumulative"],
+      [rule for rule in promotion_rules if rule.get("rule_type") == "recharge_bonus_cumulative"],
         key=lambda item: int((item.get("criteria_json") or {}).get("threshold_paid_amount_cents") or 0),
     )
     single_bonus_by_package: dict[str, dict] = {}
-    for rule in DEFAULT_PROMOTION_RULES:
+    for rule in promotion_rules:
         if rule.get("rule_type") != "recharge_bonus_single":
             continue
         for package_code in rule.get("target_package_codes") or []:
@@ -1140,6 +1171,7 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
 
 def render_portal_products_html() -> str:
     monthly_packages, recharge_packages, signup_rule, first_discount_rule, cumulative_rules, single_bonus_by_package = _split_catalog()
+    first_discount_text = escape(str((first_discount_rule.get("meta_json") or {}).get("display_text") or first_discount_rule.get("rule_name") or ""))
 
     monthly_cards = []
     for package in monthly_packages:
@@ -1147,6 +1179,9 @@ def render_portal_products_html() -> str:
         display_name = meta.get("display_name") or package.get("package_name") or package.get("package_code")
         renewal_label = meta.get("renewal_price_label") or _cny(int(package.get("price_cents") or 0))
         package_code = escape(str(package.get("package_code") or ""))
+        first_discount_bullet = ""
+        if first_discount_rule:
+            first_discount_bullet = f'<div class="bullet-item">当前活动：{first_discount_text}</div>'
         monthly_cards.append(
             f'''
             <div class="offer-card{' featured' if package.get('package_code') == 'monthly_pro' else ''}">
@@ -1164,7 +1199,7 @@ def render_portal_products_html() -> str:
                 <div class="bullet-item">计费周期：{int(package.get('period_days') or 30)} 天</div>
                 <div class="bullet-item">扣减顺序：优先消耗当前月包剩余积分</div>
                 <div class="bullet-item">续费说明：当前按单月购买，不自动续费；如需继续使用，到期后再手动续购</div>
-                <div class="bullet-item">首月促销：{escape(str((first_discount_rule.get('meta_json') or {}).get('display_text') or '首次订阅月包首月 1 折'))}</div>
+                {first_discount_bullet}
               </div>
               <div class="offer-actions">
                 <a class="offer-cta" data-checkout-link="1" data-package-code="{package_code}" data-product-type="monthly_subscription" href="/portal/checkout?package_code={package_code}">立即下单</a>
@@ -1207,6 +1242,25 @@ def render_portal_products_html() -> str:
             '''
         )
 
+    first_discount_card = ""
+    if first_discount_rule:
+        first_discount_card = f'''
+      <div class="offer-card">
+        <div class="offer-top">
+          <div>
+            <div class="offer-name">首次订阅优惠</div>
+            <div class="offer-tagline">适合首次尝试月包的用户。</div>
+          </div>
+          <div class="offer-badge">首单转化</div>
+        </div>
+        <div class="offer-price"><div class="offer-price-main">限时活动</div></div>
+        <div class="bullet-list">
+          <div class="bullet-item">活动说明：{first_discount_text}</div>
+          <div class="bullet-item">适用范围：仅首次订阅月包时可用。</div>
+        </div>
+      </div>
+        '''
+
     newcomer_cards = f'''
       <div class="offer-card featured">
         <div class="offer-top">
@@ -1222,20 +1276,7 @@ def render_portal_products_html() -> str:
           <div class="bullet-item">到账方式：邮箱验证成功后记入账户。</div>
         </div>
       </div>
-      <div class="offer-card">
-        <div class="offer-top">
-          <div>
-            <div class="offer-name">首次订阅首月 1 折</div>
-            <div class="offer-tagline">适合首次尝试月包的用户。</div>
-          </div>
-          <div class="offer-badge">首单转化</div>
-        </div>
-        <div class="offer-price"><div class="offer-price-main">首月 1 折</div></div>
-        <div class="bullet-list">
-          <div class="bullet-item">活动说明：{escape(str((first_discount_rule.get('meta_json') or {}).get('display_text') or first_discount_rule.get('rule_name') or '首次订阅月包首月 1 折'))}</div>
-          <div class="bullet-item">适用范围：仅首次订阅月包时可用。</div>
-        </div>
-      </div>
+      {first_discount_card}
     '''
 
     cumulative_reward_cards = "".join(

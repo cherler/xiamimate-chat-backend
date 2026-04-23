@@ -33,6 +33,7 @@ from data_platform.chat_backend.infra.settings import (
     _generate_invite_code,
     _hash_text,
     _is_guest_identity,
+    _resolve_promotion_rule_seed_status,
     _utc_now,
 )
 from data_platform.chat_backend.infra.postgres import (
@@ -1709,6 +1710,7 @@ def _ensure_user_credit_account_state(conn, user: RequestUser) -> UserCreditAcco
 
 def _seed_promotion_rules(conn) -> None:
     for rule in DEFAULT_PROMOTION_RULES:
+        status = _resolve_promotion_rule_seed_status(rule)
         _run_pg_dict_query(
             conn,
             """
@@ -1716,11 +1718,11 @@ def _seed_promotion_rules(conn) -> None:
                 rule_code, rule_name, rule_type, status, target_product_type,
                 target_package_codes, benefit_type, benefit_value, criteria_json,
                 meta_json, display_order, start_at, end_at, created_at, updated_at
-            ) VALUES (%s, %s, %s, 'active', %s, %s, %s, %s, %s, %s, %s, NULL, NULL, NOW(), NOW())
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL, NOW(), NOW())
             ON CONFLICT (rule_code) DO UPDATE SET
                 rule_name = EXCLUDED.rule_name,
                 rule_type = EXCLUDED.rule_type,
-                status = 'active',
+                status = EXCLUDED.status,
                 target_product_type = EXCLUDED.target_product_type,
                 target_package_codes = EXCLUDED.target_package_codes,
                 benefit_type = EXCLUDED.benefit_type,
@@ -1735,6 +1737,7 @@ def _seed_promotion_rules(conn) -> None:
                 rule["rule_code"],
                 rule["rule_name"],
                 rule["rule_type"],
+                status,
                 rule.get("target_product_type"),
                 psycopg2.extras.Json(rule.get("target_package_codes") or []),
                 rule["benefit_type"],

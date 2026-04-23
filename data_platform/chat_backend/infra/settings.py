@@ -135,6 +135,43 @@ else:
     _portal_public_base_url_lower = PORTAL_PUBLIC_BASE_URL.lower()
     PORTAL_MOCK_PAYMENT_ENABLED = "127.0.0.1" in _portal_public_base_url_lower or "localhost" in _portal_public_base_url_lower
 
+
+def _normalize_promotion_rule_status(value: Any, default: str = "active") -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"active", "inactive"}:
+        return normalized
+    return default
+
+
+def _parse_promotion_rule_status_overrides(raw_value: str) -> dict[str, str]:
+    overrides: dict[str, str] = {}
+    for chunk in raw_value.split(","):
+        item = chunk.strip()
+        if not item:
+            continue
+        separator = "=" if "=" in item else (":" if ":" in item else "")
+        if not separator:
+            continue
+        rule_code, status = item.split(separator, 1)
+        normalized_rule_code = rule_code.strip()
+        if not normalized_rule_code:
+            continue
+        overrides[normalized_rule_code] = _normalize_promotion_rule_status(status)
+    return overrides
+
+
+PROMOTION_RULE_STATUS_OVERRIDES = _parse_promotion_rule_status_overrides(
+    os.environ.get("CHAT_BACKEND_PROMOTION_RULE_STATUS_OVERRIDES", "")
+)
+
+
+def _resolve_promotion_rule_seed_status(rule: dict[str, Any]) -> str:
+    rule_code = str(rule.get("rule_code") or "").strip()
+    override_status = PROMOTION_RULE_STATUS_OVERRIDES.get(rule_code)
+    if override_status:
+        return override_status
+    return _normalize_promotion_rule_status(rule.get("status"), default="active")
+
 # ---------------------------------------------------------------------------
 # Billing bundles & packages
 # ---------------------------------------------------------------------------
@@ -337,6 +374,7 @@ DEFAULT_PROMOTION_RULES: list[dict[str, Any]] = [
     {
         "rule_code": "first_subscription_monthly_90_off",
         "rule_name": "首次订阅月包首月 1 折",
+        "status": "inactive",
         "rule_type": "first_subscription_discount",
         "target_product_type": "monthly_subscription",
         "target_package_codes": ["monthly_standard", "monthly_pro", "monthly_ultra"],

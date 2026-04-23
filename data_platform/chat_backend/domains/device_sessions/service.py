@@ -192,8 +192,6 @@ def _bootstrap_device_session(conn, user_id: str, request: Request) -> tuple[dic
     evaluated = _evaluate_device_session_request(conn, user_id, request, touch=True)
     if evaluated["status"] == "ok":
         return evaluated["session"], evaluated["raw_token"], False
-    if evaluated["status"] == "invalid":
-        return None, None, False
 
     raw_token = secrets.token_urlsafe(32)
     device_label = _request_device_label(request)
