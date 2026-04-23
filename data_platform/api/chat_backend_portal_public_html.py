@@ -787,10 +787,12 @@ def _portal_chatbot_token() -> str:
 def _render_portal_chatbot_snippet() -> str:
   chatbot_base_url = _portal_chatbot_base_url()
   chatbot_token = _portal_chatbot_token()
+  chatbot_cache_revision = "20260423-dify-chatbot-v2"
   chatbot_base_url_json = json.dumps(chatbot_base_url)
-  chatbot_embed_src_json = json.dumps(f"{chatbot_base_url}/embed.min.js")
-  chatbot_page_src_json = json.dumps(f"{chatbot_base_url}/chatbot/{chatbot_token}")
+  chatbot_embed_src_json = json.dumps(f"{chatbot_base_url}/embed.min.js?v={chatbot_cache_revision}")
+  chatbot_page_src_json = json.dumps(f"{chatbot_base_url}/chatbot/{chatbot_token}?v={chatbot_cache_revision}")
   chatbot_token_json = json.dumps(chatbot_token)
+  chatbot_cache_revision_json = json.dumps(chatbot_cache_revision)
   return f"""
 <script>
  (function() {{
@@ -802,9 +804,13 @@ def _render_portal_chatbot_snippet() -> str:
    systemVariables: {{}},
    userVariables: {{}},
   }};
+  const chatbotCacheRevision = {chatbot_cache_revision_json};
   const passportStorageKey = `passport-${{config.token}}`;
+  const chatbotStateRevisionKey = `xm_dify_chatbot_revision:${{config.token}}`;
+  const chatbotEmbedUrl = {chatbot_embed_src_json};
   const chatbotPageUrl = {chatbot_page_src_json};
   let hasScheduledWarmup = false;
+  let hasScheduledApiWarmup = false;
   const appendHintLink = (rel, href, as) => {{
     if (!href || document.head.querySelector(`link[rel="${{rel}}"][data-dify-href="${{href}}"]`)) {{
     return;
@@ -817,6 +823,42 @@ def _render_portal_chatbot_snippet() -> str:
    }}
    link.dataset.difyHref = href;
    document.head.appendChild(link);
+  }};
+  const purgeDifyCacheStorage = async () => {{
+   if (!('caches' in window)) {{
+    return;
+   }}
+   try {{
+    const cacheNames = await window.caches.keys();
+    await Promise.all(cacheNames.map(async (cacheName) => {{
+     const cache = await window.caches.open(cacheName);
+     const requests = await cache.keys();
+     await Promise.all(
+      requests
+       .filter((request) => request.url.includes('/_dify/'))
+       .map((request) => cache.delete(request)),
+     );
+    }}));
+   }} catch (error) {{
+    console.debug('portal chatbot cache storage purge skipped', error);
+   }}
+  }};
+  const resetLegacyChatbotState = () => {{
+   try {{
+    window.localStorage.removeItem(passportStorageKey);
+    window.localStorage.removeItem('conversationIdInfo');
+    window.localStorage.setItem(chatbotStateRevisionKey, chatbotCacheRevision);
+   }} catch (error) {{}}
+   purgeDifyCacheStorage();
+  }};
+  const ensureChatbotStateRevision = () => {{
+   try {{
+    const storedRevision = String(window.localStorage.getItem(chatbotStateRevisionKey) || '').trim();
+    if (storedRevision === chatbotCacheRevision) {{
+     return;
+    }}
+   }} catch (error) {{}}
+   resetLegacyChatbotState();
   }};
   const scheduleIdleWork = (callback) => {{
    if ('requestIdleCallback' in window) {{
@@ -836,9 +878,11 @@ def _render_portal_chatbot_snippet() -> str:
    hasScheduledWarmup = true;
    scheduleIdleWork(async () => {{
     try {{
+    appendHintLink('preload', chatbotEmbedUrl, 'script');
      appendHintLink('prefetch', chatbotPageUrl, 'document');
      const response = await fetch(chatbotPageUrl, {{
       credentials: 'include',
+    cache: 'force-cache',
      }});
      if (!response.ok) {{
       throw new Error(`chatbot warmup failed: ${{response.status}}`);
@@ -849,25 +893,55 @@ def _render_portal_chatbot_snippet() -> str:
       (match) => match[1],
      );
      const uniqueAssets = [...new Set(assetMatches)].slice(0, 24);
-     uniqueAssets.forEach((assetUrl) => {{
-      appendHintLink(
-       'prefetch',
-       assetUrl,
-       assetUrl.endsWith('.css') ? 'style' : 'script',
-      );
+       uniqueAssets.forEach((assetUrl, index) => {{
+        appendHintLink(
+         index < 6 ? 'preload' : 'prefetch',
+         assetUrl,
+         assetUrl.endsWith('.css') ? 'style' : 'script',
+        );
      }});
     }} catch (error) {{
      console.debug('portal chatbot warmup skipped', error);
     }}
    }});
   }};
+      const warmupChatbotApis = (passportToken) => {{
+       if (hasScheduledApiWarmup) {{
+      return;
+       }}
+       hasScheduledApiWarmup = true;
+       scheduleIdleWork(() => {{
+      const headers = {{
+       'X-App-Code': config.token,
+      }};
+      if (passportToken) {{
+       headers['X-App-Passport'] = passportToken;
+      }}
+      [
+       `${{config.baseUrl}}/api/site`,
+       `${{config.baseUrl}}/api/meta`,
+       `${{config.baseUrl}}/api/parameters`,
+       `${{config.baseUrl}}/api/webapp/access-mode`,
+       `${{config.baseUrl}}/api/login/status`,
+      ].forEach((url) => {{
+       fetch(url, {{
+        headers,
+        credentials: 'include',
+        cache: 'force-cache',
+       }}).catch((error) => {{
+        console.debug('portal chatbot api warmup skipped', url, error);
+       }});
+      }});
+       }});
+      }};
   const loadEmbedScript = () => {{
    window.difyChatbotConfig = config;
    if (document.getElementById(config.token)) {{
     return;
    }}
+       appendHintLink('preload', chatbotEmbedUrl, 'script');
    const script = document.createElement('script');
-   script.src = {chatbot_embed_src_json};
+       script.src = chatbotEmbedUrl;
    script.id = config.token;
    script.defer = true;
    document.head.appendChild(script);
@@ -959,7 +1033,7 @@ def _render_portal_chatbot_snippet() -> str:
     const validationResult = await validateStoredConversation(existingPassport);
     if (validationResult === 'ok') {{
      loadEmbedScript();
-     warmupChatbot();
+      warmupChatbotApis(existingPassport);
      return;
     }}
     window.localStorage.removeItem(passportStorageKey);
@@ -977,15 +1051,17 @@ def _render_portal_chatbot_snippet() -> str:
     const payload = await response.json();
     if (payload && payload.access_token) {{
      window.localStorage.setItem(passportStorageKey, payload.access_token);
-      clearStoredConversationId(payload.access_token);
+     clearStoredConversationId(payload.access_token);
+     warmupChatbotApis(payload.access_token);
     }}
    }} catch (error) {{
     console.error('portal chatbot passport bootstrap failed', error);
    }} finally {{
     loadEmbedScript();
-    warmupChatbot();
    }}
   }};
+  ensureChatbotStateRevision();
+  warmupChatbot();
   bootstrapPassport();
  }})();
 </script>
