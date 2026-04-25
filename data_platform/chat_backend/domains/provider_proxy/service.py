@@ -13,6 +13,9 @@ from fastapi import HTTPException
 
 from data_platform.chat_backend.infra.settings import (
     AGENT_OPENAI_TIMEOUT,
+    ALLOWED_REPORT_PROFILES,
+    REPORT_PROFILE_TO_API_KEY_ENV_VAR,
+    REPORT_PROFILE_TO_BINDING,
     THEME_API_OPERATION_PATHS,
 )
 
@@ -57,6 +60,27 @@ def _dify_workflow_api_key() -> str:
     if not api_key:
         raise HTTPException(status_code=500, detail="DIFY_WORKFLOW_APP_API_KEY is not configured")
     return api_key
+
+
+def _normalize_report_profile(profile: str) -> str:
+    normalized = str(profile or "standard").strip().lower() or "standard"
+    if normalized not in ALLOWED_REPORT_PROFILES:
+        raise HTTPException(status_code=400, detail=f"unsupported report profile: {profile}")
+    return normalized
+
+
+def _resolve_report_binding(profile: str) -> str:
+    normalized = _normalize_report_profile(profile)
+    return REPORT_PROFILE_TO_BINDING[normalized]
+
+
+def _dify_report_api_key(profile: str) -> str:
+    normalized = _normalize_report_profile(profile)
+    env_var_name = REPORT_PROFILE_TO_API_KEY_ENV_VAR[normalized]
+    api_key = (os.environ.get(env_var_name) or "").strip()
+    if api_key:
+        return api_key
+    return _dify_workflow_api_key()
 
 
 def _dify_web_search_app_id() -> str:
@@ -120,13 +144,13 @@ def _request_error_detail(response: http_requests.Response | None, exc: Exceptio
 # Dify proxies
 # ---------------------------------------------------------------------------
 
-def _proxy_dify_chat_blocking(query: str, user: str, api_key: str) -> dict[str, Any]:
+def _proxy_dify_chat_blocking(query: str, user: str, api_key: str, inputs: dict[str, Any] | None = None) -> dict[str, Any]:
     response = None
     try:
         response = http_requests.post(
             f"{_dify_base_url()}/v1/chat-messages",
             json={
-                "inputs": {},
+                "inputs": inputs or {},
                 "query": query,
                 "response_mode": "blocking",
                 "user": user,
@@ -146,13 +170,13 @@ def _proxy_dify_chat_blocking(query: str, user: str, api_key: str) -> dict[str, 
         raise HTTPException(status_code=502, detail=f"invalid Dify JSON response: {str(exc)}")
 
 
-def _proxy_dify_chat_stream(query: str, user: str, api_key: str) -> http_requests.Response:
+def _proxy_dify_chat_stream(query: str, user: str, api_key: str, inputs: dict[str, Any] | None = None) -> http_requests.Response:
     response = None
     try:
         response = http_requests.post(
             f"{_dify_base_url()}/v1/chat-messages",
             json={
-                "inputs": {},
+                "inputs": inputs or {},
                 "query": query,
                 "response_mode": "streaming",
                 "user": user,
@@ -174,11 +198,37 @@ def _proxy_dify_chat_stream(query: str, user: str, api_key: str) -> http_request
 
 
 def _proxy_dify_workflow_blocking(query: str, user: str) -> dict[str, Any]:
-    return _proxy_dify_chat_blocking(query=query, user=user, api_key=_dify_workflow_api_key())
+    return _proxy_report_blocking(query=query, user=user, profile="standard")
 
 
 def _proxy_dify_workflow_stream(query: str, user: str) -> http_requests.Response:
-    return _proxy_dify_chat_stream(query=query, user=user, api_key=_dify_workflow_api_key())
+    return _proxy_report_stream(query=query, user=user, profile="standard")
+
+
+def _proxy_report_blocking(query: str, user: str, profile: str) -> dict[str, Any]:
+    normalized = _normalize_report_profile(profile)
+    return _proxy_dify_chat_blocking(
+        query=query,
+        user=user,
+        api_key=_dify_report_api_key(normalized),
+        inputs={
+            "report_profile": normalized,
+            "report_binding": _resolve_report_binding(normalized),
+        },
+    )
+
+
+def _proxy_report_stream(query: str, user: str, profile: str) -> http_requests.Response:
+    normalized = _normalize_report_profile(profile)
+    return _proxy_dify_chat_stream(
+        query=query,
+        user=user,
+        api_key=_dify_report_api_key(normalized),
+        inputs={
+            "report_profile": normalized,
+            "report_binding": _resolve_report_binding(normalized),
+        },
+    )
 
 
 def _proxy_dify_web_search_blocking(query: str, user: str) -> dict[str, Any]:

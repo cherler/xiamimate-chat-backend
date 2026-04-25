@@ -2294,6 +2294,19 @@ def _seed_billing_event_pricing(conn) -> None:
             [row["event_type"], row["display_name"], row["points_per_unit"], row["display_order"]],
         )
 
+    _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.billing_event_pricing
+        SET display_name = %s,
+            updated_at = NOW()
+        WHERE event_type = %s
+          AND display_name = %s
+        RETURNING event_type
+        """,
+        ["历史Workflow请求", "workflow_run", "workflow请求"],
+    )
+
     # One-time compatible uplift for legacy 1-point single-retrieve pricing.
     for event_type, legacy_points, target_points in (
         ("kb_retrieve", 1, 2),

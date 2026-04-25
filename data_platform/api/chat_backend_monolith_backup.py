@@ -76,9 +76,9 @@ POINTS_PRICE_VERSION = "v2_db_pricing"
 DEFAULT_EVENT_PRICING: list[dict[str, Any]] = [
     {"event_type": "llm_request",      "display_name": "LLM请求",      "points_per_unit": 1, "display_order": 10},
     {"event_type": "workflow_run",     "display_name": "workflow请求", "points_per_unit": 8, "display_order": 20},
-    {"event_type": "kb_retrieve",      "display_name": "知识库检索",    "points_per_unit": 1, "display_order": 30},
-    {"event_type": "product_api_call", "display_name": "商品API检索",  "points_per_unit": 1, "display_order": 40},
-    {"event_type": "web_search",       "display_name": "网络搜索",      "points_per_unit": 1, "display_order": 50},
+    {"event_type": "kb_retrieve",      "display_name": "知识库检索",    "points_per_unit": 2, "display_order": 30},
+    {"event_type": "product_api_call", "display_name": "商品API检索",  "points_per_unit": 2, "display_order": 40},
+    {"event_type": "web_search",       "display_name": "网络搜索",      "points_per_unit": 2, "display_order": 50},
 ]
 
 _EVENT_PRICING_CACHE: dict[str, dict[str, Any]] = {}

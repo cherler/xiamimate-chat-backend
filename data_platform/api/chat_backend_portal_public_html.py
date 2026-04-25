@@ -1544,10 +1544,11 @@ def render_portal_guide_html() -> str:
         <div class="card-note">第一次使用时，不建议一上来就跑很大的任务。先按下面这条路径走一遍，通常 5 分钟内就能完成第一次有效体验。</div>
         <div class="guide-list">
           <div class="guide-item"><div class="guide-title">1. 先登录，再确认账户可用</div><div class="guide-desc">从 Open WebUI 首页进入产品，首次登录后系统会自动初始化账户。建议先用 /me 或 /points 看一下当前套餐、积分余额和是否已经完成邮箱验证。</div></div>
-          <div class="guide-item"><div class="guide-title">2. 有完整任务时优先用 /workflow</div><div class="guide-desc">如果你已经知道目标市场、类目和问题，直接用 /workflow 最省事。它适合输出一份相对完整的分析结果，而不是只查一个局部指标。</div></div>
-          <div class="guide-item"><div class="guide-title">3. 只是验证一个点时用 /tool 或 /web</div><div class="guide-desc">如果你只想先验证趋势、规则或某个市场变化，不要急着跑完整 workflow。先用 /tool 做局部分析，或者用 /web 查最新外部信息，会更稳也更省积分。</div></div>
-          <div class="guide-item"><div class="guide-title">4. 看结果时先看结论，再看证据</div><div class="guide-desc">优先关注结论、关键指标、风险提示；如果结果和预期不一致，再回看工具返回、知识库引用和输入条件，判断是不是问题范围太大或条件不够明确。</div></div>
-          <div class="guide-item"><div class="guide-title">5. 用完回到账户页核对消费</div><div class="guide-desc">每次使用后，都可以回到账户管理页看消费记录、扣减来源和使用趋势。系统会优先扣减月包积分，月包不足时再扣充值包积分。</div></div>
+          <div class="guide-item"><div class="guide-title">2. 有完整任务时优先用 /report</div><div class="guide-desc">如果你已经知道目标市场、类目和问题，直接用 /report 最省事。它适合输出一份相对完整的分析结果，并且可以按 quick、standard、deep、research 选择报告深度；旧命令 /workflow 当前仍兼容保留。</div></div>
+          <div class="guide-item"><div class="guide-title">3. 不知道怎么提问时，先查提示词知识库</div><div class="guide-desc">如果你还不知道该怎么开口，直接输入“新手卖家提示词”“决策层提示词”或“客服常用提示词”这类短句。系统会先检索提示词知识库，返回可直接复制的示例和对应使用说明。</div></div>
+          <div class="guide-item"><div class="guide-title">4. 只是验证一个点时用 /tool 或 /web</div><div class="guide-desc">如果你只想先验证趋势、规则或某个市场变化，不要急着跑完整报告。先用 /tool 做局部分析，或者用 /web 查最新外部信息，会更稳也更省积分。</div></div>
+          <div class="guide-item"><div class="guide-title">5. 看结果时先看结论，再看证据</div><div class="guide-desc">优先关注结论、关键指标、风险提示；如果结果和预期不一致，再回看工具返回、知识库引用和输入条件，判断是不是问题范围太大或条件不够明确。</div></div>
+          <div class="guide-item"><div class="guide-title">6. 用完回到账户页核对消费</div><div class="guide-desc">每次使用后，都可以回到账户管理页看消费记录、扣减来源和使用趋势。系统会优先扣减月包积分，月包不足时再扣充值包积分。</div></div>
         </div>
       </section>
       <section id="commands" class="section-block card">
@@ -1555,13 +1556,13 @@ def render_portal_guide_html() -> str:
         <div class="card-note">下面这些命令可以直接复制后再替换商品、市场和时间范围。对于新手来说，先照着示例改，比从零组织问题更容易成功。</div>
         <div class="example-grid">
           <div class="example-card highlight">
-            <div class="example-kicker">完整分析</div>
-            <h3 class="example-title">/workflow：拿一份完整的选品分析</h3>
-            <p class="example-desc">适合已经有目标商品或类目，希望系统自动调工具、拉数据、形成结论的场景。</p>
-            <div class="command-block">/workflow 帮我调研一下 portable blender 在 Amazon 美国站近 90 天的需求、竞争和进入机会，重点看价格带、销量趋势和风险点</div>
+            <div class="example-kicker">报告编排</div>
+            <h3 class="example-title">/report：拿一份完整的选品分析报告</h3>
+            <p class="example-desc">适合已经有目标商品或类目，希望系统自动调工具、拉数据、形成结论，并按报告深度选择 quick、standard、deep、research 的场景。</p>
+            <div class="command-block">/report standard 帮我调研一下 portable blender 在 Amazon 美国站近 90 天的需求、竞争和进入机会，重点看价格带、销量趋势和风险点</div>
             <div class="example-meta">
               <div class="example-meta-item">适合：第一次做完整市场判断、要拿结构化结论时。</div>
-              <div class="example-meta-item">提示：问题里尽量带上市场、类目、时间范围和你最关心的输出。</div>
+              <div class="example-meta-item">提示：问题里尽量带上市场、类目、时间范围和你最关心的输出；旧入口 /workflow 当前兼容保留，默认可理解为标准完整分析。</div>
             </div>
           </div>
           <div class="example-card">
@@ -1571,7 +1572,7 @@ def render_portal_guide_html() -> str:
             <div class="command-block">/tool 帮我先判断 pet grooming vacuum 在 TikTok 美国市场最近是否明显升温，并告诉我下一步最值得调用哪些工具验证</div>
             <div class="example-meta">
               <div class="example-meta-item">适合：快速试水、缩小问题范围、减少无效消耗。</div>
-              <div class="example-meta-item">提示：如果只是查一个指标或一个判断，不要一开始就跑完整 workflow。</div>
+              <div class="example-meta-item">提示：如果只是查一个指标或一个判断，不要一开始就跑完整报告。</div>
             </div>
           </div>
           <div class="example-card">
@@ -1582,6 +1583,16 @@ def render_portal_guide_html() -> str:
             <div class="example-meta">
               <div class="example-meta-item">适合：知识库不一定覆盖、你又需要最新信息的时候。</div>
               <div class="example-meta-item">提示：实时外部变化优先用 /web，不要只靠知识库回答。</div>
+            </div>
+          </div>
+          <div class="example-card">
+            <div class="example-kicker">提示词知识库</div>
+            <h3 class="example-title">先查提示词：不会提问时先拿一批可复制示例</h3>
+            <p class="example-desc">适合你刚打开产品，还不知道应该先用 /report、/tool 还是 /web，或者想先看系统已经整理好的典型问法。</p>
+            <div class="command-block">新手卖家提示词</div>
+            <div class="example-meta">
+              <div class="example-meta-item">适合：刚上手、不知道怎么组织问题、想先找可直接复制命令的时候。</div>
+              <div class="example-meta-item">提示：也可以直接输入“决策层提示词”“客服常用提示词”，系统会优先检索知识库并返回示例和使用指南。</div>
             </div>
           </div>
           <div class="example-card">
@@ -1601,7 +1612,8 @@ def render_portal_guide_html() -> str:
         <h2>什么时候用哪种模式</h2>
         <div class="card-note">如果你不知道该用哪个命令，先按下面的判断来，通常不会错。</div>
         <div class="notice-grid">
-          <div class="notice-card accent"><h3 class="notice-title">我有完整问题，想一次拿到结论</h3><p class="notice-desc">优先用 /workflow。它更适合做“某商品在某市场是否值得做”这类完整分析。</p></div>
+          <div class="notice-card accent"><h3 class="notice-title">我有完整问题，想一次拿到结论</h3><p class="notice-desc">优先用 /report。它更适合做“某商品在某市场是否值得做”这类完整分析；如果你还习惯旧命令，/workflow 当前仍可作为兼容入口使用。</p></div>
+          <div class="notice-card"><h3 class="notice-title">我还不知道怎么提问</h3><p class="notice-desc">先直接输入“新手卖家提示词”“决策层提示词”这类短句。系统会先查提示词知识库，给你可直接复制的示例和怎么用的说明。</p></div>
           <div class="notice-card"><h3 class="notice-title">我只想先验证一个局部判断</h3><p class="notice-desc">优先用 /tool。它更适合先做小范围验证，再决定要不要继续扩大任务。</p></div>
           <div class="notice-card"><h3 class="notice-title">我需要最新外部信息</h3><p class="notice-desc">优先用 /web。平台政策、行业新闻、外部舆情和近期变化都更适合走联网搜索。</p></div>
           <div class="notice-card"><h3 class="notice-title">我想知道余额和最近消耗</h3><p class="notice-desc">优先用 /points、/usage，或者直接去账户页看消费记录、使用趋势和扣减来源。</p></div>
@@ -1622,7 +1634,7 @@ def render_portal_guide_html() -> str:
         <div class="card-note">这里已经预留好后续演示位。等你准备好实际操作 GIF 或截图后，可以直接替换，不需要再改导航结构。</div>
         <div class="demo-grid">
           <div class="demo-card">
-            <h3 class="demo-title">演示 1：如何发起一次 /workflow</h3>
+            <h3 class="demo-title">演示 1：如何发起一次 /report</h3>
             <p class="demo-desc">建议后续放一张或一段演示“输入命令 -> 等待执行 -> 查看结论”的 GIF 或截图。</p>
             <div class="demo-media" data-demo-slot="workflow">
               <div>
@@ -1630,7 +1642,7 @@ def render_portal_guide_html() -> str:
                 <p class="demo-placeholder-note">后续可替换成实际使用虾米选品智能体的演示 GIF；如果暂时没有 GIF，也可以先放一张实操截图。</p>
               </div>
             </div>
-            <p class="demo-caption">建议内容：输入 /workflow 命令、等待进度、查看最终结果。</p>
+            <p class="demo-caption">建议内容：输入 /report 命令、等待进度、查看最终结果；如需说明兼容关系，可补一张 /workflow 仍可用的过渡提示图。</p>
           </div>
           <div class="demo-card">
             <h3 class="demo-title">演示 2：如何查看消费记录和扣减来源</h3>
@@ -1684,7 +1696,7 @@ def render_portal_invite_html() -> str:
       </section>
       <section id="product" class="section-block card">
         <h2>你将注册的是什么产品</h2>
-        <div class="card-note">虾密小助手是一款面向跨境电商卖家的垂直选品与分析助手，不是泛聊天工具。它把问答、Workflow、知识库和账户体系放在一个统一入口里，帮助你从方向判断走到可执行结论。</div>
+        <div class="card-note">虾密小助手是一款面向跨境电商卖家的垂直选品与分析助手，不是泛聊天工具。它把问答、/report 报告编排、知识库和账户体系放在一个统一入口里，帮助你从方向判断走到可执行结论。</div>
         <div class="tip-banner">不是让你多聊一轮，而是帮你更快判断“这个方向值不值得做、风险在哪里、下一步该怎么继续”。如果你正在做跨境电商选品、测品或市场调研，这个产品更像一套可直接上手的分析工作台。</div>
         <div style="height:18px"></div>
         <div class="mini-kpi-row">
@@ -1703,9 +1715,10 @@ def render_portal_invite_html() -> str:
         <div class="card-note">它不是单点工具，而是把一次完整分析拆成更容易落地的四个环节，让你从“想到一个方向”走到“知道下一步该怎么做”。</div>
         <div class="timeline-list">
           <div class="timeline-item"><div class="timeline-title">1. 智能问答：先把问题问清楚</div><div class="timeline-desc">适合先澄清某个市场、某个类目、某个商品方向值不值得继续看，避免一开始就跑大任务。</div></div>
-          <div class="timeline-item"><div class="timeline-title">2. Workflow：把目标变成完整分析</div><div class="timeline-desc">当你已经有明确目标时，直接输出趋势、竞争、风险和进入建议，拿到结构化判断结果。</div></div>
-          <div class="timeline-item"><div class="timeline-title">3. 知识库：补规则和方法依据</div><div class="timeline-desc">需要看平台规则、SOP、产品说明和标准答复时，不再到处翻资料，直接回到统一入口检索。</div></div>
-          <div class="timeline-item"><div class="timeline-title">4. 账户页：回看成本和奖励结果</div><div class="timeline-desc">分析完成后，可以回到账户页看积分消耗、账本变化、邀请奖励和整体使用趋势。</div></div>
+          <div class="timeline-item"><div class="timeline-title">2. /report：把目标变成完整报告</div><div class="timeline-desc">当你已经有明确目标时，直接输出趋势、竞争、风险和进入建议，并可按 quick、standard、deep、research 选择报告深度；/workflow 当前仍作为兼容入口保留。</div></div>
+          <div class="timeline-item"><div class="timeline-title">3. 提示词知识库：先拿可直接复制的问法</div><div class="timeline-desc">如果你还不知道应该怎么提问，可以直接输入“新手卖家提示词”“决策层提示词”等短句，先拿一批系统整理好的示例和使用方式。</div></div>
+          <div class="timeline-item"><div class="timeline-title">4. 知识库：补规则和方法依据</div><div class="timeline-desc">需要看平台规则、SOP、产品说明和标准答复时，不再到处翻资料，直接回到统一入口检索。</div></div>
+          <div class="timeline-item"><div class="timeline-title">5. 账户页：回看成本和奖励结果</div><div class="timeline-desc">分析完成后，可以回到账户页看积分消耗、账本变化、邀请奖励和整体使用趋势。</div></div>
         </div>
         <div style="height:18px"></div>
         <div class="offer-grid">
@@ -1725,14 +1738,14 @@ def render_portal_invite_html() -> str:
           <div class="offer-card">
             <div class="offer-top">
               <div>
-                <div class="offer-name">Workflow 分析</div>
-                <div class="offer-tagline">适合已经有目标商品或市场时，直接拿完整分析结果。</div>
+                <div class="offer-name">/report 报告编排</div>
+                <div class="offer-tagline">适合已经有目标商品或市场时，直接拿完整分析结果，并按报告深度选择输出。</div>
               </div>
               <div class="offer-badge">完整任务</div>
             </div>
             <div class="bullet-list">
               <div class="bullet-item">输出趋势、竞争、风险和进入建议</div>
-              <div class="bullet-item">适合做一份结构化选品分析</div>
+              <div class="bullet-item">适合做一份结构化选品分析；/workflow 当前作为兼容入口保留</div>
             </div>
           </div>
           <div class="offer-card">
@@ -1745,6 +1758,7 @@ def render_portal_invite_html() -> str:
             </div>
             <div class="bullet-list">
               <div class="bullet-item">查看产品规则、SOP 和常见问题</div>
+              <div class="bullet-item">直接问“新手卖家提示词”“客服常用提示词”拿可复制示例</div>
               <div class="bullet-item">查看余额、账本、趋势和奖励到账结果</div>
             </div>
           </div>

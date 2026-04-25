@@ -77,6 +77,8 @@ from data_platform.chat_backend.domains.provider_proxy.service import (
     _proxy_knowledge_retrieve,
     _proxy_minimax_chat_completion,
     _proxy_minimax_chat_completion_stream,
+    _proxy_report_blocking,
+    _proxy_report_stream,
     _proxy_theme_api,
 )
 from data_platform.chat_backend.api.models import (
@@ -87,6 +89,7 @@ from data_platform.chat_backend.api.models import (
     IdentityExchangeRequest,
     InternalKnowledgeRetrieveRequest,
     InternalMinimaxRequest,
+    InternalReportRunRequest,
     InternalThemeAPICallRequest,
     InternalWorkflowRunRequest,
     PaymentProviderCallbackRequest,
@@ -392,6 +395,37 @@ def internal_run_dify_workflow(request: Request, payload: InternalWorkflowRunReq
 def internal_run_dify_workflow_stream(request: Request, payload: InternalWorkflowRunRequest) -> StreamingResponse:
     _require_internal_service(request, request.url.path)
     upstream_response = _proxy_dify_workflow_stream(query=payload.query, user=payload.user)
+
+    def iterate_stream() -> Any:
+        try:
+            for chunk in upstream_response.iter_content(chunk_size=4096):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream_response.close()
+
+    return StreamingResponse(
+        iterate_stream(),
+        media_type=upstream_response.headers.get("content-type") or "text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.post("/internal/provider/report/run")
+def internal_run_report(request: Request, payload: InternalReportRunRequest) -> dict[str, Any]:
+    _require_internal_service(request, request.url.path)
+    provider_response = _proxy_report_blocking(query=payload.query, user=payload.user, profile=payload.profile)
+    return _success_response(
+        "/internal/provider/report/run",
+        provider_response,
+        "report request proxied",
+    )
+
+
+@router.post("/internal/provider/report/run-stream")
+def internal_run_report_stream(request: Request, payload: InternalReportRunRequest) -> StreamingResponse:
+    _require_internal_service(request, request.url.path)
+    upstream_response = _proxy_report_stream(query=payload.query, user=payload.user, profile=payload.profile)
 
     def iterate_stream() -> Any:
         try:

@@ -1187,7 +1187,11 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
 
     const ledgerEventTypeLabels = {
       llm_request: 'LLM 请求',
-      workflow_run: 'Workflow 请求',
+      workflow_run: '历史 Workflow 请求',
+      report_quick_run: '快速报告',
+      report_standard_run: '标准报告',
+      report_deep_run: '深度报告',
+      report_research_run: '研究报告',
       kb_retrieve: '知识库检索',
       dify_knowledge_retrieve: '知识库检索',
       product_api_call: '商品 API 检索',

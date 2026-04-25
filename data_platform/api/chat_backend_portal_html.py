@@ -2232,8 +2232,10 @@ def render_portal_html() -> str:
       "promotion reward": "活动赠送积分",
       "MiniMax agent request": "按 LLM 请求次数计费。",
       "MiniMax agent request failed": "LLM 请求失败，系统已自动退款。",
-      "Dify workflow run": "一次 Workflow 固定计费 8 积分，内部步骤只保留审计记录，不重复收费。",
+      "Dify workflow run": "这是历史 Workflow 固定计费记录；当前兼容入口 /workflow 会按标准报告语义执行，新请求会记为标准报告。",
       "Dify workflow request failed": "Workflow 请求失败，系统已自动退款。",
+      "Dify report run": "一次 /report 报告按档位计费，报告内部基础检索和分析步骤不重复收费。",
+      "Dify report request failed": "/report 请求失败，系统已自动退款。",
       "expired subscription points removed": "当前订阅周期结束后，未使用完的月包积分会自动清零。"
     };
     if (mapping[description]) {
@@ -2244,7 +2246,19 @@ def render_portal_html() -> str:
     }
     if (entryType === "consume") {
       if (eventType === "workflow_run") {
-        return "一次 Workflow 固定计费 8 积分，内部检索和调用只保留审计记录，不重复收费。";
+        return "这是历史 Workflow 固定计费记录；当前兼容入口 /workflow 会按标准报告语义执行，新请求会记为标准报告。";
+      }
+      if (eventType === "report_quick_run") {
+        return "一次快速报告计费，已包含报告内部基础检索与分析步骤，不重复收费。";
+      }
+      if (eventType === "report_standard_run") {
+        return "一次标准报告计费，已包含报告内部基础检索与分析步骤，不重复收费。";
+      }
+      if (eventType === "report_deep_run") {
+        return "一次深度报告计费，已包含报告内部基础检索、下钻与分析步骤，不重复收费。";
+      }
+      if (eventType === "report_research_run") {
+        return "一次研究报告计费，已包含报告内部基础检索、外部补证与分析步骤，不重复收费。";
       }
       if (eventType === "llm_request") {
         return "按 LLM 请求次数计费。";
@@ -2311,7 +2325,11 @@ def render_portal_html() -> str:
     }
     var mapping = {
       llm_request: "LLM 请求",
-      workflow_run: "Workflow 请求",
+      workflow_run: "历史 Workflow 请求",
+      report_quick_run: "快速报告",
+      report_standard_run: "标准报告",
+      report_deep_run: "深度报告",
+      report_research_run: "研究报告",
       kb_retrieve: "知识库检索",
       dify_knowledge_retrieve: "知识库检索",
       product_api_call: "商品 API 检索",
@@ -2470,7 +2488,7 @@ def render_portal_html() -> str:
     }
     var priorityText = formatConsumptionPriority(balanceBreakdown.consumption_priority || ["subscription", "recharge", "other"]);
     var policyText = balanceBreakdown.consumption_policy_text || "系统会优先扣减月包积分；月包不足时再扣充值包积分。";
-    var examples = ["workflow_run", "llm_request", "kb_retrieve", "product_api_call", "web_search"].filter(function(eventType) {
+    var examples = ["report_quick_run", "report_standard_run", "report_deep_run", "report_research_run", "llm_request", "kb_retrieve", "product_api_call", "web_search"].filter(function(eventType) {
       return intVal(costMap[eventType]) > 0;
     }).map(function(eventType) {
       return (displayMap[eventType] || localizeLedgerEventType(eventType) || eventType) + '：' + intVal(costMap[eventType]) + ' 积分/次';

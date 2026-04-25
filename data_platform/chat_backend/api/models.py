@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, validator
 
 from data_platform.chat_backend.infra.settings import (
     ALLOWED_MESSAGE_ROLES,
+    ALLOWED_REPORT_PROFILES,
     ALLOWED_RUN_STATUSES,
     DEFAULT_PAYMENT_PROVIDER,
 )
@@ -203,6 +204,23 @@ class GrantSubscriptionRequest(BaseModel):
 class InternalWorkflowRunRequest(BaseModel):
     query: str = Field(..., min_length=1)
     user: str = Field(..., min_length=1)
+
+
+class InternalReportRunRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    user: str = Field(..., min_length=1)
+    profile: str = Field(default="standard", min_length=1)
+    sections: list[str] = Field(default_factory=list)
+    evidence_mode: str | None = None
+    answer_style: str | None = None
+    max_points: int | None = Field(default=None, ge=1)
+
+    @validator("profile")
+    def _validate_profile(cls, value: str) -> str:  # noqa: N805
+        normalized = value.strip().lower()
+        if normalized not in ALLOWED_REPORT_PROFILES:
+            raise ValueError(f"unsupported report profile: {value}")
+        return normalized
 
 
 class InternalKnowledgeRetrieveRequest(BaseModel):
