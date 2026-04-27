@@ -228,6 +228,39 @@ class InternalKnowledgeRetrieveRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
 
 
+class InternalIMAKnowledgeBaseSearchRequest(BaseModel):
+    query: str = Field(default="", max_length=200)
+    cursor: str = Field(default="")
+    limit: int = Field(default=10, ge=1, le=20)
+
+
+class InternalIMAKnowledgeSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=200)
+    knowledge_base_ids: list[str] = Field(default_factory=list)
+    knowledge_base_query: str | None = Field(default=None, max_length=200)
+    knowledge_base_limit: int = Field(default=3, ge=1, le=10)
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class InternalIMAMediaInfoRequest(BaseModel):
+    media_id: str = Field(..., min_length=1)
+
+
+class InternalMemoryProfileBuildRequest(BaseModel):
+    user_id: str = Field(..., min_length=1)
+    query: str = Field(..., min_length=1)
+    target_platform: str | None = None
+    target_market: str | None = None
+    report_profile: str = Field(default="research", min_length=1)
+
+    @validator("report_profile")
+    def _validate_memory_report_profile(cls, value: str) -> str:  # noqa: N805
+        normalized = value.strip().lower()
+        if normalized not in ALLOWED_REPORT_PROFILES:
+            raise ValueError(f"unsupported report profile: {value}")
+        return normalized
+
+
 class InternalThemeAPICallRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 

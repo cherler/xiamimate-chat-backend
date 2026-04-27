@@ -214,6 +214,7 @@ THEME_API_OPERATION_PATHS: dict[str, str] = {
     "candidate_pool_trends": "/api/product-theme/candidate-pool-trends",
     "candidate_pool_weak_forecast": "/api/product-theme/candidate-pool-weak-forecast",
     "top_asin_drilldown": "/api/product-theme/top-asin-drilldown",
+    "asin_history_timeseries": "/api/product-theme/asin-history-timeseries",
     "category_benchmark": "/api/product-theme/category-benchmark",
     "keepa_asin_lookup": "/api/product-theme/keepa-asin-lookup",
 }

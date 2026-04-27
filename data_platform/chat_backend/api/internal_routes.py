@@ -69,7 +69,11 @@ from data_platform.chat_backend.domains.portal.service import (
     _generate_portal_token,
     _portal_public_base_url,
 )
+from data_platform.chat_backend.domains.memory_profile.service import build_memory_profile
 from data_platform.chat_backend.domains.provider_proxy.service import (
+    _proxy_ima_get_media_info,
+    _proxy_ima_retrieve,
+    _proxy_ima_search_knowledge_bases,
     _proxy_dify_web_search_blocking,
     _proxy_dify_web_search_stream,
     _proxy_dify_workflow_blocking,
@@ -86,6 +90,10 @@ from data_platform.chat_backend.api.models import (
     DifyRunCallbackRequest,
     GrantPointsRequest,
     GrantSubscriptionRequest,
+    InternalIMAKnowledgeBaseSearchRequest,
+    InternalMemoryProfileBuildRequest,
+    InternalIMAKnowledgeSearchRequest,
+    InternalIMAMediaInfoRequest,
     IdentityExchangeRequest,
     InternalKnowledgeRetrieveRequest,
     InternalMinimaxRequest,
@@ -481,6 +489,67 @@ def internal_retrieve_knowledge(request: Request, payload: InternalKnowledgeRetr
         "/internal/provider/dify-dataset/retrieve",
         {"result": result},
         "knowledge retrieval proxied",
+    )
+
+
+@router.post("/internal/provider/external-kb/ima-knowledge-bases/search")
+def internal_search_ima_knowledge_bases(
+    request: Request,
+    payload: InternalIMAKnowledgeBaseSearchRequest,
+) -> dict[str, Any]:
+    _require_internal_service(request, request.url.path)
+    result = _proxy_ima_search_knowledge_bases(query=payload.query, cursor=payload.cursor, limit=payload.limit)
+    return _success_response(
+        "/internal/provider/external-kb/ima-knowledge-bases/search",
+        result,
+        "IMA knowledge base search proxied",
+    )
+
+
+@router.post("/internal/provider/external-kb/ima-search")
+def internal_search_ima_knowledge(request: Request, payload: InternalIMAKnowledgeSearchRequest) -> dict[str, Any]:
+    _require_internal_service(request, request.url.path)
+    result = _proxy_ima_retrieve(
+        query=payload.query,
+        top_k=payload.top_k,
+        knowledge_base_ids=payload.knowledge_base_ids,
+        knowledge_base_query=payload.knowledge_base_query,
+        knowledge_base_limit=payload.knowledge_base_limit,
+    )
+    return _success_response(
+        "/internal/provider/external-kb/ima-search",
+        result,
+        "IMA knowledge retrieval proxied",
+    )
+
+
+@router.post("/internal/provider/external-kb/ima-media-info")
+def internal_get_ima_media_info(request: Request, payload: InternalIMAMediaInfoRequest) -> dict[str, Any]:
+    _require_internal_service(request, request.url.path)
+    result = _proxy_ima_get_media_info(media_id=payload.media_id)
+    return _success_response(
+        "/internal/provider/external-kb/ima-media-info",
+        result,
+        "IMA media info proxied",
+    )
+
+
+@router.post("/internal/provider/memory-profile/build")
+def internal_build_memory_profile(request: Request, payload: InternalMemoryProfileBuildRequest) -> dict[str, Any]:
+    _require_internal_service(request, request.url.path)
+    with _postgres_conn() as conn:
+        result = build_memory_profile(
+            conn,
+            user_id=payload.user_id,
+            query=payload.query,
+            target_platform=payload.target_platform,
+            target_market=payload.target_market,
+            report_profile=payload.report_profile,
+        )
+    return _success_response(
+        "/internal/provider/memory-profile/build",
+        result,
+        "memory profile built",
     )
 
 

@@ -2090,6 +2090,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
 
     const siteConfigInputType = (key) => {
       if (key === 'wechat_qr_base64' || key === 'official_account_qr_base64') return 'file';
+      if (key === 'ima_default_knowledge_bases_json') return 'textarea';
       if (key === 'feedback_url') return 'url';
       return 'text';
     };
@@ -2102,6 +2103,10 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       wechat_qr_base64: '顶部“企微”按钮弹窗展示的二维码图片，建议上传清晰正方形图片。',
       official_account_qr_base64: '顶部“公众号”按钮弹窗展示的二维码图片，建议上传清晰正方形图片。',
       feedback_url: '顶部“反馈”按钮跳转的外部意见收集链接。',
+      ima_default_knowledge_bases_json: '研究档 IMA 外部知识库默认池。支持 JSON 数组，元素格式为 {"id":"知识库ID","name":"显示名"}；也兼容只填 {"id":"..."}。',
+      ima_default_knowledge_base_query: '未显式传知识库时，用这个词先搜默认知识库候选；通常填业务域，如“跨境电商”。',
+      ima_query_rewrite_enabled: '是否启用 LLM 动态改写 IMA 检索词。true/false。',
+      ima_query_rewrite_max_terms: 'LLM 最多生成多少个 IMA 检索词，建议 2-4。',
       email_verification_request_ip_window_seconds: '验证码发送接口按 IP 统计的时间窗口，单位秒。',
       email_verification_request_ip_max_attempts: '同一 IP 在发送窗口内最多可请求多少次验证码。',
       email_verification_confirm_ip_window_seconds: '验证码确认接口按 IP 统计的时间窗口，单位秒。',
@@ -2118,6 +2123,17 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
         title: '站点联络配置',
         description: '管理顶部联络入口和外部反馈信息。',
         keys: ['contact_email', 'wechat_qr_base64', 'official_account_qr_base64', 'feedback_url'],
+      },
+      {
+        key: 'ima_external_kb',
+        title: 'IMA 外部知识库配置',
+        description: '配置研究档默认使用的 IMA 知识库池，以及检索词改写参数。',
+        keys: [
+          'ima_default_knowledge_bases_json',
+          'ima_default_knowledge_base_query',
+          'ima_query_rewrite_enabled',
+          'ima_query_rewrite_max_terms',
+        ],
       },
     ];
 
@@ -2170,6 +2186,26 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
               </div>
               <div class="button-row">
                 <button class="secondary" data-save-site-config="${escapeHtml(row.config_key)}" data-input-type="file">保存</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+      if (inputType === 'textarea') {
+        return `
+          <div class="mini-card" data-site-config-card="${escapeHtml(row.config_key)}">
+            <div style="display:grid; gap:10px;">
+              <div>
+                <strong>${escapeHtml(row.display_name || row.config_key)}</strong>
+                <div class="hint">config_key = ${escapeHtml(row.config_key)}</div>
+                ${description ? `<div class="hint" style="margin-top:6px;line-height:1.6;">${escapeHtml(description)}</div>` : ''}
+              </div>
+              <div>
+                <label for="site-config-val-${escapeHtml(row.config_key)}">值</label>
+                <textarea id="site-config-val-${escapeHtml(row.config_key)}" rows="5" style="width:100%;resize:vertical;">${escapeHtml(row.config_value || '')}</textarea>
+              </div>
+              <div class="button-row">
+                <button class="secondary" data-save-site-config="${escapeHtml(row.config_key)}" data-input-type="text">保存</button>
               </div>
             </div>
           </div>

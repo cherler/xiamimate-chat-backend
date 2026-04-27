@@ -44,6 +44,26 @@ DEFAULT_SITE_CONFIG: list[dict[str, str]] = [
         "config_value": "https://my.feishu.cn/share/base/form/shrcnQVnRPvEuOGjz9ojf05tD1d",
     },
     {
+        "config_key": "ima_default_knowledge_bases_json",
+        "display_name": "IMA 默认知识库(JSON)",
+        "config_value": "[]",
+    },
+    {
+        "config_key": "ima_default_knowledge_base_query",
+        "display_name": "IMA 默认知识库检索词",
+        "config_value": "跨境电商",
+    },
+    {
+        "config_key": "ima_query_rewrite_enabled",
+        "display_name": "IMA 检索词改写开关",
+        "config_value": "true",
+    },
+    {
+        "config_key": "ima_query_rewrite_max_terms",
+        "display_name": "IMA 检索词改写最大词数",
+        "config_value": "3",
+    },
+    {
         "config_key": "email_verification_request_ip_window_seconds",
         "display_name": "邮箱验证码发送-IP 限流窗口秒数",
         "config_value": "300",
