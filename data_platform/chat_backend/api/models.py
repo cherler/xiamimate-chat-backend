@@ -228,6 +228,80 @@ class InternalKnowledgeRetrieveRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
 
 
+class InternalTavilySearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    user: str | None = Field(default=None, max_length=120)
+    product_query: str | None = Field(default=None, max_length=300)
+    target_platform: str | None = Field(default=None, max_length=80)
+    target_market: str | None = Field(default=None, max_length=80)
+    intent: str | None = Field(default=None, max_length=120)
+    search_mode: str | None = Field(default=None, max_length=30)
+    topic: str = Field(default="general", max_length=20)
+    search_depth: str = Field(default="basic", max_length=20)
+    time_range: str | None = Field(default=None, max_length=20)
+    days: int | None = Field(default=None, ge=1, le=3650)
+    start_date: str | None = Field(default=None, max_length=10)
+    end_date: str | None = Field(default=None, max_length=10)
+    max_results: int = Field(default=5, ge=1, le=10)
+    minimum_relevance: float = Field(default=0.35, ge=0.0, le=1.5)
+    include_domains: list[str] = Field(default_factory=list)
+    exclude_domains: list[str] = Field(default_factory=list)
+    include_answer: bool = False
+    include_raw_content: bool = False
+    include_images: bool = False
+
+    @validator("topic")
+    def _validate_tavily_topic(cls, value: str) -> str:  # noqa: N805
+        normalized = value.strip().lower()
+        if normalized not in {"general", "news", "finance"}:
+            raise ValueError(f"unsupported Tavily topic: {value}")
+        return normalized
+
+    @validator("search_depth")
+    def _validate_tavily_search_depth(cls, value: str) -> str:  # noqa: N805
+        normalized = value.strip().lower()
+        if normalized not in {"basic", "advanced"}:
+            raise ValueError(f"unsupported Tavily search_depth: {value}")
+        return normalized
+
+    @validator("search_mode")
+    def _validate_tavily_search_mode(cls, value: str | None) -> str | None:  # noqa: N805
+        if value is None:
+            return value
+        normalized = value.strip().lower().replace("_", "-")
+        if not normalized:
+            return None
+        if normalized not in {"auto", "commerce", "news", "current-events", "hot-news"}:
+            raise ValueError(f"unsupported Tavily search_mode: {value}")
+        return normalized
+
+    @validator("time_range")
+    def _validate_tavily_time_range(cls, value: str | None) -> str | None:  # noqa: N805
+        if value is None:
+            return value
+        normalized = value.strip().lower()
+        if not normalized:
+            return None
+        if normalized not in {"day", "week", "month", "year", "d", "w", "m", "y"}:
+            raise ValueError(f"unsupported Tavily time_range: {value}")
+        return normalized
+
+    @validator("start_date", "end_date")
+    def _validate_tavily_date(cls, value: str | None) -> str | None:  # noqa: N805
+        if value is None:
+            return value
+        normalized = value.strip()
+        if not normalized:
+            return None
+        parts = normalized.split("-")
+        if len(parts) != 3 or any(not part.isdigit() for part in parts):
+            raise ValueError(f"date must use YYYY-MM-DD format: {value}")
+        year, month, day = [int(part) for part in parts]
+        if year < 2000 or not 1 <= month <= 12 or not 1 <= day <= 31:
+            raise ValueError(f"date must use YYYY-MM-DD format: {value}")
+        return normalized
+
+
 class InternalIMAKnowledgeBaseSearchRequest(BaseModel):
     query: str = Field(default="", max_length=200)
     cursor: str = Field(default="")
@@ -265,8 +339,12 @@ class InternalThemeAPICallRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
-class InternalMinimaxRequest(BaseModel):
+class InternalLLMRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class InternalMinimaxRequest(InternalLLMRequest):
+    pass
 
 
 class DifyRunCallbackRequest(BaseModel):

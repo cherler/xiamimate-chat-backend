@@ -6,12 +6,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
+from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import requests as http_requests
 from fastapi import HTTPException
 
-from data_platform.llm_client import build_llm_provider
+from data_platform.llm_client import build_chat_completions_url, build_llm_provider, build_openai_compatible_config
 from data_platform.chat_backend.domains.site_config import (
     _get_site_config_int_value,
     _get_site_config_value,
@@ -103,6 +106,29 @@ def _dify_web_search_api_key() -> str:
     return api_key
 
 
+def _tavily_base_url() -> str:
+    return (os.environ.get("TAVILY_API_BASE_URL") or "https://api.tavily.com").rstrip("/")
+
+
+def _tavily_api_key() -> str:
+    api_key = (os.environ.get("TAVILY_API_KEY") or "").strip()
+    if not api_key:
+        raise HTTPException(status_code=500, detail="TAVILY_API_KEY is not configured")
+    return api_key
+
+
+def _tavily_timeout() -> int:
+    return max(1, int(os.environ.get("TAVILY_REQUEST_TIMEOUT", "30")))
+
+
+def _tavily_default_exclude_domains() -> list[str]:
+    raw_value = os.environ.get(
+        "TAVILY_DEFAULT_EXCLUDE_DOMAINS",
+        "who13.com,wgntv.com,aol.com,yahoo.com,msn.com,newsweek.com,people.com",
+    )
+    return [item.strip().lower() for item in raw_value.split(",") if item.strip()]
+
+
 def _dify_dataset_api_key() -> str:
     api_key = (os.environ.get("DIFY_DATASET_API_KEY") or "").strip()
     if not api_key:
@@ -129,6 +155,20 @@ def _openai_api_key() -> str:
     if not api_key:
         raise HTTPException(status_code=500, detail="AGENT_OPENAI_API_KEY is not configured")
     return api_key
+
+
+def _agent_openai_provider():
+    provider = build_llm_provider("AGENT_OPENAI", provider_default="openai_compatible", enabled_default=True)
+    if provider.provider_name != "openai_compatible":
+        raise HTTPException(status_code=500, detail=f"AGENT_OPENAI provider mismatch: {provider.provider_name}")
+    return provider
+
+
+def _agent_anthropic_provider():
+    provider = build_llm_provider("AGENT_ANTHROPIC", provider_default="anthropic_compatible", enabled_default=False)
+    if provider.provider_name != "anthropic_compatible":
+        raise HTTPException(status_code=500, detail=f"AGENT_ANTHROPIC provider mismatch: {provider.provider_name}")
+    return provider
 
 
 def _ima_base_url() -> str:
@@ -186,6 +226,352 @@ def _compact_unique_strings(values: list[Any], *, limit: int | None = None) -> l
         if limit is not None and len(result) >= limit:
             break
     return result
+
+
+def _normalize_tavily_query_text(value: Any) -> str:
+    text = str(value or "").strip()
+    text = re.sub(r"^/(?:report|workflow|wf|agent|tool|web)\b", "", text, flags=re.IGNORECASE).strip()
+    text = re.sub(r"^(?:quick|standard|deep|research)\b", "", text, flags=re.IGNORECASE).strip()
+    text = re.sub(r"^(?:请|帮我|请帮我|麻烦帮我|我想看|想看|帮忙)", "", text).strip()
+    text = re.sub(r"^(?:调研一下|分析一下|分析|调研|看看|评估一下|评估|判断一下|判断)", "", text).strip()
+    return text.strip("：:，,。.!?！？；; ")
+
+
+def _is_tavily_news_request(*, query: str, intent: str | None = None, topic: str | None = None, search_mode: str | None = None) -> bool:
+    mode_lookup = str(search_mode or "").strip().lower()
+    if mode_lookup in {"news", "current_events", "current-events", "hot_news", "hot-news"}:
+        return True
+    topic_lookup = str(topic or "").strip().lower()
+    if topic_lookup == "news":
+        return True
+    lookup = f"{query}\n{intent or ''}".lower()
+    chinese_news_tokens = [
+        "新闻",
+        "热点",
+        "今日",
+        "今天",
+        "本周",
+        "最新",
+        "快讯",
+        "公告",
+        "政策",
+        "规则更新",
+        "平台动态",
+        "卖家影响",
+    ]
+    english_news_tokens = [
+        "news",
+        "today",
+        "latest",
+        "breaking",
+        "headline",
+        "policy update",
+        "seller update",
+        "platform update",
+        "current events",
+    ]
+    return any(token in query for token in chinese_news_tokens) or any(token in lookup for token in english_news_tokens)
+
+
+def _is_cross_border_ecommerce_query(query: str) -> bool:
+    lookup = query.lower()
+    return any(
+        token in query or token in lookup
+        for token in [
+            "跨境电商",
+            "跨境卖家",
+            "出海",
+            "amazon",
+            "亚马逊",
+            "tiktok shop",
+            "temu",
+            "shein",
+            "shopify",
+            "cross-border ecommerce",
+            "cross border ecommerce",
+            "e-commerce sellers",
+            "ecommerce sellers",
+        ]
+    )
+
+
+def _tavily_requested_result_limit(query: str, requested_limit: int) -> int:
+    text = str(query or "")
+    match = re.search(r"top\s*(\d{1,2})", text, flags=re.IGNORECASE)
+    if not match:
+        match = re.search(r"前\s*(\d{1,2})\s*(?:条|个|则)?", text)
+    if match:
+        requested_limit = max(requested_limit, int(match.group(1)))
+    return max(1, min(10, requested_limit))
+
+
+def _build_tavily_news_query_variants(query: str, *, limit: int = 4) -> list[str]:
+    normalized = _normalize_tavily_query_text(query)
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    variants: list[str] = []
+    if normalized:
+        variants.append(normalized)
+
+    if _is_cross_border_ecommerce_query(query):
+        variants.extend(
+            [
+                f"{current_date} 跨境电商 今日 热点新闻 平台 政策 卖家 影响 Amazon TikTok Shop Temu SHEIN",
+                "跨境电商 最新新闻 平台政策 卖家影响 Amazon TikTok Shop Temu SHEIN Shopify",
+                "cross-border ecommerce latest news Amazon TikTok Shop Temu SHEIN seller policy updates",
+                "Amazon Seller Central TikTok Shop Temu SHEIN ecommerce seller policy update latest news",
+            ]
+        )
+    else:
+        variants.extend(
+            [
+                f"{current_date} {normalized} 最新新闻 政策 影响",
+                f"{normalized} latest news policy update",
+                f"{normalized} today headlines",
+            ]
+        )
+    return _compact_unique_strings(variants, limit=limit)
+
+
+def _guess_product_query_for_tavily(query: str, product_query: str | None = None) -> str:
+    explicit = _normalize_tavily_query_text(product_query)
+    if explicit:
+        return explicit
+
+    text = _normalize_tavily_query_text(query)
+    if not text:
+        return ""
+    patterns = [
+        r"(?P<product>.+?)\s+在\s+(?:Amazon|亚马逊|TikTok|Temu|美国|英国|德国|日本)",
+        r"(?P<product>.+?)\s+(?:Amazon|亚马逊|TikTok|Temu)\s*(?:美国|US|UK|DE|JP)?\s*(?:市场|平台)",
+        r"(?P<product>[A-Za-z0-9][A-Za-z0-9\s\-/&]+?)\s+(?:market|opportunity|trend|amazon|temu|tiktok)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            candidate = match.group("product").strip(" ：:，,。.!?！？；;")
+            if candidate:
+                return candidate
+    text = re.split(r"并输出|输出|并给出|，|。|；|\n", text, maxsplit=1)[0]
+    text = re.sub(r"(?:在)?(?:Amazon|亚马逊|TikTok Shop|TikTok|Temu)(?:美国|US|UK|DE|JP|英国|德国|日本)?(?:市场|平台)?", "", text, flags=re.IGNORECASE)
+    return text.strip(" ：:，,。.!?！？；;")
+
+
+def _build_tavily_search_query(
+    *,
+    query: str,
+    product_query: str | None = None,
+    target_platform: str | None = None,
+    target_market: str | None = None,
+    intent: str | None = None,
+    topic: str | None = None,
+    search_mode: str | None = None,
+) -> dict[str, Any]:
+    normalized_intent = str(intent or "market opportunity").strip() or "market opportunity"
+    if _is_tavily_news_request(query=query, intent=normalized_intent, topic=topic, search_mode=search_mode):
+        query_variants = _build_tavily_news_query_variants(query)
+        search_query = query_variants[0] if query_variants else _normalize_tavily_query_text(query)
+        return {
+            "query": search_query,
+            "query_variants": query_variants or [search_query],
+            "product_query": "",
+            "target_platform": str(target_platform or "").strip(),
+            "target_market": str(target_market or "").strip(),
+            "intent": normalized_intent,
+            "search_mode": "news",
+        }
+
+    product = _guess_product_query_for_tavily(query, product_query)
+    platform = str(target_platform or "").strip()
+    market = str(target_market or "").strip()
+
+    inferred_platform = platform
+    lookup = query.lower()
+    if not inferred_platform:
+        if "amazon" in lookup or "亚马逊" in query:
+            inferred_platform = "Amazon"
+        elif "temu" in lookup:
+            inferred_platform = "Temu"
+        elif "tiktok" in lookup or "抖音" in query:
+            inferred_platform = "TikTok Shop"
+
+    inferred_market = market
+    if not inferred_market:
+        if "美国" in query or " us" in f" {lookup} " or "usa" in lookup:
+            inferred_market = "US"
+        elif "英国" in query or " uk" in f" {lookup} ":
+            inferred_market = "UK"
+        elif "德国" in query or " de" in f" {lookup} ":
+            inferred_market = "DE"
+        elif "日本" in query or " jp" in f" {lookup} ":
+            inferred_market = "JP"
+
+    search_parts = [product or _normalize_tavily_query_text(query)]
+    if inferred_platform:
+        search_parts.append(inferred_platform)
+    if inferred_market:
+        search_parts.append(inferred_market)
+    search_parts.extend([normalized_intent, "reviews", "price", "competition"])
+    search_query = " ".join(part for part in search_parts if part).strip()
+    return {
+        "query": search_query,
+        "query_variants": [search_query],
+        "product_query": product,
+        "target_platform": inferred_platform,
+        "target_market": inferred_market,
+        "intent": normalized_intent,
+        "search_mode": "commerce",
+    }
+
+
+def _domain_from_url(url: str) -> str:
+    try:
+        return (urlparse(url).netloc or "").lower().removeprefix("www.")
+    except Exception:
+        return ""
+
+
+def _score_tavily_result(item: dict[str, Any], *, product_query: str, target_platform: str) -> tuple[float, list[str]]:
+    title = str(item.get("title") or "")
+    content = str(item.get("content") or "")
+    url = str(item.get("url") or "")
+    domain = _domain_from_url(url)
+    haystack = f"{title}\n{content}\n{url}".lower()
+    score = float(item.get("score") or 0.0)
+    reasons: list[str] = []
+
+    product_tokens = [token.lower() for token in re.findall(r"[A-Za-z0-9]+", product_query or "") if len(token) >= 3]
+    matched_tokens = [token for token in product_tokens if token in haystack]
+    if product_tokens:
+        token_ratio = len(set(matched_tokens)) / max(1, len(set(product_tokens)))
+        score += token_ratio * 0.45
+        if token_ratio >= 0.5:
+            reasons.append("product_match")
+
+    platform_lookup = (target_platform or "").lower()
+    if platform_lookup and platform_lookup in haystack:
+        score += 0.15
+        reasons.append("platform_match")
+    if any(keyword in haystack for keyword in ["best seller", "bestseller", "most wished", "amazon", "review", "price"]):
+        score += 0.08
+        reasons.append("commerce_context")
+    if any(domain.endswith(suffix) for suffix in ["amazon.com", "junglescout.com", "helium10.com", "keepa.com", "statista.com"]):
+        score += 0.12
+        reasons.append("commerce_domain")
+    if any(noise in haystack for noise in ["tornado", "shooting", "celebrity", "weather", "mother's day"]):
+        score -= 0.3
+        reasons.append("news_noise")
+    return score, reasons
+
+
+def _score_tavily_news_result(item: dict[str, Any], *, query: str) -> tuple[float, list[str]]:
+    title = str(item.get("title") or "")
+    content = str(item.get("content") or "")
+    url = str(item.get("url") or "")
+    domain = _domain_from_url(url)
+    haystack = f"{title}\n{content}\n{url}".lower()
+    raw_text = f"{title}\n{content}\n{url}"
+    score = float(item.get("score") or 0.0)
+    reasons: list[str] = []
+
+    ecommerce_terms = ["跨境", "跨境电商", "卖家", "电商", "出海", "amazon", "亚马逊", "tiktok", "temu", "shein", "shopify", "ecommerce", "e-commerce"]
+    platform_terms = ["amazon", "亚马逊", "seller central", "tiktok shop", "temu", "shein", "shopify", "walmart", "etsy", "lazada", "shopee"]
+    news_terms = ["新闻", "热点", "最新", "今日", "今天", "公告", "政策", "规则", "动态", "发布", "更新", "news", "latest", "announced", "policy", "update", "regulation"]
+    seller_impact_terms = ["卖家", "商家", "店铺", "佣金", "物流", "关税", "合规", "广告", "流量", "seller", "merchant", "tariff", "fee", "logistics", "compliance"]
+
+    if any(term in raw_text or term in haystack for term in ecommerce_terms):
+        score += 0.35
+        reasons.append("ecommerce_context")
+    if any(term in raw_text or term in haystack for term in platform_terms):
+        score += 0.2
+        reasons.append("platform_context")
+    if any(term in raw_text or term in haystack for term in news_terms):
+        score += 0.15
+        reasons.append("news_context")
+    if any(term in raw_text or term in haystack for term in seller_impact_terms):
+        score += 0.12
+        reasons.append("seller_impact_context")
+    if item.get("published_date"):
+        score += 0.08
+        reasons.append("dated_result")
+
+    trusted_domain_suffixes = [
+        "cifnews.com",
+        "ebrun.com",
+        "sellercentral.amazon.com",
+        "sell.amazon.com",
+        "aboutamazon.com",
+        "newsroom.tiktok.com",
+        "seller-us.tiktok.com",
+        "marketplacepulse.com",
+        "practicalecommerce.com",
+        "digitalcommerce360.com",
+        "retaildive.com",
+        "pymnts.com",
+        "ecommercebytes.com",
+        "channelx.world",
+        "reuters.com",
+        "cnbc.com",
+    ]
+    if any(domain.endswith(suffix) for suffix in trusted_domain_suffixes):
+        score += 0.18
+        reasons.append("trusted_news_domain")
+
+    technical_noise_terms = ["github", "githubdaily", "代码", "开源", "repository", "developer", "python", "javascript"]
+    if _is_cross_border_ecommerce_query(query) and any(term in raw_text.lower() for term in technical_noise_terms):
+        score -= 0.7
+        reasons.append("technical_noise")
+    if any(noise in haystack for noise in ["coupon code", "promo code", "招聘", "job opening", "weather", "celebrity"]):
+        score -= 0.25
+        reasons.append("general_noise")
+    return score, reasons
+
+
+def _format_tavily_result_text(query: str, results: list[dict[str, Any]], dropped_count: int, *, search_mode: str = "commerce") -> str:
+    if not results:
+        return f"Tavily 搜索未得到可用于报告的高相关结果。原始查询: {query}。已过滤低相关或噪声结果 {dropped_count} 条。"
+    if search_mode == "news":
+        lines = [f"Tavily 新闻/热点搜索可用结果 {len(results)} 条；已过滤低相关或噪声结果 {dropped_count} 条。"]
+    else:
+        lines = [f"Tavily 搜索可用结果 {len(results)} 条；已过滤低相关或噪声结果 {dropped_count} 条。"]
+    for index, item in enumerate(results, 1):
+        title = item.get("title") or "未命名结果"
+        domain = item.get("domain") or _domain_from_url(str(item.get("url") or "")) or "unknown"
+        content = str(item.get("content") or "").strip().replace("\n", " ")
+        snippet = content[:280] + ("..." if len(content) > 280 else "")
+        published_date = item.get("published_date") or "unknown-date"
+        if search_mode == "news":
+            lines.append(f"{index}. {title} ({domain}, {published_date})\n   相关性: {item.get('relevance_score')}；摘要: {snippet}\n   URL: {item.get('url')}")
+        else:
+            lines.append(f"{index}. {title} ({domain})\n   相关性: {item.get('relevance_score')}；摘要: {snippet}\n   URL: {item.get('url')}")
+    return "\n".join(lines)
+
+
+def _normalize_tavily_time_filters(payload: dict[str, Any]) -> dict[str, Any]:
+    time_filters: dict[str, Any] = {}
+    time_range_aliases = {
+        "d": "day",
+        "w": "week",
+        "m": "month",
+        "y": "year",
+    }
+    time_range = str(payload.get("time_range") or "").strip().lower()
+    time_range = time_range_aliases.get(time_range, time_range)
+    if time_range in {"day", "week", "month", "year"}:
+        time_filters["time_range"] = time_range
+
+    days = payload.get("days")
+    if days not in (None, ""):
+        try:
+            normalized_days = max(1, min(3650, int(days)))
+            time_filters["days"] = normalized_days
+        except (TypeError, ValueError):
+            pass
+
+    for field_name in ("start_date", "end_date"):
+        value = str(payload.get(field_name) or "").strip()
+        if value:
+            time_filters[field_name] = value
+    return time_filters
 
 
 def _parse_ima_knowledge_bases_config(raw_value: str) -> list[dict[str, str]]:
@@ -717,6 +1103,176 @@ def _proxy_dify_web_search_stream(query: str, user: str) -> http_requests.Respon
     return _proxy_dify_chat_stream(query=query, user=user, api_key=_dify_web_search_api_key())
 
 
+def _proxy_tavily_search(payload: dict[str, Any]) -> dict[str, Any]:
+    raw_query = str(payload.get("query") or "").strip()
+    if not raw_query:
+        raise HTTPException(status_code=400, detail="query is required")
+
+    requested_topic = str(payload.get("topic") or "general").strip().lower()
+    query_plan = _build_tavily_search_query(
+        query=raw_query,
+        product_query=payload.get("product_query"),
+        target_platform=payload.get("target_platform"),
+        target_market=payload.get("target_market"),
+        intent=payload.get("intent"),
+        topic=requested_topic,
+        search_mode=payload.get("search_mode"),
+    )
+    search_mode = str(query_plan.get("search_mode") or "commerce")
+    include_domains = _compact_unique_strings(list(payload.get("include_domains") or []), limit=20)
+    requested_exclude_domains = _compact_unique_strings(list(payload.get("exclude_domains") or []), limit=50)
+    exclude_domains = _compact_unique_strings(
+        requested_exclude_domains + _tavily_default_exclude_domains(),
+        limit=80,
+    )
+    max_results = _tavily_requested_result_limit(raw_query, max(1, min(10, int(payload.get("max_results") or 5))))
+    raw_limit = max(max_results, min(20, max_results * 3))
+    search_depth = str(payload.get("search_depth") or "basic").strip().lower()
+    if search_depth not in {"basic", "advanced"}:
+        search_depth = "basic"
+    topic = requested_topic
+    if topic not in {"general", "news", "finance"}:
+        topic = "general"
+    if search_mode == "news" and topic == "general":
+        topic = "news"
+    time_filters = _normalize_tavily_time_filters(payload)
+
+    request_payload: dict[str, Any] = {
+        "query": query_plan["query"],
+        "search_depth": search_depth,
+        "topic": topic,
+        "max_results": raw_limit,
+        "include_answer": bool(payload.get("include_answer", False)),
+        "include_raw_content": bool(payload.get("include_raw_content", False)),
+        "include_images": bool(payload.get("include_images", False)),
+    }
+    request_payload.update(time_filters)
+    if include_domains:
+        request_payload["include_domains"] = include_domains
+    if exclude_domains:
+        request_payload["exclude_domains"] = exclude_domains
+
+    response_records: list[dict[str, Any]] = []
+    request_errors: list[str] = []
+    api_key = _tavily_api_key()
+    query_variants = _compact_unique_strings(list(query_plan.get("query_variants") or [query_plan["query"]]), limit=4 if search_mode == "news" else 1)
+    for search_query in query_variants:
+        variant_payload = {**request_payload, "query": search_query}
+        response = None
+        try:
+            response = http_requests.post(
+                f"{_tavily_base_url()}/search",
+                json={**variant_payload, "api_key": api_key},
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                timeout=(10, _tavily_timeout()),
+            )
+            response.raise_for_status()
+            response_records.append({"query": search_query, "response_json": response.json()})
+        except http_requests.RequestException as exc:
+            request_errors.append(("Tavily API 请求失败:\n" + _request_error_detail(response, exc))[:1000])
+        except ValueError as exc:
+            request_errors.append(f"Tavily API 返回了无法解析的 JSON: {str(exc)}")
+
+    if not response_records:
+        detail = request_errors[0] if request_errors else "Tavily API 请求失败"
+        raise HTTPException(status_code=502, detail=detail[:4000])
+
+    raw_results: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    answers: list[str] = []
+    request_ids: list[Any] = []
+    response_times: list[Any] = []
+    for record in response_records:
+        response_json = record["response_json"]
+        if response_json.get("answer"):
+            answers.append(str(response_json.get("answer")))
+        if response_json.get("request_id"):
+            request_ids.append(response_json.get("request_id"))
+        if response_json.get("response_time") is not None:
+            response_times.append(response_json.get("response_time"))
+        for item in response_json.get("results") or []:
+            if not isinstance(item, dict):
+                continue
+            url = str(item.get("url") or "").strip()
+            dedupe_key = url or f"{item.get('title')}::{item.get('content')}"
+            if dedupe_key in seen_urls:
+                continue
+            seen_urls.add(dedupe_key)
+            enriched_item = dict(item)
+            enriched_item["source_query"] = record["query"]
+            raw_results.append(enriched_item)
+    normalized_results: list[dict[str, Any]] = []
+    dropped_results: list[dict[str, Any]] = []
+    minimum_relevance = float(payload.get("minimum_relevance") or (0.25 if search_mode == "news" else 0.35))
+
+    for item in raw_results:
+        url = str(item.get("url") or "").strip()
+        domain = _domain_from_url(url)
+        if search_mode == "news":
+            relevance_score, reasons = _score_tavily_news_result(item, query=raw_query)
+        else:
+            relevance_score, reasons = _score_tavily_result(
+                item,
+                product_query=str(query_plan.get("product_query") or ""),
+                target_platform=str(query_plan.get("target_platform") or ""),
+            )
+        normalized_item = {
+            "title": str(item.get("title") or "").strip(),
+            "url": url,
+            "domain": domain,
+            "content": str(item.get("content") or "").strip(),
+            "published_date": item.get("published_date"),
+            "source_query": item.get("source_query"),
+            "tavily_score": item.get("score"),
+            "relevance_score": round(relevance_score, 4),
+            "relevance_reasons": reasons,
+        }
+        if relevance_score >= minimum_relevance:
+            normalized_results.append(normalized_item)
+        else:
+            dropped_results.append(normalized_item)
+
+    normalized_results.sort(key=lambda item: float(item.get("relevance_score") or 0.0), reverse=True)
+    selected_results = normalized_results[:max_results]
+    dropped_count = len(raw_results) - len(selected_results)
+
+    return {
+        "provider": "tavily",
+        "capability": "web_search",
+        "query": raw_query,
+        "query_plan": query_plan,
+        "request": {
+            **request_payload,
+            "query_variants": query_variants,
+            "api_key": "***",
+        },
+        "answer": "\n\n".join(answers) if answers else None,
+        "results": selected_results,
+        "dropped_results": dropped_results[:10],
+        "result_text": _format_tavily_result_text(query_plan["query"], selected_results, dropped_count, search_mode=search_mode),
+        "source_meta": {
+            "request_id": request_ids[0] if len(request_ids) == 1 else request_ids,
+            "response_time": response_times[0] if len(response_times) == 1 else response_times,
+            "raw_result_count": len(raw_results),
+            "selected_result_count": len(selected_results),
+            "dropped_result_count": dropped_count,
+            "search_mode": search_mode,
+            "query_variant_count": len(query_variants),
+            "search_depth": search_depth,
+            "topic": topic,
+            "time_filters": time_filters,
+            "partial_error_count": len(request_errors),
+        },
+        "degradation": {
+            "status": "ok" if selected_results and not request_errors else ("partial" if selected_results else "no_relevant_results"),
+            "reason": "" if selected_results and not request_errors else ("Some Tavily query variants failed." if selected_results else "Tavily returned results, but none passed local relevance filtering."),
+        },
+    }
+
+
 def _proxy_knowledge_retrieve(query: str, top_k: int) -> str:
     all_records: list[dict[str, Any]] = []
     errors: list[str] = []
@@ -777,6 +1333,83 @@ def _proxy_knowledge_retrieve(query: str, top_k: int) -> str:
 
 
 # ---------------------------------------------------------------------------
+# OpenAI-compatible / Anthropic-compatible LLM proxy
+# ---------------------------------------------------------------------------
+
+def _proxy_openai_chat_completion(payload: dict[str, Any]) -> dict[str, Any]:
+    provider = _agent_openai_provider()
+    extra_body = {
+        key: value
+        for key, value in dict(payload or {}).items()
+        if key not in {"messages", "temperature", "response_format", "model"}
+    }
+    try:
+        return provider.chat(
+            messages=list(payload.get("messages") or []),
+            temperature=float(payload.get("temperature") or 0),
+            response_format=payload.get("response_format") if isinstance(payload.get("response_format"), dict) else None,
+            extra_body=extra_body or None,
+        )
+    except http_requests.RequestException as exc:
+        response = getattr(exc, "response", None)
+        raise HTTPException(status_code=502, detail=_request_error_detail(response, exc)[:4000])
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)[:4000])
+
+
+def _proxy_openai_chat_completion_stream(payload: dict[str, Any]) -> http_requests.Response:
+    config = build_openai_compatible_config("AGENT_OPENAI", enabled_default=True)
+    if not config.enabled:
+        raise HTTPException(status_code=500, detail="AGENT_OPENAI is not enabled")
+    if not config.configured:
+        raise HTTPException(status_code=500, detail="AGENT_OPENAI requires BASE_URL and MODEL")
+
+    stream_payload = dict(payload or {})
+    stream_payload["model"] = config.model
+    stream_payload["stream"] = True
+
+    response = None
+    try:
+        response = http_requests.post(
+            build_chat_completions_url(config.base_url),
+            json=stream_payload,
+            headers={
+                "Authorization": f"Bearer {config.api_key}",
+                "Content-Type": "application/json",
+            },
+            timeout=(10, config.timeout_seconds),
+            stream=True,
+        )
+        response.raise_for_status()
+        return response
+    except http_requests.RequestException as exc:
+        if response is not None:
+            response.close()
+        raise HTTPException(status_code=502, detail=_request_error_detail(response, exc)[:4000])
+
+
+def _proxy_anthropic_message(payload: dict[str, Any]) -> dict[str, Any]:
+    provider = _agent_anthropic_provider()
+    extra_body = {
+        key: value
+        for key, value in dict(payload or {}).items()
+        if key not in {"messages", "temperature", "response_format", "model", "stream"}
+    }
+    try:
+        return provider.chat(
+            messages=list(payload.get("messages") or []),
+            temperature=float(payload.get("temperature") or 0),
+            response_format=payload.get("response_format") if isinstance(payload.get("response_format"), dict) else None,
+            extra_body=extra_body or None,
+        )
+    except http_requests.RequestException as exc:
+        response = getattr(exc, "response", None)
+        raise HTTPException(status_code=502, detail=_request_error_detail(response, exc)[:4000])
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)[:4000])
+
+
+# ---------------------------------------------------------------------------
 # Theme API proxy
 # ---------------------------------------------------------------------------
 
@@ -804,7 +1437,9 @@ def _proxy_theme_api(operation: str, payload: dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# MiniMax (OpenAI-compatible) proxy
+# Deprecated MiniMax OpenAI-compatible proxy.
+# MiniMax-M2.7 should use _proxy_anthropic_message so native tool_use/tool_result
+# conversion stays aligned with the Anthropic-compatible protocol.
 # ---------------------------------------------------------------------------
 
 def _proxy_minimax_chat_completion(payload: dict[str, Any]) -> dict[str, Any]:

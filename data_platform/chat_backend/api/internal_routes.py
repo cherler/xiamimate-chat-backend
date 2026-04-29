@@ -73,6 +73,7 @@ from data_platform.chat_backend.domains.memory_profile.service import build_memo
 from data_platform.chat_backend.domains.provider_proxy.service import (
     _proxy_ima_get_media_info,
     _proxy_ima_retrieve,
+    _proxy_anthropic_message,
     _proxy_ima_search_knowledge_bases,
     _proxy_dify_web_search_blocking,
     _proxy_dify_web_search_stream,
@@ -81,8 +82,11 @@ from data_platform.chat_backend.domains.provider_proxy.service import (
     _proxy_knowledge_retrieve,
     _proxy_minimax_chat_completion,
     _proxy_minimax_chat_completion_stream,
+    _proxy_openai_chat_completion,
+    _proxy_openai_chat_completion_stream,
     _proxy_report_blocking,
     _proxy_report_stream,
+    _proxy_tavily_search,
     _proxy_theme_api,
 )
 from data_platform.chat_backend.api.models import (
@@ -96,8 +100,10 @@ from data_platform.chat_backend.api.models import (
     InternalIMAMediaInfoRequest,
     IdentityExchangeRequest,
     InternalKnowledgeRetrieveRequest,
+    InternalLLMRequest,
     InternalMinimaxRequest,
     InternalReportRunRequest,
+    InternalTavilySearchRequest,
     InternalThemeAPICallRequest,
     InternalWorkflowRunRequest,
     PaymentProviderCallbackRequest,
@@ -481,6 +487,17 @@ def internal_run_dify_web_search_stream(request: Request, payload: InternalWorkf
     )
 
 
+@router.post("/internal/provider/web-search/tavily")
+def internal_run_tavily_search(request: Request, payload: InternalTavilySearchRequest) -> dict[str, Any]:
+    _require_internal_service(request, request.url.path)
+    provider_response = _proxy_tavily_search(payload=jsonable_encoder(payload))
+    return _success_response(
+        "/internal/provider/web-search/tavily",
+        provider_response,
+        "tavily search proxied",
+    )
+
+
 @router.post("/internal/provider/dify-dataset/retrieve")
 def internal_retrieve_knowledge(request: Request, payload: InternalKnowledgeRetrieveRequest) -> dict[str, Any]:
     _require_internal_service(request, request.url.path)
@@ -564,18 +581,20 @@ def internal_call_theme_api(operation: str, request: Request, payload: InternalT
     )
 
 
-@router.post("/internal/provider/minimax/chat-completions")
+# Deprecated: MiniMax-M2.7 now uses the Anthropic-compatible route
+# /internal/provider/anthropic/messages for native tool_use/tool_result support.
+@router.post("/internal/provider/minimax/chat-completions", deprecated=True)
 def internal_minimax_chat_completion(request: Request, payload: InternalMinimaxRequest) -> dict[str, Any]:
     _require_internal_service(request, request.url.path)
     provider_response = _proxy_minimax_chat_completion(payload=payload.payload)
     return _success_response(
         "/internal/provider/minimax/chat-completions",
         provider_response,
-        "minimax request proxied",
+        "deprecated minimax openai-compatible request proxied; use /internal/provider/anthropic/messages",
     )
 
-
-@router.post("/internal/provider/minimax/chat-completions/stream")
+# Deprecated: retained only for backward compatibility with old callers.
+@router.post("/internal/provider/minimax/chat-completions/stream", deprecated=True)
 def internal_minimax_chat_completion_stream(request: Request, payload: InternalMinimaxRequest) -> StreamingResponse:
     _require_internal_service(request, request.url.path)
     upstream_response = _proxy_minimax_chat_completion_stream(payload=payload.payload)
@@ -591,7 +610,52 @@ def internal_minimax_chat_completion_stream(request: Request, payload: InternalM
     return StreamingResponse(
         iterate_stream(),
         media_type=upstream_response.headers.get("content-type") or "text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Deprecated-Route": "use /internal/provider/anthropic/messages for MiniMax-M2.7",
+        },
+    )
+
+
+@router.post("/internal/provider/openai/chat-completions")
+def internal_openai_chat_completion(request: Request, payload: InternalLLMRequest) -> dict[str, Any]:
+    _require_internal_service(request, request.url.path)
+    provider_response = _proxy_openai_chat_completion(payload=payload.payload)
+    return _success_response(
+        "/internal/provider/openai/chat-completions",
+        provider_response,
+        "openai-compatible request proxied",
+    )
+
+
+@router.post("/internal/provider/openai/chat-completions/stream")
+def internal_openai_chat_completion_stream(request: Request, payload: InternalLLMRequest) -> StreamingResponse:
+    _require_internal_service(request, request.url.path)
+    upstream_response = _proxy_openai_chat_completion_stream(payload=payload.payload)
+
+    def iterate_stream() -> Any:
+        try:
+            for chunk in upstream_response.iter_content(chunk_size=4096):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream_response.close()
+
+    return StreamingResponse(
+        iterate_stream(),
+        media_type=upstream_response.headers.get("content-type") or "text/event-stream",
         headers={"Cache-Control": "no-cache"},
+    )
+
+
+@router.post("/internal/provider/anthropic/messages")
+def internal_anthropic_messages(request: Request, payload: InternalLLMRequest) -> dict[str, Any]:
+    _require_internal_service(request, request.url.path)
+    provider_response = _proxy_anthropic_message(payload=payload.payload)
+    return _success_response(
+        "/internal/provider/anthropic/messages",
+        provider_response,
+        "anthropic-compatible request proxied",
     )
 
 

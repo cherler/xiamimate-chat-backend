@@ -66,3 +66,5 @@ PostgreSQL DDL：
 4. `CHAT_BACKEND_DAILY_RESET_TIMEZONE`：日配额重置时区，默认 `Asia/Shanghai`。
 5. `CHAT_BACKEND_DISABLE_DEMO_FALLBACK`：设为 `true` 后，public API 不再接受 demo fallback 用户。
 6. `DIFY_CHATBOT_TOKEN`：portal 右下角 bubble 使用的 Dify chatbot token/share code；切换 chatbot 时只改这个值即可，无需改代码。
+7. `AGENT_OPENAI_*`：DeepSeek-V4-Pro 这条 OpenAI-compatible 线路的上游配置。
+8. `AGENT_ANTHROPIC_*`：MiniMax-M2.7 这条 Anthropic-compatible 线路的上游配置；bridge 选择 MiniMax profile 时会走这组参数。
