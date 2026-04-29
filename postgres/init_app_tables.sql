@@ -20,24 +20,12 @@ CREATE TABLE IF NOT EXISTS app.app_user (
     status        TEXT NOT NULL DEFAULT 'active',
     plan_tier     TEXT NOT NULL DEFAULT 'free',
     invite_code   TEXT UNIQUE,
-    source_state  TEXT NOT NULL DEFAULT 'active',
-    source_last_seen_at TIMESTAMPTZ,
-    source_orphaned_at TIMESTAMPTZ,
-    source_recovered_at TIMESTAMPTZ,
-    auth_session_version BIGINT NOT NULL DEFAULT 1,
-    last_password_reset_at TIMESTAMPTZ,
     email_verified_at TIMESTAMPTZ,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS invite_code TEXT;
-ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS source_state TEXT NOT NULL DEFAULT 'active';
-ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS source_last_seen_at TIMESTAMPTZ;
-ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS source_orphaned_at TIMESTAMPTZ;
-ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS source_recovered_at TIMESTAMPTZ;
-ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS auth_session_version BIGINT NOT NULL DEFAULT 1;
-ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS last_password_reset_at TIMESTAMPTZ;
 ALTER TABLE app.app_user ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
 
 DO $$
@@ -262,24 +250,6 @@ ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS failed_att
 ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
 ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS last_failed_at TIMESTAMPTZ;
 
-CREATE TABLE IF NOT EXISTS app.user_device_session (
-    session_id            TEXT PRIMARY KEY,
-    user_id               TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
-    session_token_hash    TEXT NOT NULL UNIQUE,
-    session_version       BIGINT NOT NULL,
-    device_label          TEXT NOT NULL,
-    user_agent            TEXT NOT NULL DEFAULT '',
-    created_ip            TEXT,
-    last_seen_ip          TEXT,
-    last_seen_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    elevated_until        TIMESTAMPTZ,
-    last_verified_at      TIMESTAMPTZ,
-    revoked_at            TIMESTAMPTZ,
-    revoked_reason        TEXT,
-    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS app.user_referral_binding (
     binding_id          TEXT PRIMARY KEY,
     inviter_user_id     TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
@@ -436,10 +406,8 @@ CREATE TABLE IF NOT EXISTS app.admin_audit_log (
 -- app.* indexes owned by chat-backend.
 
 CREATE INDEX IF NOT EXISTS idx_app_user_plan_tier ON app.app_user(plan_tier);
-CREATE INDEX IF NOT EXISTS idx_app_user_source_state ON app.app_user(source_state, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_app_user_email_verified ON app.app_user(email_verified_at DESC);
 CREATE INDEX IF NOT EXISTS idx_app_user_invite_code ON app.app_user(invite_code);
-CREATE INDEX IF NOT EXISTS idx_app_user_auth_session_version ON app.app_user(auth_session_version);
 CREATE INDEX IF NOT EXISTS idx_user_api_key_status ON app.user_api_key(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_account_balance ON app.user_credit_account(balance_points DESC, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_package_status_order ON app.billing_package(status, display_order ASC, created_at ASC);
@@ -457,32 +425,30 @@ CREATE INDEX IF NOT EXISTS idx_redeem_code_status_created ON app.redeem_code(sta
 CREATE INDEX IF NOT EXISTS idx_redeem_code_batch_created ON app.redeem_code(batch_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_redeem_code_redeemed_user_created ON app.redeem_code(redeemed_by_user_id, redeemed_at DESC);
 WITH ranked_redeem_duplicates AS (
-        SELECT
-                code_id,
-                ROW_NUMBER() OVER (
-                        PARTITION BY batch_id, redeemed_by_user_id
-                        ORDER BY COALESCE(redeemed_at, created_at) ASC, code_id ASC
-                ) AS redeem_rank
-        FROM app.redeem_code
-        WHERE batch_id IS NOT NULL
-            AND redeemed_by_user_id IS NOT NULL
+		SELECT
+				code_id,
+				ROW_NUMBER() OVER (
+						PARTITION BY batch_id, redeemed_by_user_id
+						ORDER BY COALESCE(redeemed_at, created_at) ASC, code_id ASC
+				) AS redeem_rank
+		FROM app.redeem_code
+		WHERE batch_id IS NOT NULL
+			AND redeemed_by_user_id IS NOT NULL
 )
 UPDATE app.redeem_code AS code
 SET meta_json = COALESCE(code.meta_json, '{}'::jsonb) || '{"legacy_batch_duplicate": true}'::jsonb,
-        updated_at = NOW()
+		updated_at = NOW()
 FROM ranked_redeem_duplicates AS ranked
 WHERE code.code_id = ranked.code_id
-    AND ranked.redeem_rank > 1
-    AND COALESCE(code.meta_json ->> 'legacy_batch_duplicate', 'false') <> 'true';
+	AND ranked.redeem_rank > 1
+	AND COALESCE(code.meta_json ->> 'legacy_batch_duplicate', 'false') <> 'true';
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_redeem_code_batch_user_once ON app.redeem_code(batch_id, redeemed_by_user_id)
 WHERE batch_id IS NOT NULL
-    AND redeemed_by_user_id IS NOT NULL
-    AND COALESCE(meta_json ->> 'legacy_batch_duplicate', 'false') <> 'true';
+	AND redeemed_by_user_id IS NOT NULL
+	AND COALESCE(meta_json ->> 'legacy_batch_duplicate', 'false') <> 'true';
 CREATE INDEX IF NOT EXISTS idx_email_verification_challenge_user_created ON app.email_verification_challenge(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_email_verification_challenge_email_created ON app.email_verification_challenge(email, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_user_device_session_user_seen ON app.user_device_session(user_id, last_seen_at DESC, session_id DESC);
-CREATE INDEX IF NOT EXISTS idx_user_device_session_active_user ON app.user_device_session(user_id, revoked_at, last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_referral_binding_inviter_created ON app.user_referral_binding(inviter_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_referral_binding_status_updated ON app.user_referral_binding(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_session_user_updated ON app.chat_session(user_id, updated_at DESC);

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import secrets
+import json
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -52,6 +53,8 @@ from data_platform.chat_backend.domains.site_config import (
 from data_platform.chat_backend.api.models import (
     AdminCreateRedeemCodeBatchRequest,
     AdminGrantPointsRequest,
+    AdminKeepaJobCancelRequest,
+    AdminKeepaJobPromoteRequest,
     CreateSystemNotificationBroadcastRequest,
     UpdateEventPricingRequest,
     UpdateSiteConfigRequest,
@@ -317,6 +320,304 @@ def admin_disable_redeem_code(code_id: str, request: Request) -> dict[str, Any]:
         f"/admin/api/redeem-codes/{code_id}/disable",
         {"redeem_code": redeem_code, "audit_log": audit_log},
         "redeem code disabled",
+    )
+
+
+@router.get("/admin/api/keepa-operations")
+def admin_keepa_operations(request: Request) -> dict[str, Any]:
+    _require_admin_operator(request)
+    raw_limit = (request.query_params.get("limit") or "30").strip()
+    try:
+        limit = max(1, min(int(raw_limit), 100))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="limit must be an integer")
+
+    with _postgres_conn() as conn:
+        table_rows = _run_pg_dict_query(
+            conn,
+            """
+            SELECT
+                to_regclass('sync.keepa_candidate_expansion_jobs')::text AS jobs_table,
+                to_regclass('sync.keepa_token_ledger')::text AS ledger_table,
+                to_regclass('sync.keepa_token_budget_policy')::text AS policy_table
+            """,
+        )
+        table_state = table_rows[0] if table_rows else {}
+        has_jobs = bool(table_state.get("jobs_table"))
+        has_ledger = bool(table_state.get("ledger_table"))
+        has_policy = bool(table_state.get("policy_table"))
+
+        status_counts = []
+        recent_jobs = []
+        if has_jobs:
+            status_counts = _run_pg_dict_query(
+                conn,
+                """
+                SELECT status, COUNT(*) AS job_count
+                FROM sync.keepa_candidate_expansion_jobs
+                GROUP BY status
+                ORDER BY job_count DESC, status ASC
+                """,
+            )
+            recent_jobs = _run_pg_dict_query(
+                conn,
+                """
+                SELECT job_id, marketplace, domain, source, priority, product_query, recall_mode,
+                       category_id, category_path, target_asin_count, min_pool_size, status,
+                       status_reason, tokens_estimated, tokens_reserved, tokens_consumed,
+                       token_wait_until, result_new_asin_count, error_message,
+                       created_at, updated_at, started_at, finished_at
+                FROM sync.keepa_candidate_expansion_jobs
+                ORDER BY updated_at DESC NULLS LAST, created_at DESC
+                LIMIT %s
+                """,
+                [limit],
+            )
+
+        token_latest = None
+        recent_token_ledger = []
+        token_24h = []
+        if has_ledger:
+            latest_rows = _run_pg_dict_query(
+                conn,
+                """
+                SELECT ledger_id, job_id, domain, source, queue_name, action, tokens_before,
+                       tokens_delta, tokens_after, keepa_refill_in_ms, status, message, created_at
+                FROM sync.keepa_token_ledger
+                ORDER BY created_at DESC, ledger_id DESC
+                LIMIT 1
+                """,
+            )
+            token_latest = latest_rows[0] if latest_rows else None
+            recent_token_ledger = _run_pg_dict_query(
+                conn,
+                """
+                SELECT ledger_id, job_id, domain, source, queue_name, action, tokens_before,
+                       tokens_delta, tokens_after, keepa_refill_in_ms, status, message, created_at
+                FROM sync.keepa_token_ledger
+                ORDER BY created_at DESC, ledger_id DESC
+                LIMIT %s
+                """,
+                [limit],
+            )
+            token_24h = _run_pg_dict_query(
+                conn,
+                """
+                SELECT queue_name,
+                       SUM(CASE WHEN tokens_delta < 0 THEN -tokens_delta ELSE 0 END) AS tokens_consumed_24h,
+                       COUNT(*) AS event_count
+                FROM sync.keepa_token_ledger
+                WHERE created_at >= NOW() - INTERVAL '24 hours'
+                GROUP BY queue_name
+                ORDER BY tokens_consumed_24h DESC NULLS LAST, queue_name ASC
+                """,
+            )
+
+        token_budget_policy = []
+        if has_policy:
+            token_budget_policy = _run_pg_dict_query(
+                conn,
+                """
+                SELECT policy_name, enabled, interactive_min_tokens, bestseller_min_tokens,
+                       search_min_tokens, history_min_tokens, safe_reserve_tokens,
+                       pause_history_when_interactive_pending, max_history_tokens_per_run,
+                       updated_at, notes
+                FROM sync.keepa_token_budget_policy
+                ORDER BY policy_name ASC
+                """,
+            )
+
+    return _success_response(
+        "/admin/api/keepa-operations",
+        {
+            "table_state": table_state,
+            "status_counts": status_counts,
+            "recent_jobs": recent_jobs,
+            "token_latest": token_latest,
+            "token_24h": token_24h,
+            "recent_token_ledger": recent_token_ledger,
+            "token_budget_policy": token_budget_policy,
+        },
+        "keepa operations loaded",
+    )
+
+
+@router.post("/admin/api/keepa-operations/jobs/{job_id}/promote")
+def admin_promote_keepa_job(
+    job_id: str,
+    request: Request,
+    payload: AdminKeepaJobPromoteRequest,
+) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    reason = (payload.reason or "admin promote").strip() or "admin promote"
+    with _postgres_conn() as conn:
+        table_rows = _run_pg_dict_query(
+            conn,
+            "SELECT to_regclass('sync.keepa_candidate_expansion_jobs')::text AS jobs_table",
+        )
+        if not table_rows or not table_rows[0].get("jobs_table"):
+            raise HTTPException(status_code=503, detail="keepa expansion job table is unavailable")
+        rows = _run_pg_dict_query(
+            conn,
+            """
+            SELECT job_id, status, priority
+            FROM sync.keepa_candidate_expansion_jobs
+            WHERE job_id = %s
+            """,
+            [job_id],
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="keepa expansion job not found")
+        before = rows[0]
+        if before.get("status") in {"completed", "failed", "cancelled"}:
+            raise HTTPException(status_code=409, detail=f"cannot promote terminal job status: {before.get('status')}")
+        updated_rows = _run_pg_dict_query(
+            conn,
+            """
+            UPDATE sync.keepa_candidate_expansion_jobs
+            SET priority = %s,
+                status_reason = %s,
+                updated_at = NOW(),
+                meta_json = COALESCE(meta_json, '{}'::JSONB) || jsonb_build_object(
+                    'admin_promoted_at', NOW(),
+                    'admin_promoted_by', %s,
+                    'admin_promote_reason', %s,
+                    'admin_previous_priority', %s
+                )
+            WHERE job_id = %s
+            RETURNING job_id, marketplace, domain, source, priority, product_query, recall_mode,
+                      category_id, category_path, target_asin_count, status, status_reason,
+                      tokens_estimated, tokens_reserved, tokens_consumed, result_new_asin_count,
+                      created_at, updated_at, started_at, finished_at
+            """,
+            [payload.priority, reason, operator_id, reason, before.get("priority"), job_id],
+        )
+        _run_pg_dict_query(
+            conn,
+            """
+            INSERT INTO sync.keepa_token_ledger (
+                job_id, domain, source, queue_name, action, tokens_before,
+                tokens_delta, tokens_after, status, message, meta_json
+            )
+            SELECT job_id, domain, source,
+                   CASE WHEN %s LIKE 'interactive%%' THEN 'interactive' ELSE 'background' END,
+                   'promote', NULL, 0, NULL, 'recorded', %s,
+                   %s::JSONB
+            FROM sync.keepa_candidate_expansion_jobs
+            WHERE job_id = %s
+                 RETURNING ledger_id
+            """,
+            [
+                payload.priority,
+                reason,
+                json.dumps(jsonable_encoder({"operator_id": operator_id, "priority": payload.priority}), ensure_ascii=False),
+                job_id,
+            ],
+        )
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="promote_keepa_expansion_job",
+            target_type="keepa_candidate_expansion_job",
+            target_id=job_id,
+            request_json=jsonable_encoder(payload),
+            result_json={"before": before, "job": updated_rows[0] if updated_rows else None},
+        )
+        conn.commit()
+    return _success_response(
+        f"/admin/api/keepa-operations/jobs/{job_id}/promote",
+        {"job": updated_rows[0] if updated_rows else None, "audit_log": audit_log},
+        "keepa expansion job promoted",
+    )
+
+
+@router.post("/admin/api/keepa-operations/jobs/{job_id}/cancel")
+def admin_cancel_keepa_job(
+    job_id: str,
+    request: Request,
+    payload: AdminKeepaJobCancelRequest,
+) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    reason = (payload.reason or "admin cancel").strip() or "admin cancel"
+    with _postgres_conn() as conn:
+        table_rows = _run_pg_dict_query(
+            conn,
+            "SELECT to_regclass('sync.keepa_candidate_expansion_jobs')::text AS jobs_table",
+        )
+        if not table_rows or not table_rows[0].get("jobs_table"):
+            raise HTTPException(status_code=503, detail="keepa expansion job table is unavailable")
+        rows = _run_pg_dict_query(
+            conn,
+            """
+            SELECT job_id, status, priority
+            FROM sync.keepa_candidate_expansion_jobs
+            WHERE job_id = %s
+            """,
+            [job_id],
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail="keepa expansion job not found")
+        before = rows[0]
+        if before.get("status") in {"completed", "failed", "cancelled"}:
+            raise HTTPException(status_code=409, detail=f"cannot cancel terminal job status: {before.get('status')}")
+        updated_rows = _run_pg_dict_query(
+            conn,
+            """
+            UPDATE sync.keepa_candidate_expansion_jobs
+            SET status = 'cancelled',
+                status_reason = %s,
+                error_message = NULL,
+                updated_at = NOW(),
+                finished_at = NOW(),
+                meta_json = COALESCE(meta_json, '{}'::JSONB) || jsonb_build_object(
+                    'admin_cancelled_at', NOW(),
+                    'admin_cancelled_by', %s,
+                    'admin_cancel_reason', %s,
+                    'admin_previous_status', %s
+                )
+            WHERE job_id = %s
+            RETURNING job_id, marketplace, domain, source, priority, product_query, recall_mode,
+                      category_id, category_path, target_asin_count, status, status_reason,
+                      tokens_estimated, tokens_reserved, tokens_consumed, result_new_asin_count,
+                      created_at, updated_at, started_at, finished_at
+            """,
+            [reason, operator_id, reason, before.get("status"), job_id],
+        )
+        _run_pg_dict_query(
+            conn,
+            """
+            INSERT INTO sync.keepa_token_ledger (
+                job_id, domain, source, queue_name, action, tokens_before,
+                tokens_delta, tokens_after, status, message, meta_json
+            )
+            SELECT job_id, domain, source,
+                   CASE WHEN priority LIKE 'interactive%%' THEN 'interactive' ELSE 'background' END,
+                   'cancel', NULL, 0, NULL, 'recorded', %s,
+                   %s::JSONB
+            FROM sync.keepa_candidate_expansion_jobs
+            WHERE job_id = %s
+                 RETURNING ledger_id
+            """,
+            [
+                reason,
+                json.dumps(jsonable_encoder({"operator_id": operator_id, "previous_status": before.get("status")}), ensure_ascii=False),
+                job_id,
+            ],
+        )
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="cancel_keepa_expansion_job",
+            target_type="keepa_candidate_expansion_job",
+            target_id=job_id,
+            request_json=jsonable_encoder(payload),
+            result_json={"before": before, "job": updated_rows[0] if updated_rows else None},
+        )
+        conn.commit()
+    return _success_response(
+        f"/admin/api/keepa-operations/jobs/{job_id}/cancel",
+        {"job": updated_rows[0] if updated_rows else None, "audit_log": audit_log},
+        "keepa expansion job cancelled",
     )
 
 

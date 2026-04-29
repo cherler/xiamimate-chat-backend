@@ -210,6 +210,9 @@ WORKFLOW_BUNDLED_NON_BILLABLE_EVENT_TYPES = {
 
 THEME_API_OPERATION_PATHS: dict[str, str] = {
     "resolve_candidates": "/api/product-theme/resolve-candidates",
+    "category_resolve": "/api/product-theme/category-resolve",
+    "expand_candidates": "/api/product-theme/expand-candidates",
+    "candidate_expansion_status": "/api/product-theme/candidate-expansion-status",
     "candidate_pool_stats": "/api/product-theme/candidate-pool-stats",
     "candidate_pool_trends": "/api/product-theme/candidate-pool-trends",
     "candidate_pool_weak_forecast": "/api/product-theme/candidate-pool-weak-forecast",

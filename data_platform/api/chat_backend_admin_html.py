@@ -805,6 +805,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
               <button class="module-nav-button secondary" data-nav-target="module-pricing">计价管理</button>
               <button class="module-nav-button secondary" data-nav-target="module-site-config">站点联络配置</button>
               <button class="module-nav-button secondary" data-nav-target="module-email-verification">邮箱验证码风控</button>
+              <button class="module-nav-button secondary" data-nav-target="module-keepa-ops">补池与采集</button>
               <button class="module-nav-button secondary" data-nav-target="section-audit">后台审计</button>
               <button class="module-nav-button secondary" data-nav-target="section-broadcast-history">系统广播记录</button>
             </div>
@@ -1004,6 +1005,22 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
                 <div id="email-verification-config-status" class="status"></div>
               </div>
             </section>
+
+            <section id="module-keepa-ops" data-admin-page="module-keepa-ops" class="card panel management-module module-card module-anchor">
+              <div class="module-card-head">
+                <h3>补池与采集</h3>
+                <div class="hint">查看 Keepa 补池队列、token 消耗账本和当前预算策略，辅助判断任务是否卡在 token、collector 或同步阶段。</div>
+              </div>
+              <div class="module-card-body">
+                <div class="button-row" style="margin-bottom: 12px;">
+                  <button id="load-keepa-ops" class="secondary">刷新补池状态</button>
+                </div>
+                <div id="keepa-ops-status" class="status"></div>
+                <div id="keepa-ops-content" class="field-grid" style="margin-top: 12px;">
+                  <div class="empty">正在加载补池与采集状态...</div>
+                </div>
+              </div>
+            </section>
           </div>
         </section>
 
@@ -1098,6 +1115,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       'module-pricing',
       'module-site-config',
       'module-email-verification',
+      'module-keepa-ops',
       'section-audit',
       'section-broadcast-history',
     ];
@@ -1546,6 +1564,98 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       ], data.system_notifications || [], { className: 'tall' });
     };
 
+    const renderKeepaOperations = (data) => {
+      const target = document.getElementById('keepa-ops-content');
+      const statusCounts = data.status_counts || [];
+      const latest = data.token_latest || {};
+      const policies = data.token_budget_policy || [];
+      const statusSummary = statusCounts.length
+        ? statusCounts.map((row) => `${row.status}: ${row.job_count}`).join(' · ')
+        : '暂无补池任务状态';
+      const latestTokenText = latest.created_at
+        ? `tokens_after=${latest.tokens_after ?? '-'} · ${latest.queue_name || '-'} · ${latest.created_at}`
+        : '暂无 token ledger';
+      const terminalStatuses = new Set(['completed', 'failed', 'cancelled']);
+
+      target.innerHTML = `
+        <div class="metric-grid">
+          <div class="metric">
+            <div class="label">补池任务</div>
+            <div class="value">${escapeHtml((data.recent_jobs || []).length)}</div>
+          </div>
+          <div class="metric">
+            <div class="label">最新 token</div>
+            <div class="value">${escapeHtml(latest.tokens_after ?? '-')}</div>
+          </div>
+          <div class="metric">
+            <div class="label">24h 队列数</div>
+            <div class="value">${escapeHtml((data.token_24h || []).length)}</div>
+          </div>
+        </div>
+        <div class="mini-card">
+          <h3>当前状态</h3>
+          ${renderKv([
+            ['补池队列分布', statusSummary],
+            ['最新 token 记录', latestTokenText],
+            ['jobs 表', data.table_state?.jobs_table || '-'],
+            ['ledger 表', data.table_state?.ledger_table || '-'],
+          ])}
+        </div>
+        <div class="mini-card">
+          <h3>最近补池任务</h3>
+          ${renderTable([
+            { label: '更新时间', render: (row) => row.updated_at || row.created_at || '-' },
+            { label: '任务', render: (row) => row.job_id },
+            { label: '状态', render: (row) => `${row.status || '-'} / ${row.priority || '-'}` },
+            { label: '查询/类目', render: (row) => row.product_query || row.category_path || row.category_id || '-' },
+            { label: 'token', render: (row) => `${row.tokens_consumed || 0}/${row.tokens_estimated || 0}` },
+            { label: '原因', render: (row) => row.status_reason || row.error_message || '-' },
+            {
+              label: '操作',
+              render: (row) => terminalStatuses.has(row.status)
+                ? '-'
+                : `<div class="button-row compact"><button class="secondary" data-keepa-promote-job="${escapeHtml(row.job_id)}">置顶</button><button class="danger" data-keepa-cancel-job="${escapeHtml(row.job_id)}">取消</button></div>`,
+            },
+          ], data.recent_jobs || [], { className: 'tall' })}
+        </div>
+        <div class="mini-card">
+          <h3>最近 token ledger</h3>
+          ${renderTable([
+            { label: '时间', render: (row) => row.created_at },
+            { label: '队列', render: (row) => row.queue_name },
+            { label: '动作', render: (row) => row.action },
+            { label: '变化', render: (row) => `${row.tokens_before ?? '-'} -> ${row.tokens_after ?? '-'} (${row.tokens_delta ?? 0})` },
+            { label: '消息', render: (row) => row.message || row.status || '-' },
+          ], data.recent_token_ledger || [], { className: 'tall' })}
+        </div>
+        <div class="mini-card">
+          <h3>24 小时消耗</h3>
+          ${renderTable([
+            { label: '队列', render: (row) => row.queue_name },
+            { label: '消耗 token', render: (row) => row.tokens_consumed_24h || 0 },
+            { label: '事件数', render: (row) => row.event_count || 0 },
+          ], data.token_24h || [])}
+        </div>
+        <div class="mini-card">
+          <h3>预算策略</h3>
+          ${renderTable([
+            { label: '策略', render: (row) => row.policy_name },
+            { label: '启用', render: (row) => row.enabled },
+            { label: 'interactive', render: (row) => row.interactive_min_tokens },
+            { label: 'bestseller/search/history', render: (row) => `${row.bestseller_min_tokens}/${row.search_min_tokens}/${row.history_min_tokens}` },
+            { label: 'safe reserve', render: (row) => row.safe_reserve_tokens },
+            { label: '暂停 history', render: (row) => row.pause_history_when_interactive_pending },
+          ], policies)}
+        </div>
+      `;
+      target.querySelectorAll('[data-keepa-promote-job]').forEach((button) => {
+        button.addEventListener('click', () => promoteKeepaJob(button.dataset.keepaPromoteJob));
+      });
+      target.querySelectorAll('[data-keepa-cancel-job]').forEach((button) => {
+        button.addEventListener('click', () => cancelKeepaJob(button.dataset.keepaCancelJob));
+      });
+    };
+
     const loadOverview = async () => {
       setStatus('global-status', '正在加载总览...');
       try {
@@ -1605,6 +1715,56 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
         renderBroadcastHistory(data);
       } catch (error) {
         setStatus('global-status', error.message, 'error');
+      }
+    };
+
+    const loadKeepaOperations = async () => {
+      setStatus('keepa-ops-status', '正在加载补池与采集状态...');
+      try {
+        const data = await fetchJson('/admin/api/keepa-operations?limit=30');
+        renderKeepaOperations(data);
+        setStatus('keepa-ops-status', '补池与采集状态已刷新', 'ok');
+      } catch (error) {
+        setStatus('keepa-ops-status', error.message, 'error');
+      }
+    };
+
+    const promoteKeepaJob = async (jobId) => {
+      if (!jobId) {
+        return;
+      }
+      setStatus('keepa-ops-status', `正在置顶补池任务 ${jobId}...`);
+      try {
+        await fetchJson(`/admin/api/keepa-operations/jobs/${encodeURIComponent(jobId)}/promote`, {
+          method: 'POST',
+          body: JSON.stringify({ priority: 'interactive_high', reason: 'admin panel promote' }),
+        });
+        setStatus('keepa-ops-status', '补池任务已置顶', 'ok');
+        await loadKeepaOperations();
+        await loadAuditLogs();
+      } catch (error) {
+        setStatus('keepa-ops-status', error.message, 'error');
+      }
+    };
+
+    const cancelKeepaJob = async (jobId) => {
+      if (!jobId) {
+        return;
+      }
+      if (!window.confirm(`确认取消补池任务 ${jobId}？`)) {
+        return;
+      }
+      setStatus('keepa-ops-status', `正在取消补池任务 ${jobId}...`);
+      try {
+        await fetchJson(`/admin/api/keepa-operations/jobs/${encodeURIComponent(jobId)}/cancel`, {
+          method: 'POST',
+          body: JSON.stringify({ reason: 'admin panel cancel' }),
+        });
+        setStatus('keepa-ops-status', '补池任务已取消', 'ok');
+        await loadKeepaOperations();
+        await loadAuditLogs();
+      } catch (error) {
+        setStatus('keepa-ops-status', error.message, 'error');
       }
     };
 
@@ -2369,6 +2529,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
     document.getElementById('load-pricing').addEventListener('click', loadPricing);
     document.getElementById('load-site-config').addEventListener('click', loadSiteConfig);
     document.getElementById('load-email-verification-config').addEventListener('click', loadSiteConfig);
+    document.getElementById('load-keepa-ops').addEventListener('click', loadKeepaOperations);
     document.getElementById('search-users').addEventListener('click', (event) => {
       runWithButtonBusy(event.currentTarget, () => searchUsers(document.getElementById('user-query').value.trim()), '搜索中...');
     });
@@ -2432,6 +2593,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       loadPricing().catch(() => {});
       loadRedeemCodes().catch(() => {});
       loadSiteConfig().catch(() => {});
+      loadKeepaOperations().catch(() => {});
       searchUsers('').catch(() => {});
       loadAuditLogs().catch(() => {});
       loadBroadcasts().catch(() => {});

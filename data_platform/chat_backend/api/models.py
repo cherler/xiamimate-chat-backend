@@ -74,6 +74,22 @@ class AdminGrantPointsRequest(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class AdminKeepaJobPromoteRequest(BaseModel):
+    priority: str = Field(default="interactive_high", min_length=1, max_length=32)
+    reason: str | None = Field(default=None, max_length=255)
+
+    @validator("priority")
+    def _validate_priority(cls, value: str) -> str:  # noqa: N805
+        normalized = value.strip()
+        if normalized not in {"interactive_high", "interactive_normal", "background_low"}:
+            raise ValueError(f"unsupported priority: {value}")
+        return normalized
+
+
+class AdminKeepaJobCancelRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=255)
+
+
 class CreateSystemNotificationBroadcastRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=120)
     body: str = Field(..., min_length=1, max_length=2000)
