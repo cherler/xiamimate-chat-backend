@@ -11,6 +11,7 @@ from data_platform.llm_client import (  # noqa: E402
     anthropic_response_to_openai_chat_completion,
     build_anthropic_messages_payload,
 )
+from data_platform.chat_backend.domains.provider_proxy.service import _format_theme_api_tool_result  # noqa: E402
 
 
 class AnthropicToolProtocolTests(unittest.TestCase):
@@ -100,6 +101,28 @@ class AnthropicToolProtocolTests(unittest.TestCase):
         self.assertEqual(message["tool_calls"][0]["id"], "toolu_1")
         self.assertEqual(message["tool_calls"][0]["function"]["name"], "asin_history_timeseries")
         self.assertEqual(json.loads(message["tool_calls"][0]["function"]["arguments"])["asins"], "B001")
+
+    def test_opportunity_discovery_tool_result_is_presentation_first(self) -> None:
+        formatted = _format_theme_api_tool_result(
+            "opportunity_discovery",
+            {
+                "success": True,
+                "data": {
+                    "opportunity_count": 1,
+                    "opportunity_cards_text": "| 排名 | 机会主题 | 样本ASIN数 |\n| 1 | Golf Balls | 12 |\n\n### 字段解释\n- Offer 不是供应商数量。",
+                    "opportunities_for_llm": [{"title": "Golf Balls", "candidate_count": 12, "row_count": 120}],
+                    "metric_definitions": {"offer_count_avg": {"meaning": "Offer 不是供应商数量"}},
+                    "diagnostics": {"window_days": 30},
+                },
+                "meta": {"endpoint": "/api/product-theme/opportunity-discovery"},
+            },
+        )
+
+        payload = json.loads(formatted)
+        self.assertIn("优先原样使用 opportunity_cards_text", payload["instruction"])
+        self.assertIn("样本ASIN数", payload["opportunity_cards_text"])
+        self.assertEqual(payload["opportunities_for_llm"][0]["candidate_count"], 12)
+        self.assertIn("Offer 不是供应商数量", json.dumps(payload["metric_definitions"], ensure_ascii=False))
 
 
 if __name__ == "__main__":

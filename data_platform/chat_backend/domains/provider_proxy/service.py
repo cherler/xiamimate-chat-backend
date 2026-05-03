@@ -1413,6 +1413,29 @@ def _proxy_anthropic_message(payload: dict[str, Any]) -> dict[str, Any]:
 # Theme API proxy
 # ---------------------------------------------------------------------------
 
+def _format_theme_api_tool_result(operation: str, payload: dict[str, Any]) -> str:
+    if operation != "opportunity_discovery":
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(data, dict):
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+
+    llm_presentation = data.get("llm_presentation") if isinstance(data.get("llm_presentation"), dict) else {}
+    compact = {
+        "success": payload.get("success", True),
+        "operation": operation,
+        "instruction": "优先原样使用 opportunity_cards_text 展示；必须包含字段解释；不要补齐不存在的机会行；不要把窗口销量估算加美元符号。",
+        "opportunity_count": data.get("opportunity_count"),
+        "opportunity_cards_text": data.get("opportunity_cards_text") or llm_presentation.get("opportunity_cards_text"),
+        "opportunities_for_llm": data.get("opportunities_for_llm") or llm_presentation.get("opportunities_for_llm"),
+        "metric_definitions": data.get("metric_definitions"),
+        "diagnostics": data.get("diagnostics"),
+        "notes": data.get("notes"),
+        "meta": payload.get("meta"),
+    }
+    return json.dumps(compact, ensure_ascii=False, indent=2)
+
 def _proxy_theme_api(operation: str, payload: dict[str, Any]) -> str:
     path = THEME_API_OPERATION_PATHS.get(operation)
     if path is None:
@@ -1429,7 +1452,7 @@ def _proxy_theme_api(operation: str, payload: dict[str, Any]) -> str:
             timeout=_theme_api_timeout(),
         )
         response.raise_for_status()
-        return json.dumps(response.json(), ensure_ascii=False, indent=2)
+        return _format_theme_api_tool_result(operation, response.json())
     except http_requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=("theme_api 请求失败:\n" + _request_error_detail(response, exc))[:4000])
     except ValueError as exc:
