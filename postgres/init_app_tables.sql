@@ -474,6 +474,7 @@ CREATE INDEX IF NOT EXISTS idx_analysis_run_status ON app.analysis_run(status, u
 CREATE INDEX IF NOT EXISTS idx_analysis_artifact_run ON app.analysis_artifact(run_id, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_usage_event_user_created ON app.usage_event(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tiktok_realtime_queries_run ON app.report_tiktok_realtime_queries(report_run_id);
+CREATE INDEX IF NOT EXISTS idx_tiktok_realtime_queries_reuse ON app.report_tiktok_realtime_queries(report_run_id, lower(query), target_market, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tiktok_realtime_queries_created_at ON app.report_tiktok_realtime_queries(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tiktok_realtime_queries_status ON app.report_tiktok_realtime_queries(status);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_created ON app.credit_ledger_entry(user_id, created_at DESC);

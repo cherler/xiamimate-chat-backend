@@ -26,6 +26,7 @@ class StructureRefactorBoundaryTests(unittest.TestCase):
         self.assertIn('APP_ENTRYPOINT="data_platform.chat_backend.app:app"', source)
         self.assertIn("data_platform.chat_backend.app:app", source)
         self.assertIn('"$PYTHON_BIN" -m uvicorn "$APP_ENTRYPOINT"', source)
+        self.assertIn('--app-dir "$ROOT_DIR"', source)
         self.assertNotIn("uvicorn data_platform.api.chat_backend:app", source)
 
     def test_tiktok_native_tool_route_is_registered_in_new_tool_router(self) -> None:

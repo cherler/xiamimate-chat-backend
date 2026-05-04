@@ -53,7 +53,7 @@ def _first_number(item: dict[str, Any], keys: tuple[str, ...]) -> float | None:
 def _normalize_product(item: Any) -> dict[str, Any]:
     source = _as_dict(item)
     product_id = _first_text(source, ("product_id", "productId", "id", "item_id", "itemId"))
-    title = _first_text(source, ("title", "product_title", "name", "productName"))
+    title = _first_text(source, ("title", "product_title", "name", "productName", "url_title"))
     shop_name = _first_text(source, ("shop_name", "shopName", "seller_name", "sellerName", "brand", "brand_name"))
     price = _first_number(source, ("price", "sale_price", "min_price", "current_price"))
     sold_count = _first_number(source, ("sold_count", "sales", "sold", "total_sales", "orders"))
@@ -89,20 +89,26 @@ def normalize_product_detail(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_keywords(payload: dict[str, Any]) -> list[str]:
-    items = _recursive_find_first_list(payload, {"keywords", "words", "suggestions", "list", "data"})
+    items = _recursive_find_first_list(
+        payload,
+        {"keywords", "words", "suggestions", "trending_search_words", "trendingSearchWords", "list", "data"},
+    )
     keywords: list[str] = []
     for item in _as_list(items):
         if isinstance(item, str):
             text = item.strip()
         else:
-            text = _first_text(_as_dict(item), ("keyword", "word", "query", "text", "name"))
+            text = _first_text(_as_dict(item), ("keyword", "word", "query", "text", "name", "search_word", "trendingSearchWord"))
         if text and text not in keywords:
             keywords.append(text)
     return keywords
 
 
 def normalize_trending_posts(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    items = _recursive_find_first_list(payload, {"posts", "videos", "items", "list", "data"})
+    items = _recursive_find_first_list(
+        payload,
+        {"posts", "videos", "items", "item_list", "aweme_list", "video_list", "trending_posts", "list", "data"},
+    )
     posts: list[dict[str, Any]] = []
     for item in _as_list(items):
         source = _as_dict(item)

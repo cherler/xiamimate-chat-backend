@@ -361,6 +361,9 @@ class InternalTikTokOpportunityRequest(BaseModel):
     target_market: str = Field(default="US", min_length=2, max_length=20)
     keywords: list[str] = Field(default_factory=list)
     limit: int = Field(default=20, ge=1, le=50)
+    candidate_context: dict[str, Any] = Field(default_factory=dict)
+    force_refresh: bool = False
+    allow_realtime: bool = True
 
     @validator("report_run_id")
     def _normalize_optional_report_run_id(cls, value: str | None) -> str | None:  # noqa: N805

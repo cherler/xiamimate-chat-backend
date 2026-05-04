@@ -18,6 +18,9 @@ class TikHubCallResult:
     latency_ms: int = 0
     data: dict[str, Any] | None = None
     error: str | None = None
+    error_payload: dict[str, Any] | None = None
+    request_id: str | None = None
+    docs_url: str | None = None
 
 
 @dataclass
@@ -60,6 +63,29 @@ def load_tikhub_config() -> TikHubConfig:
     )
 
 
+def _safe_json(response: Any) -> dict[str, Any]:
+    try:
+        payload = response.json()
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {"value": payload}
+
+
+def _extract_first_string(payload: dict[str, Any], keys: set[str]) -> str | None:
+    stack: list[Any] = [payload]
+    while stack:
+        value = stack.pop()
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                if key.lower() in keys and isinstance(nested, str) and nested.strip():
+                    return nested.strip()
+                if isinstance(nested, (dict, list)):
+                    stack.append(nested)
+        elif isinstance(value, list):
+            stack.extend(value)
+    return None
+
+
 @dataclass
 class TikHubClient:
     config: TikHubConfig
@@ -84,6 +110,7 @@ class TikHubClient:
                 status_code = response.status_code
                 latency_ms = int((time.monotonic() - started_at) * 1000)
                 if response.status_code >= 400:
+                    error_payload = _safe_json(response)
                     last_error = f"http_{response.status_code}"
                     if attempt < self.config.max_retries:
                         continue
@@ -94,9 +121,18 @@ class TikHubClient:
                         status_code=response.status_code,
                         latency_ms=latency_ms,
                         error=last_error,
+                        error_payload=error_payload,
+                        request_id=_extract_first_string(error_payload, {"request_id", "requestid", "trace_id", "traceid"}),
+                        docs_url=_extract_first_string(error_payload, {"docs", "doc", "documentation", "docs_url", "doc_url"}),
                     )
-                payload = response.json()
-                data = payload if isinstance(payload, dict) else {"value": payload}
+                data = _safe_json(response)
+                cache_url = data.get("cache_url") if isinstance(data, dict) else None
+                if isinstance(cache_url, str) and cache_url.startswith("http"):
+                    cache_response = self.session.get(cache_url, timeout=self.config.timeout_seconds)
+                    latency_ms = int((time.monotonic() - started_at) * 1000)
+                    if cache_response.status_code < 400:
+                        cache_payload = cache_response.json()
+                        data = cache_payload if isinstance(cache_payload, dict) else {"value": cache_payload}
                 return TikHubCallResult(
                     endpoint=endpoint,
                     params=cleaned_params,

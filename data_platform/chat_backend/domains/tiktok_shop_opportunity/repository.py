@@ -12,6 +12,36 @@ except ImportError:
 from data_platform.chat_backend.infra.postgres import _run_pg_dict_query
 
 
+def fetch_recent_tiktok_realtime_query(
+    conn,
+    *,
+    report_run_id: str,
+    query: str,
+    target_market: str,
+    max_age_minutes: int,
+) -> dict[str, Any] | None:
+    rows = _run_pg_dict_query(
+        conn,
+        """
+        SELECT
+            id, report_run_id, query, target_market, provider, request_payload,
+            vendor_endpoints, vendor_response_raw, normalized_summary, result_text,
+            status, latency_ms, created_at
+        FROM app.report_tiktok_realtime_queries
+        WHERE report_run_id = %s
+          AND lower(query) = lower(%s)
+          AND target_market = %s
+          AND normalized_summary IS NOT NULL
+          AND status IN ('ok', 'partial', 'timeout')
+          AND created_at >= NOW() - (%s::text || ' minutes')::interval
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        [report_run_id, query, target_market, max_age_minutes],
+    )
+    return rows[0] if rows else None
+
+
 def record_tiktok_realtime_query(
     conn,
     *,

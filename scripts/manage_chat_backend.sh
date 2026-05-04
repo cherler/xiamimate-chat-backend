@@ -82,7 +82,7 @@ preview_backend() {
     echo "host=$HOST"
     echo "port=$PORT"
     echo "log_file=$LOG_FILE"
-    echo "command=$PYTHON_BIN -m uvicorn $APP_ENTRYPOINT --host $HOST --port $PORT"
+    echo "command=$PYTHON_BIN -m uvicorn $APP_ENTRYPOINT --app-dir $ROOT_DIR --host $HOST --port $PORT"
 }
 
 start_backend() {
@@ -98,6 +98,7 @@ start_backend() {
 
     cleanup_metadata
     nohup "$PYTHON_BIN" -m uvicorn "$APP_ENTRYPOINT" \
+        --app-dir "$ROOT_DIR" \
         --host "$HOST" --port "$PORT" >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
 
