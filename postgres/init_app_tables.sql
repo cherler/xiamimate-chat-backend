@@ -334,6 +334,22 @@ CREATE TABLE IF NOT EXISTS app.usage_event (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS app.report_tiktok_realtime_queries (
+    id                   UUID PRIMARY KEY,
+    report_run_id        TEXT NOT NULL,
+    query                TEXT NOT NULL,
+    target_market        TEXT NOT NULL,
+    provider             TEXT NOT NULL DEFAULT 'tikhub',
+    request_payload      JSONB NOT NULL,
+    vendor_endpoints     JSONB NOT NULL,
+    vendor_response_raw  JSONB,
+    normalized_summary   JSONB,
+    result_text          TEXT,
+    status               TEXT NOT NULL,
+    latency_ms           INTEGER,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS app.daily_credit_quota_state (
     user_id               TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
     quota_date            DATE NOT NULL,
@@ -457,6 +473,9 @@ CREATE INDEX IF NOT EXISTS idx_analysis_run_session_started ON app.analysis_run(
 CREATE INDEX IF NOT EXISTS idx_analysis_run_status ON app.analysis_run(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_analysis_artifact_run ON app.analysis_artifact(run_id, created_at ASC);
 CREATE INDEX IF NOT EXISTS idx_usage_event_user_created ON app.usage_event(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tiktok_realtime_queries_run ON app.report_tiktok_realtime_queries(report_run_id);
+CREATE INDEX IF NOT EXISTS idx_tiktok_realtime_queries_created_at ON app.report_tiktok_realtime_queries(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tiktok_realtime_queries_status ON app.report_tiktok_realtime_queries(status);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_created ON app.credit_ledger_entry(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_reference ON app.credit_ledger_entry(user_id, entry_type, reference_id);
 CREATE INDEX IF NOT EXISTS idx_redeem_code_hash_status ON app.redeem_code(code_hash, status);

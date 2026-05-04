@@ -24,9 +24,9 @@ from data_platform.chat_backend.domains.site_config import (
 
 # Routers
 from data_platform.chat_backend.api.public_routes import router as public_router
-from data_platform.chat_backend.api.internal_routes import router as internal_router
+from data_platform.chat_backend.api.internal.router import router as internal_router
 from data_platform.chat_backend.api.admin_routes import router as admin_router
-from data_platform.chat_backend.api.portal_routes import router as portal_router
+from data_platform.chat_backend.api.portal.router import router as portal_router
 
 app = FastAPI(title="xiamimate Chat Backend", version="2026-04-13")
 

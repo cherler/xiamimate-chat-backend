@@ -11,6 +11,7 @@ PID_FILE="$LOG_DIR/chat_backend.pid"
 LOG_FILE="$LOG_DIR/chat_backend.log"
 HOST="${CHAT_BACKEND_HOST:-0.0.0.0}"
 PORT="${CHAT_BACKEND_PORT:-18200}"
+APP_ENTRYPOINT="data_platform.chat_backend.app:app"
 
 mkdir -p "$LOG_DIR"
 
@@ -81,7 +82,7 @@ preview_backend() {
     echo "host=$HOST"
     echo "port=$PORT"
     echo "log_file=$LOG_FILE"
-    echo "command=$PYTHON_BIN -m uvicorn data_platform.api.chat_backend:app --host $HOST --port $PORT"
+    echo "command=$PYTHON_BIN -m uvicorn $APP_ENTRYPOINT --host $HOST --port $PORT"
 }
 
 start_backend() {
@@ -96,7 +97,7 @@ start_backend() {
     fi
 
     cleanup_metadata
-    nohup "$PYTHON_BIN" -m uvicorn data_platform.api.chat_backend:app \
+    nohup "$PYTHON_BIN" -m uvicorn "$APP_ENTRYPOINT" \
         --host "$HOST" --port "$PORT" >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
 
@@ -201,15 +202,15 @@ case "${1:-}" in
     logs)
         show_logs "$@"
         ;;
-        preview)
-                preview_backend
-                ;;
+    preview)
+        preview_backend
+        ;;
     *)
         cat <<EOF
 Usage: bash scripts/manage_chat_backend.sh {start|stop|restart|status|logs|preview}
 
 Commands:
-        start    启动 chat backend（默认 0.0.0.0:8200）
+    start    启动 chat backend（当前解析为 ${HOST}:${PORT}，可用 CHAT_BACKEND_HOST / CHAT_BACKEND_PORT 覆盖）
   stop     停止 chat backend
   restart  重启 chat backend
   status   查看运行状态 + 健康检查

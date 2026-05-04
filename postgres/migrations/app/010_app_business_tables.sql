@@ -321,6 +321,22 @@ CREATE TABLE IF NOT EXISTS app.usage_event (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS app.report_tiktok_realtime_queries (
+    id                   UUID PRIMARY KEY,
+    report_run_id        TEXT NOT NULL,
+    query                TEXT NOT NULL,
+    target_market        TEXT NOT NULL,
+    provider             TEXT NOT NULL DEFAULT 'tikhub',
+    request_payload      JSONB NOT NULL,
+    vendor_endpoints     JSONB NOT NULL,
+    vendor_response_raw  JSONB,
+    normalized_summary   JSONB,
+    result_text          TEXT,
+    status               TEXT NOT NULL,
+    latency_ms           INTEGER,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS app.daily_credit_quota_state (
     user_id               TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
     quota_date            DATE NOT NULL,

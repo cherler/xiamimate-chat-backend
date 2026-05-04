@@ -20,7 +20,6 @@ except ImportError:
     pass
 
 from data_platform.chat_backend.infra.settings import (
-    DEFAULT_BILLING_PACKAGES,
     DEFAULT_EVENT_PRICING,
     DEFAULT_PROMOTION_RULES,
     GUEST_DAILY_POINTS,
@@ -30,9 +29,6 @@ from data_platform.chat_backend.infra.settings import (
     SIGNUP_GIFT_POINTS,
     _current_quota_date,
     _generate_id,
-    _generate_invite_code,
-    _hash_text,
-    _is_guest_identity,
     _resolve_promotion_rule_seed_status,
     _utc_now,
 )
@@ -42,6 +38,24 @@ from data_platform.chat_backend.infra.postgres import (
     _run_pg_dict_query,
 )
 from data_platform.chat_backend.domains.billing.models import UserCreditAccount
+from data_platform.chat_backend.domains.billing.catalog import (
+    _fetch_billing_package,
+    _list_billing_packages,
+    _seed_billing_packages,
+)
+from data_platform.chat_backend.domains.billing.quotas import (
+    _adjust_daily_credit_quota_consumed,
+    _fetch_daily_credit_quota_state,
+    _fetch_latest_daily_credit_quota_state,
+    _is_guest_daily_quota_user,
+)
+from data_platform.chat_backend.domains.billing.redeem_codes import (
+    _build_redeem_code_hash,
+    _generate_redeem_code_value,
+    _mask_redeem_code,
+    _normalize_redeem_code,
+    _normalize_redeem_code_type,
+)
 from data_platform.chat_backend.domains.identity.models import RequestUser
 from data_platform.chat_backend.domains.notifications.service import _upsert_user_notification
 
@@ -61,14 +75,6 @@ _EVENT_PRICING_CACHE: dict[str, dict[str, Any]] = {}
 _EVENT_PRICING_CACHE_LOCK = threading.Lock()
 _EVENT_PRICING_CACHE_TS: float = 0.0
 _EVENT_PRICING_CACHE_TTL: float = 60.0
-_LEGACY_BILLING_PACKAGE_CODES = (
-    "credit_pack_s",
-    "credit_pack_m",
-    "credit_pack_l",
-    "monthly_basic",
-)
-
-
 # ---------------------------------------------------------------------------
 # Credit account
 # ---------------------------------------------------------------------------
@@ -672,38 +678,6 @@ def _grant_points_with_ledger(
 # Redeem codes
 # ---------------------------------------------------------------------------
 
-def _normalize_redeem_code(raw_code: str) -> str:
-    normalized = "".join(ch for ch in str(raw_code or "").strip().upper() if ch.isalnum())
-    if len(normalized) < 6:
-        raise HTTPException(status_code=400, detail="invalid redeem code")
-    return normalized
-
-
-def _build_redeem_code_hash(raw_code: str) -> str:
-    return _hash_text(f"redeem_code:{_normalize_redeem_code(raw_code)}")
-
-
-def _mask_redeem_code(raw_code: str) -> str:
-    normalized = _normalize_redeem_code(raw_code)
-    if len(normalized) <= 8:
-        return normalized[:2] + "****" + normalized[-2:]
-    return normalized[:4] + "****" + normalized[-4:]
-
-
-def _format_generated_redeem_code(raw_code: str) -> str:
-    normalized = _normalize_redeem_code(raw_code)
-    return "-".join(normalized[index:index + 4] for index in range(0, len(normalized), 4))
-
-
-def _normalize_redeem_code_type(code_type: str | None) -> str:
-    normalized = str(code_type or "promotion").strip().lower() or "promotion"
-    if normalized in {"promotion", "promotion_reward", "gift", "bonus"}:
-        return "promotion"
-    if normalized in {"recharge", "sold", "paid", "cash"}:
-        return "recharge"
-    raise HTTPException(status_code=400, detail=f"unsupported redeem code type: {code_type}")
-
-
 def _coerce_redeem_datetime(value: Any, field_name: str) -> datetime | None:
     if value is None or value == "":
         return None
@@ -757,10 +731,6 @@ def _serialize_redeem_code_batch_row(row: dict[str, Any]) -> dict[str, Any]:
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
     }
-
-
-def _generate_redeem_code_value(length: int = 12) -> str:
-    return _format_generated_redeem_code(_generate_invite_code(length=max(8, length)))
 
 
 def _create_redeem_code_batch(
@@ -1271,61 +1241,6 @@ def _record_usage_event(
 # ---------------------------------------------------------------------------
 # Daily credit quota (guest users)
 # ---------------------------------------------------------------------------
-
-def _fetch_daily_credit_quota_state(conn, user_id: str, quota_date) -> dict[str, Any] | None:
-    return _fetch_optional_one(
-        conn,
-        """
-        SELECT user_id, quota_date, quota_points, applied_delta_points, consumed_points,
-               reset_reference_id, created_at, updated_at
-        FROM app.daily_credit_quota_state
-        WHERE user_id = %s AND quota_date = %s
-        LIMIT 1
-        """,
-        [user_id, quota_date],
-    )
-
-
-def _fetch_latest_daily_credit_quota_state(conn, user_id: str) -> dict[str, Any] | None:
-    return _fetch_optional_one(
-        conn,
-        """
-        SELECT user_id, quota_date, quota_points, applied_delta_points, consumed_points,
-               reset_reference_id, created_at, updated_at
-        FROM app.daily_credit_quota_state
-        WHERE user_id = %s
-        ORDER BY quota_date DESC, updated_at DESC
-        LIMIT 1
-        """,
-        [user_id],
-    )
-
-
-def _is_guest_daily_quota_user(user: RequestUser) -> bool:
-    return _is_guest_identity(
-        user_id=user.user_id,
-        email=user.email,
-        display_name=user.display_name,
-        plan_tier=user.plan_tier,
-    )
-
-
-def _adjust_daily_credit_quota_consumed(conn, user_id: str, delta_points: int) -> None:
-    if delta_points == 0:
-        return
-    quota_date = _current_quota_date()
-    _run_pg_dict_query(
-        conn,
-        """
-        UPDATE app.daily_credit_quota_state
-        SET consumed_points = GREATEST(0, consumed_points + %s),
-            updated_at = NOW()
-        WHERE user_id = %s AND quota_date = %s
-        RETURNING user_id, quota_date
-        """,
-        [delta_points, user_id, quota_date],
-    )
-
 
 def _apply_guest_daily_quota_if_needed(conn, user: RequestUser) -> UserCreditAccount:
     _ensure_credit_account(conn, user.user_id)
@@ -2198,83 +2113,6 @@ def _apply_user_plan_tier_from_package(conn, user_id: str, package: dict[str, An
         """,
         [tier_key, user_id],
     )
-
-def _seed_billing_packages(conn) -> None:
-    for package in DEFAULT_BILLING_PACKAGES:
-        _run_pg_dict_query(
-            conn,
-            """
-            INSERT INTO app.billing_package (
-                package_code, package_name, product_type, price_cents, points_amount,
-                period_days, status, display_order, meta_json, created_at, updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, 'active', %s, %s, NOW(), NOW())
-            ON CONFLICT (package_code) DO UPDATE SET
-                package_name = EXCLUDED.package_name,
-                product_type = EXCLUDED.product_type,
-                price_cents = EXCLUDED.price_cents,
-                points_amount = EXCLUDED.points_amount,
-                period_days = EXCLUDED.period_days,
-                status = 'active',
-                display_order = EXCLUDED.display_order,
-                meta_json = EXCLUDED.meta_json,
-                updated_at = NOW()
-            RETURNING package_code
-            """,
-            [
-                package["package_code"],
-                package["package_name"],
-                package["product_type"],
-                package["price_cents"],
-                package["points_amount"],
-                package["period_days"],
-                package["display_order"],
-                psycopg2.extras.Json(package.get("meta_json") or {}),
-            ],
-        )
-    _run_pg_dict_query(
-        conn,
-        """
-        UPDATE app.billing_package
-        SET status = 'disabled',
-            updated_at = NOW()
-        WHERE package_code = ANY(%s)
-        RETURNING package_code
-        """,
-        [list(_LEGACY_BILLING_PACKAGE_CODES)],
-    )
-
-
-def _fetch_billing_package(conn, package_code: str) -> dict[str, Any]:
-    row = _fetch_optional_one(
-        conn,
-        """
-        SELECT package_code, package_name, product_type, price_cents, points_amount,
-               period_days, status, display_order, meta_json, created_at, updated_at
-        FROM app.billing_package
-        WHERE package_code = %s
-        LIMIT 1
-        """,
-        [package_code],
-    )
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"billing package not found: {package_code}")
-    if row["status"] != "active":
-        raise HTTPException(status_code=409, detail=f"billing package is not active: {package_code}")
-    return row
-
-
-def _list_billing_packages(conn) -> list[dict[str, Any]]:
-    return _run_pg_dict_query(
-        conn,
-        """
-        SELECT package_code, package_name, product_type, price_cents, points_amount,
-               period_days, status, display_order, meta_json, created_at, updated_at
-        FROM app.billing_package
-        WHERE status = 'active'
-        ORDER BY display_order ASC, created_at ASC, package_code ASC
-        """,
-    )
-
 
 # ---------------------------------------------------------------------------
 # Event pricing (DB + cache)

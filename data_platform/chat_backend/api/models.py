@@ -355,6 +355,43 @@ class InternalThemeAPICallRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class InternalTikTokOpportunityRequest(BaseModel):
+    report_run_id: str | None = Field(default=None, max_length=120)
+    query: str = Field(..., min_length=1, max_length=300)
+    target_market: str = Field(default="US", min_length=2, max_length=20)
+    keywords: list[str] = Field(default_factory=list)
+    limit: int = Field(default=20, ge=1, le=50)
+
+    @validator("report_run_id")
+    def _normalize_optional_report_run_id(cls, value: str | None) -> str | None:  # noqa: N805
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @validator("target_market")
+    def _normalize_tiktok_target_market(cls, value: str) -> str:  # noqa: N805
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("target_market is required")
+        return normalized
+
+    @validator("keywords", pre=True, always=True)
+    def _normalize_tiktok_keywords(cls, value: Any) -> list[str]:  # noqa: N805
+        if value is None:
+            return []
+        if isinstance(value, str):
+            raw_items = value.split(",")
+        else:
+            raw_items = value
+        keywords: list[str] = []
+        for item in raw_items:
+            text = str(item or "").strip()
+            if text and text not in keywords:
+                keywords.append(text)
+        return keywords[:20]
+
+
 class InternalLLMRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
