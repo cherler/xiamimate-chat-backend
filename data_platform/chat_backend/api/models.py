@@ -395,6 +395,44 @@ class InternalTikTokOpportunityRequest(BaseModel):
         return keywords[:20]
 
 
+class InternalOnebound1688SupplierDiscoveryRequest(BaseModel):
+    report_run_id: str | None = Field(default=None, max_length=120)
+    query: str = Field(..., min_length=1, max_length=300)
+    marketplace: str = Field(default="US", min_length=2, max_length=20)
+    seller_scope: str = Field(default="cross_border_sme_v1", min_length=1, max_length=80)
+    supplier_queries: list[str] = Field(default_factory=list)
+    limit: int = Field(default=20, ge=1, le=50)
+    cost_assumptions: dict[str, Any] = Field(default_factory=dict)
+    force_refresh: bool = False
+    allow_realtime: bool = True
+
+    @validator("report_run_id")
+    def _normalize_onebound_report_run_id(cls, value: str | None) -> str | None:  # noqa: N805
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @validator("marketplace")
+    def _normalize_onebound_marketplace(cls, value: str) -> str:  # noqa: N805
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("marketplace is required")
+        return normalized
+
+    @validator("supplier_queries", pre=True, always=True)
+    def _normalize_supplier_queries(cls, value: Any) -> list[str]:  # noqa: N805
+        if value is None:
+            return []
+        raw_items = value.split(",") if isinstance(value, str) else value
+        queries: list[str] = []
+        for item in raw_items:
+            text = str(item or "").strip()
+            if text and text not in queries:
+                queries.append(text)
+        return queries[:5]
+
+
 class InternalLLMRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 

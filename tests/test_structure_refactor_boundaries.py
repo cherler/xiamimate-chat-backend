@@ -35,6 +35,12 @@ class StructureRefactorBoundaryTests(unittest.TestCase):
         paths = [route.path for route in app.routes if hasattr(route, "methods")]
         self.assertIn("/internal/provider/external-market/tiktok/opportunity", paths)
 
+    def test_onebound_1688_supplier_route_is_registered_in_new_tool_router(self) -> None:
+        from data_platform.chat_backend.app import app
+
+        paths = [route.path for route in app.routes if hasattr(route, "methods")]
+        self.assertIn("/internal/provider/sourcing/1688/supplier-discovery", paths)
+
     def test_legacy_internal_routes_no_longer_owns_provider_proxy_routes(self) -> None:
         source = read_repo_file("data_platform/chat_backend/api/internal_routes.py")
 
@@ -62,6 +68,18 @@ class StructureRefactorBoundaryTests(unittest.TestCase):
             source = read_repo_file(relative_path).lower()
             self.assertNotIn("tikhub", source, relative_path)
             self.assertNotIn("tiktok_shop_opportunity", source, relative_path)
+
+    def test_onebound_provider_code_must_not_land_in_legacy_files(self) -> None:
+        legacy_files = [
+            "data_platform/chat_backend/api/internal_routes.py",
+            "data_platform/chat_backend/api/portal_routes.py",
+            "data_platform/chat_backend/domains/billing/service.py",
+        ]
+
+        for relative_path in legacy_files:
+            source = read_repo_file(relative_path).lower()
+            self.assertNotIn("onebound_1688", source, relative_path)
+            self.assertNotIn("supplier-discovery", source, relative_path)
 
 
 if __name__ == "__main__":

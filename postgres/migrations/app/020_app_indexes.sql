@@ -56,6 +56,13 @@ CREATE INDEX IF NOT EXISTS idx_tiktok_realtime_queries_run ON app.report_tiktok_
 CREATE INDEX IF NOT EXISTS idx_tiktok_realtime_queries_reuse ON app.report_tiktok_realtime_queries(report_run_id, lower(query), target_market, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tiktok_realtime_queries_created_at ON app.report_tiktok_realtime_queries(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tiktok_realtime_queries_status ON app.report_tiktok_realtime_queries(status);
+CREATE INDEX IF NOT EXISTS idx_onebound_1688_queries_run ON app.report_onebound_1688_realtime_queries(report_run_id);
+CREATE INDEX IF NOT EXISTS idx_onebound_1688_queries_reuse ON app.report_onebound_1688_realtime_queries(report_run_id, lower(query), marketplace, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_onebound_1688_queries_created_at ON app.report_onebound_1688_realtime_queries(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_onebound_1688_queries_status ON app.report_onebound_1688_realtime_queries(status);
+CREATE INDEX IF NOT EXISTS idx_onebound_1688_offers_snapshot_rank ON app.report_onebound_1688_supplier_offer_results(snapshot_id, rank ASC);
+CREATE INDEX IF NOT EXISTS idx_onebound_1688_offers_report_created ON app.report_onebound_1688_supplier_offer_results(report_run_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_onebound_1688_offers_seller ON app.report_onebound_1688_supplier_offer_results(seller_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_created ON app.credit_ledger_entry(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_credit_ledger_reference ON app.credit_ledger_entry(user_id, entry_type, reference_id);
 CREATE INDEX IF NOT EXISTS idx_redeem_code_hash_status ON app.redeem_code(code_hash, status);

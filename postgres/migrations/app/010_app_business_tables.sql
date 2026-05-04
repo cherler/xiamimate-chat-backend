@@ -337,6 +337,43 @@ CREATE TABLE IF NOT EXISTS app.report_tiktok_realtime_queries (
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS app.report_onebound_1688_realtime_queries (
+    id                   UUID PRIMARY KEY,
+    report_run_id        TEXT NOT NULL,
+    query                TEXT NOT NULL,
+    marketplace          TEXT NOT NULL,
+    provider             TEXT NOT NULL DEFAULT 'onebound_1688',
+    request_payload      JSONB NOT NULL,
+    vendor_endpoints     JSONB NOT NULL,
+    vendor_response_raw  JSONB,
+    normalized_summary   JSONB,
+    result_text          TEXT,
+    status               TEXT NOT NULL,
+    latency_ms           INTEGER,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.report_onebound_1688_supplier_offer_results (
+    id                   UUID PRIMARY KEY,
+    snapshot_id          UUID NOT NULL REFERENCES app.report_onebound_1688_realtime_queries(id) ON DELETE CASCADE,
+    report_run_id        TEXT NOT NULL,
+    rank                 INTEGER NOT NULL,
+    num_iid              TEXT,
+    title                TEXT,
+    detail_url           TEXT,
+    pic_url              TEXT,
+    price_cny            NUMERIC(12, 2),
+    moq                  INTEGER,
+    sales_30d            INTEGER,
+    seller_id            TEXT,
+    shop_id              TEXT,
+    seller_name          TEXT,
+    shop_name            TEXT,
+    seller_info          JSONB NOT NULL DEFAULT '{}'::JSONB,
+    normalized_offer     JSONB NOT NULL DEFAULT '{}'::JSONB,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS app.daily_credit_quota_state (
     user_id               TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
     quota_date            DATE NOT NULL,
