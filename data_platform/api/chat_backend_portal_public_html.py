@@ -19,16 +19,16 @@ from data_platform.chat_backend.infra.settings import (
 
 _BASE_CSS = """
   :root {
-    --bg: #f5efe4;
-    --paper: rgba(255, 251, 245, 0.96);
-    --panel: rgba(255, 251, 245, 0.9);
-    --ink: #1e2a2f;
-    --muted: #68767d;
-    --accent: #114b5f;
-    --accent-soft: rgba(17, 75, 95, 0.08);
-    --accent-2: #d97706;
-    --line: rgba(17, 75, 95, 0.12);
-    --shadow: 0 18px 48px rgba(30, 42, 47, 0.12);
+    --bg: #f7f8fb;
+    --paper: rgba(255, 255, 255, 0.97);
+    --panel: rgba(255, 255, 255, 0.94);
+    --ink: #172033;
+    --muted: #64748b;
+    --accent: #2563eb;
+    --accent-soft: rgba(37, 99, 235, 0.08);
+    --accent-2: #0f766e;
+    --line: rgba(23, 32, 51, 0.12);
+    --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
     --sidebar-w: 228px;
     --content-w: 1220px;
   }
@@ -38,10 +38,7 @@ _BASE_CSS = """
     margin: 0;
     font-family: "IBM Plex Sans", "Helvetica Neue", "PingFang SC", sans-serif;
     color: var(--ink);
-    background:
-      radial-gradient(circle at top left, rgba(217, 119, 6, 0.18), transparent 24%),
-      radial-gradient(circle at right top, rgba(17, 75, 95, 0.18), transparent 20%),
-      linear-gradient(180deg, #fffdf8 0%, var(--bg) 100%);
+    background: linear-gradient(180deg, #ffffff 0%, var(--bg) 100%);
     min-height: 100vh;
     overflow: hidden;
   }
@@ -114,7 +111,7 @@ _BASE_CSS = """
     top: 0;
     z-index: 10;
     backdrop-filter: blur(12px);
-    background: rgba(255, 251, 245, 0.84);
+    background: rgba(255, 255, 255, 0.86);
     border-bottom: 1px solid var(--line);
   }
   .workspace-topbar-inner {
@@ -174,7 +171,7 @@ _BASE_CSS = """
     padding: 0 14px;
     border-radius: 12px;
     border: 1px solid var(--line);
-    background: rgba(255, 251, 245, 0.75);
+    background: rgba(255, 255, 255, 0.84);
     color: var(--muted);
     text-decoration: none;
     font-size: 0.84rem;
@@ -184,7 +181,7 @@ _BASE_CSS = """
   .top-route-link.active {
     background: var(--accent-soft);
     color: var(--accent);
-    border-color: rgba(17, 75, 95, 0.18);
+    border-color: rgba(37, 99, 235, 0.18);
   }
   .top-home-link {
     display: inline-flex;
@@ -193,7 +190,7 @@ _BASE_CSS = """
     min-height: 40px;
     padding: 0 16px;
     border-radius: 12px;
-    border: 1px solid rgba(17, 75, 95, 0.18);
+    border: 1px solid rgba(37, 99, 235, 0.18);
     background: var(--accent);
     color: #fff;
     text-decoration: none;
@@ -201,8 +198,8 @@ _BASE_CSS = """
     font-weight: 600;
   }
   .top-home-link:hover {
-    background: #0f3f50;
-    border-color: #0f3f50;
+    background: #1d4ed8;
+    border-color: #1d4ed8;
   }
   .top-action-link {
     display: inline-flex;
@@ -212,7 +209,7 @@ _BASE_CSS = """
     height: 40px;
     border-radius: 12px;
     border: 1px solid var(--line);
-    background: rgba(255, 251, 245, 0.78);
+    background: rgba(255, 255, 255, 0.86);
     color: var(--ink);
     text-decoration: none;
     cursor: pointer;
@@ -220,7 +217,7 @@ _BASE_CSS = """
   }
   .top-action-link:hover {
     background: var(--accent-soft);
-    border-color: rgba(17, 75, 95, 0.18);
+    border-color: rgba(37, 99, 235, 0.18);
     color: var(--accent);
   }
   .top-action-link svg {
@@ -278,8 +275,8 @@ _BASE_CSS = """
   }
   .tip-banner {
     border-radius: 16px;
-    border: 1px solid rgba(217, 119, 6, 0.2);
-    background: linear-gradient(135deg, rgba(217, 119, 6, 0.12), rgba(255, 251, 245, 0.94));
+    border: 1px solid rgba(37, 99, 235, 0.16);
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(255, 255, 255, 0.96));
     padding: 16px 18px;
     font-size: 0.9rem;
     line-height: 1.7;
@@ -292,7 +289,7 @@ _BASE_CSS = """
   .offer-card {
     border-radius: 20px;
     border: 1px solid var(--line);
-    background: linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(244, 236, 223, 0.9));
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94));
     padding: 20px;
     display: grid;
     gap: 14px;
@@ -330,26 +327,26 @@ _BASE_CSS = """
   }
   .offer-cta:hover,
   .payment-method.active:hover {
-    background: #0f3f50;
-    border-color: #0f3f50;
+    background: #1d4ed8;
+    border-color: #1d4ed8;
   }
   .offer-cta.disabled,
   .offer-cta[aria-disabled="true"] {
-    background: rgba(17, 75, 95, 0.1);
+    background: rgba(37, 99, 235, 0.1);
     color: var(--muted);
     border: 1px solid rgba(17, 75, 95, 0.12);
     pointer-events: none;
   }
   .ghost-button,
   .payment-method {
-    background: rgba(255, 251, 245, 0.78);
+    background: rgba(255, 255, 255, 0.88);
     color: var(--ink);
     border: 1px solid var(--line);
   }
   .ghost-button:hover,
   .payment-method:hover {
     background: var(--accent-soft);
-    border-color: rgba(17, 75, 95, 0.18);
+    border-color: rgba(37, 99, 235, 0.18);
     color: var(--accent);
   }
   .form-grid {
@@ -421,15 +418,15 @@ _BASE_CSS = """
     font-weight: 600;
   }
   .support-inline-link:hover {
-    color: #0f3f50;
+    color: #1d4ed8;
   }
   .cta-hint {
     color: var(--muted);
     font-size: 0.8rem;
   }
   .offer-card.featured {
-    border-color: rgba(217, 119, 6, 0.26);
-    box-shadow: 0 20px 42px rgba(217, 119, 6, 0.08);
+    border-color: rgba(37, 99, 235, 0.24);
+    box-shadow: 0 20px 42px rgba(37, 99, 235, 0.08);
   }
   .offer-top {
     display: flex;
@@ -486,7 +483,7 @@ _BASE_CSS = """
   .roadmap-card {
     border: 1px solid var(--line);
     border-radius: 14px;
-    background: rgba(255, 251, 245, 0.84);
+    background: rgba(255, 255, 255, 0.9);
     padding: 14px 16px;
   }
   .bullet-item {
@@ -525,7 +522,7 @@ _BASE_CSS = """
   .notice-card {
     border: 1px solid var(--line);
     border-radius: 16px;
-    background: rgba(255, 251, 245, 0.88);
+    background: rgba(255, 255, 255, 0.92);
     padding: 16px 18px;
   }
   .example-card {
@@ -533,7 +530,7 @@ _BASE_CSS = """
     gap: 12px;
   }
   .example-card.highlight {
-    background: linear-gradient(180deg, rgba(17, 75, 95, 0.08), rgba(255, 251, 245, 0.92));
+    background: linear-gradient(180deg, rgba(37, 99, 235, 0.08), rgba(255, 255, 255, 0.94));
   }
   .example-kicker {
     color: var(--muted);
@@ -579,18 +576,18 @@ _BASE_CSS = """
     line-height: 1.6;
   }
   .notice-card.accent {
-    background: linear-gradient(180deg, rgba(217, 119, 6, 0.12), rgba(255, 251, 245, 0.94));
+    background: linear-gradient(180deg, rgba(37, 99, 235, 0.08), rgba(255, 255, 255, 0.94));
   }
   .notice-card.service {
-    background: linear-gradient(180deg, rgba(15, 118, 110, 0.12), rgba(255, 251, 245, 0.94));
+    background: linear-gradient(180deg, rgba(15, 118, 110, 0.1), rgba(255, 255, 255, 0.94));
   }
   .demo-media {
     border: 1px dashed rgba(17, 75, 95, 0.28);
     border-radius: 16px;
     min-height: 220px;
     background:
-      linear-gradient(135deg, rgba(17, 75, 95, 0.08), rgba(255, 251, 245, 0.92)),
-      repeating-linear-gradient(135deg, rgba(17, 75, 95, 0.06) 0, rgba(17, 75, 95, 0.06) 12px, transparent 12px, transparent 24px);
+      linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(255, 255, 255, 0.94)),
+      repeating-linear-gradient(135deg, rgba(37, 99, 235, 0.05) 0, rgba(37, 99, 235, 0.05) 12px, transparent 12px, transparent 24px);
     display: grid;
     place-items: center;
     padding: 18px;
@@ -625,12 +622,12 @@ _BASE_CSS = """
     font-weight: 700;
   }
   .status-pill.done {
-    background: rgba(17, 75, 95, 0.12);
+    background: rgba(37, 99, 235, 0.12);
     color: var(--accent);
   }
   .status-pill.pending {
-    background: rgba(217, 119, 6, 0.12);
-    color: #9a6700;
+    background: rgba(100, 116, 139, 0.12);
+    color: #475569;
   }
   .status-pill.success {
     background: rgba(15, 118, 110, 0.12);
@@ -681,7 +678,7 @@ _BASE_CSS = """
   .status-card {
     border: 1px solid var(--line);
     border-radius: 16px;
-    background: rgba(255, 251, 245, 0.86);
+    background: rgba(255, 255, 255, 0.9);
     padding: 14px 16px;
   }
   .checkout-price-label,
@@ -706,7 +703,7 @@ _BASE_CSS = """
     border: 1px solid var(--line);
     border-radius: 14px;
     padding: 12px 14px;
-    background: rgba(255, 251, 245, 0.78);
+    background: rgba(255, 255, 255, 0.88);
   }
   .promo-item strong {
     display: block;
@@ -727,15 +724,15 @@ _BASE_CSS = """
     font-weight: 700;
   }
   .status-badge.pending {
-    background: rgba(217, 119, 6, 0.12);
-    color: #9a6700;
+    background: rgba(100, 116, 139, 0.12);
+    color: #475569;
   }
   .status-badge.paid {
     background: rgba(15, 118, 110, 0.12);
     color: #0f766e;
   }
   .status-badge.other {
-    background: rgba(17, 75, 95, 0.1);
+    background: rgba(37, 99, 235, 0.1);
     color: var(--accent);
   }
   @media (max-width: 900px) {

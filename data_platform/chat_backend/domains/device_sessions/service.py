@@ -110,8 +110,14 @@ def _serialize_device_session(row: dict[str, Any] | None, *, current_session_id:
     if row is None:
         return None
     elevated_until = row.get("elevated_until")
+    session_id = row.get("session_id")
+    session_ids = list(row.get("session_ids") or ([session_id] if session_id else []))
     return {
-        "session_id": row.get("session_id"),
+        "session_id": session_id,
+        "session_ids": session_ids,
+        "session_count": int(row.get("session_count") or max(1, len(session_ids))),
+        "active_session_count": int(row.get("active_session_count") or (0 if row.get("revoked_at") else 1)),
+        "revoked_session_count": int(row.get("revoked_session_count") or 0),
         "device_label": row.get("device_label") or "当前设备",
         "user_agent": row.get("user_agent") or "",
         "created_ip": row.get("created_ip"),
@@ -188,12 +194,69 @@ def _evaluate_device_session_request(conn, user_id: str, request: Request, *, to
     return {"status": "ok", "raw_token": raw_token, "session": session_row}
 
 
+def _reuse_recent_matching_device_session(conn, user_id: str, raw_token: str, request: Request) -> dict[str, Any] | None:
+    device_label = _request_device_label(request)
+    user_agent = str(request.headers.get("user-agent") or "")
+    client_ip = _request_client_ip(request)
+    if not user_agent or not client_ip or client_ip == "unknown":
+        return None
+    rows = _run_pg_dict_query(
+        conn,
+        """
+        WITH candidate AS (
+            SELECT s.session_id
+            FROM app.user_device_session s
+            JOIN app.app_user u ON u.user_id = s.user_id
+            WHERE s.user_id = %s
+              AND s.revoked_at IS NULL
+              AND s.session_version = u.auth_session_version
+              AND s.created_at >= NOW() - (%s * INTERVAL '1 second')
+              AND s.device_label = %s
+              AND COALESCE(s.user_agent, '') = %s
+              AND COALESCE(s.last_seen_ip, s.created_ip, '') = %s
+            ORDER BY s.last_seen_at DESC NULLS LAST, s.updated_at DESC NULLS LAST, s.created_at DESC
+            LIMIT 1
+            FOR UPDATE OF s SKIP LOCKED
+        )
+        UPDATE app.user_device_session s
+        SET session_token_hash = %s,
+            last_seen_at = NOW(),
+            last_seen_ip = %s,
+            device_label = %s,
+            user_agent = %s,
+            updated_at = NOW()
+        FROM candidate
+        WHERE s.session_id = candidate.session_id
+        RETURNING s.session_id, s.user_id, s.session_version, s.device_label, s.user_agent,
+                  s.created_ip, s.last_seen_ip, s.last_seen_at, s.elevated_until,
+                  s.last_verified_at, s.revoked_at, s.revoked_reason,
+                  s.created_at, s.updated_at
+        """,
+        [
+            user_id,
+            DEVICE_SESSION_TTL_SECONDS,
+            device_label,
+            user_agent,
+            client_ip,
+            _hash_device_session_token(raw_token),
+            client_ip,
+            device_label,
+            user_agent,
+        ],
+    )
+    return rows[0] if rows else None
+
+
 def _bootstrap_device_session(conn, user_id: str, request: Request) -> tuple[dict[str, Any] | None, str | None, bool]:
     evaluated = _evaluate_device_session_request(conn, user_id, request, touch=True)
     if evaluated["status"] == "ok":
         return evaluated["session"], evaluated["raw_token"], False
 
     raw_token = secrets.token_urlsafe(32)
+    reused_session = _reuse_recent_matching_device_session(conn, user_id, raw_token, request)
+    if reused_session is not None:
+        return reused_session, raw_token, False
+
     device_label = _request_device_label(request)
     rows = _run_pg_dict_query(
         conn,
@@ -293,7 +356,32 @@ def _revoke_other_device_sessions(conn, user_id: str, current_session_id: str, r
     )
 
 
-def _revoke_device_session(conn, user_id: str, session_id: str, reason: str) -> dict[str, Any] | None:
+def _revoke_device_session(
+    conn,
+    user_id: str,
+    session_id: str,
+    reason: str,
+    *,
+    current_session_id: str | None = None,
+) -> dict[str, Any] | None:
+    target = _fetch_optional_one(
+        conn,
+        """
+        SELECT session_id, user_id, session_version, device_label, user_agent,
+               created_ip, last_seen_ip, last_seen_at, elevated_until,
+               last_verified_at, revoked_at, revoked_reason,
+               created_at, updated_at
+        FROM app.user_device_session
+        WHERE user_id = %s
+          AND session_id = %s
+          AND revoked_at IS NULL
+        LIMIT 1
+        """,
+        [user_id, session_id],
+    )
+    if target is None:
+        return None
+    target_ip_key = str(target.get("last_seen_ip") or target.get("created_ip") or "")
     rows = _run_pg_dict_query(
         conn,
         """
@@ -302,16 +390,32 @@ def _revoke_device_session(conn, user_id: str, session_id: str, reason: str) -> 
             revoked_reason = %s,
             updated_at = NOW()
         WHERE user_id = %s
-          AND session_id = %s
           AND revoked_at IS NULL
+          AND session_id <> COALESCE(%s, '')
+          AND device_label = %s
+          AND COALESCE(user_agent, '') = %s
+          AND COALESCE(last_seen_ip, created_ip, '') = %s
         RETURNING session_id, user_id, session_version, device_label, user_agent,
                   created_ip, last_seen_ip, last_seen_at, elevated_until,
                   last_verified_at, revoked_at, revoked_reason,
                   created_at, updated_at
         """,
-        [reason, user_id, session_id],
+        [
+            reason,
+            user_id,
+            current_session_id,
+            str(target.get("device_label") or ""),
+            str(target.get("user_agent") or ""),
+            target_ip_key,
+        ],
     )
-    return rows[0] if rows else None
+    revoked_session_ids = [str(row.get("session_id") or "") for row in rows if row.get("session_id")]
+    result = dict(target)
+    result["revoked_at"] = rows[0].get("revoked_at") if rows else target.get("revoked_at")
+    result["revoked_reason"] = reason
+    result["revoked_session_ids"] = revoked_session_ids
+    result["revoked_session_count"] = len(revoked_session_ids)
+    return result
 
 
 def _elevate_device_session(conn, session_id: str, *, ttl_seconds: int = DEVICE_SESSION_ELEVATION_TTL_SECONDS) -> dict[str, Any]:
@@ -344,7 +448,61 @@ def _require_elevated_device_session(conn, user_id: str, request: Request) -> di
     return session_row
 
 
+def _device_session_group_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(row.get("device_label") or ""),
+        str(row.get("user_agent") or ""),
+        str(row.get("last_seen_ip") or row.get("created_ip") or ""),
+    )
+
+
+def _latest_session_time(row: dict[str, Any]) -> Any:
+    return row.get("last_seen_at") or row.get("updated_at") or row.get("created_at")
+
+
+def _aggregate_device_session_rows(
+    rows: list[dict[str, Any]],
+    *,
+    current_session_id: str | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    grouped_rows: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped_rows.setdefault(_device_session_group_key(row), []).append(row)
+
+    serialized_groups: list[dict[str, Any]] = []
+    for group in grouped_rows.values():
+        current_rows = [row for row in group if current_session_id and row.get("session_id") == current_session_id]
+        active_rows = [row for row in group if not row.get("revoked_at")]
+        representative_pool = current_rows or active_rows or group
+        representative = max(representative_pool, key=lambda row: str(_latest_session_time(row) or ""))
+        created_values = [row.get("created_at") for row in group if row.get("created_at") is not None]
+        seen_values = [row.get("last_seen_at") for row in group if row.get("last_seen_at") is not None]
+        representative = dict(representative)
+        representative["session_ids"] = [row.get("session_id") for row in group if row.get("session_id")]
+        representative["session_count"] = len(group)
+        representative["active_session_count"] = len(active_rows)
+        representative["revoked_session_count"] = len(group) - len(active_rows)
+        if created_values:
+            representative["created_at"] = min(created_values)
+        if seen_values:
+            representative["last_seen_at"] = max(seen_values)
+        serialized = _serialize_device_session(representative, current_session_id=current_session_id)
+        if serialized is not None:
+            serialized_groups.append(serialized)
+
+    serialized_groups.sort(
+        key=lambda session: (
+            1 if session.get("is_current") else 0,
+            str(session.get("last_seen_at") or session.get("updated_at") or session.get("created_at") or ""),
+        ),
+        reverse=True,
+    )
+    return serialized_groups[: max(1, int(limit or 10))]
+
+
 def _list_recent_device_sessions(conn, user_id: str, *, current_session_id: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
+    raw_limit = max(max(1, int(limit or 10)) * 4, 40)
     rows = _run_pg_dict_query(
         conn,
         """
@@ -358,9 +516,6 @@ def _list_recent_device_sessions(conn, user_id: str, *, current_session_id: str 
         ORDER BY last_seen_at DESC, session_id DESC
         LIMIT %s
         """,
-        [user_id, DEVICE_SESSION_TTL_SECONDS, max(1, int(limit or 10))],
+        [user_id, DEVICE_SESSION_TTL_SECONDS, raw_limit],
     )
-    return [
-        _serialize_device_session(row, current_session_id=current_session_id)
-        for row in rows
-    ]
+    return _aggregate_device_session_rows(rows, current_session_id=current_session_id, limit=limit)

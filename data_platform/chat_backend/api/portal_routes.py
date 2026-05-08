@@ -854,6 +854,7 @@ def portal_revoke_device_session(session_id: str, request: Request) -> dict[str,
             user_id,
             normalized_session_id,
             "self_service_revoke_device",
+            current_session_id=current_session_id or None,
         )
         if revoked_session is None:
             raise HTTPException(status_code=404, detail="device session not found or already revoked")
@@ -868,6 +869,7 @@ def portal_revoke_device_session(session_id: str, request: Request) -> dict[str,
             "action": "revoke_device_session",
             "revoked_session_id": normalized_session_id,
             "revoked_device_label": revoked_session.get("device_label") or "设备",
+            "revoked_session_count": int(revoked_session.get("revoked_session_count") or 1),
         }
         overview = _apply_security_verification_summary(overview)
     return _success_response(

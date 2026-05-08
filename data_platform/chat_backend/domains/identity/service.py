@@ -9,6 +9,7 @@ import logging
 import re
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,100 @@ _EMAIL_CHALLENGE_PURPOSE_PASSWORD_RESET = "password_reset"
 _EMAIL_CHALLENGE_PURPOSE_SECURITY_VERIFY = "security_verify"
 _OPENWEBUI_DB_LOCK = threading.Lock()
 _LOGGER = logging.getLogger(__name__)
+_PG_RETRYABLE_CONCURRENCY_CODES = {"40P01", "40001"}
+
+
+def _is_retryable_pg_concurrency_error(exc: Exception) -> bool:
+    return str(getattr(exc, "pgcode", "") or "") in _PG_RETRYABLE_CONCURRENCY_CODES
+
+
+def _execute_app_user_upsert(
+    conn,
+    *,
+    user_id: str,
+    normalized_email: str,
+    display_name: str,
+    effective_plan_tier: str,
+    invite_code: str,
+) -> list[dict[str, Any]]:
+    _run_pg_dict_query(conn, "SELECT pg_advisory_xact_lock(90210508, hashtext(%s))", [user_id])
+    return _run_pg_dict_query(
+        conn,
+        """
+        INSERT INTO app.app_user (
+            user_id, email, display_name, status, plan_tier, invite_code,
+            source_state, source_last_seen_at, source_orphaned_at, source_recovered_at,
+            auth_session_version, last_password_reset_at,
+            email_verified_at, created_at, updated_at
+        ) VALUES (
+            %s, %s, %s, 'active', %s, %s,
+            'active', NOW(), NULL, NULL,
+            1, NULL,
+            NULL, NOW(), NOW()
+        )
+        ON CONFLICT (user_id) DO UPDATE SET
+            email = EXCLUDED.email,
+            display_name = EXCLUDED.display_name,
+            invite_code = COALESCE(app.app_user.invite_code, EXCLUDED.invite_code),
+            source_state = 'active',
+            source_last_seen_at = NOW(),
+            source_orphaned_at = NULL,
+            source_recovered_at = CASE
+                WHEN app.app_user.source_state = 'orphaned' THEN NOW()
+                ELSE app.app_user.source_recovered_at
+            END,
+            email_verified_at = CASE
+                WHEN app.app_user.email IS DISTINCT FROM EXCLUDED.email THEN NULL
+                ELSE app.app_user.email_verified_at
+            END,
+            updated_at = NOW()
+        RETURNING user_id, email, display_name, status, plan_tier,
+                  created_at, updated_at, source_state, source_last_seen_at,
+                  source_orphaned_at, source_recovered_at, auth_session_version,
+                  last_password_reset_at, invite_code, email_verified_at
+        """,
+        [user_id, normalized_email, display_name, effective_plan_tier, invite_code],
+    )
+
+
+def _execute_app_user_upsert_with_retry(
+    conn,
+    *,
+    user_id: str,
+    normalized_email: str,
+    display_name: str,
+    effective_plan_tier: str,
+    invite_code: str,
+) -> list[dict[str, Any]]:
+    max_attempts = 3
+    for attempt_index in range(max_attempts):
+        savepoint_name = f"app_user_upsert_{attempt_index}"
+        with conn.cursor() as cursor:
+            cursor.execute(f"SAVEPOINT {savepoint_name}")
+        try:
+            rows = _execute_app_user_upsert(
+                conn,
+                user_id=user_id,
+                normalized_email=normalized_email,
+                display_name=display_name,
+                effective_plan_tier=effective_plan_tier,
+                invite_code=invite_code,
+            )
+            with conn.cursor() as cursor:
+                cursor.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+            return rows
+        except Exception as exc:
+            with conn.cursor() as cursor:
+                cursor.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
+                cursor.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+            if not _is_retryable_pg_concurrency_error(exc) or attempt_index >= max_attempts - 1:
+                raise
+            _LOGGER.warning(
+                "retrying app_user upsert after PostgreSQL concurrency error",
+                extra={"user_id": user_id, "pgcode": getattr(exc, "pgcode", None), "attempt": attempt_index + 1},
+            )
+            time.sleep(0.05 * (attempt_index + 1))
+    raise RuntimeError("unreachable app_user upsert retry state")
 
 
 def _normalize_user_headers(request: Request) -> tuple[str, str, str]:
@@ -255,42 +350,13 @@ def _upsert_user_row(
         email=normalized_email,
         display_name=display_name,
     )
-    rows = _run_pg_dict_query(
+    rows = _execute_app_user_upsert_with_retry(
         conn,
-        """
-        INSERT INTO app.app_user (
-            user_id, email, display_name, status, plan_tier, invite_code,
-            source_state, source_last_seen_at, source_orphaned_at, source_recovered_at,
-            auth_session_version, last_password_reset_at,
-            email_verified_at, created_at, updated_at
-        ) VALUES (
-            %s, %s, %s, 'active', %s, %s,
-            'active', NOW(), NULL, NULL,
-            1, NULL,
-            NULL, NOW(), NOW()
-        )
-        ON CONFLICT (user_id) DO UPDATE SET
-            email = EXCLUDED.email,
-            display_name = EXCLUDED.display_name,
-            invite_code = COALESCE(app.app_user.invite_code, EXCLUDED.invite_code),
-            source_state = 'active',
-            source_last_seen_at = NOW(),
-            source_orphaned_at = NULL,
-            source_recovered_at = CASE
-                WHEN app.app_user.source_state = 'orphaned' THEN NOW()
-                ELSE app.app_user.source_recovered_at
-            END,
-            email_verified_at = CASE
-                WHEN app.app_user.email IS DISTINCT FROM EXCLUDED.email THEN NULL
-                ELSE app.app_user.email_verified_at
-            END,
-            updated_at = NOW()
-        RETURNING user_id, email, display_name, status, plan_tier,
-                  created_at, updated_at, source_state, source_last_seen_at,
-                  source_orphaned_at, source_recovered_at, auth_session_version,
-                  last_password_reset_at, invite_code, email_verified_at
-        """,
-        [user_id, normalized_email, display_name, effective_plan_tier, invite_code],
+        user_id=user_id,
+        normalized_email=normalized_email,
+        display_name=display_name,
+        effective_plan_tier=effective_plan_tier,
+        invite_code=invite_code,
     )
     row = _ensure_invite_code_for_row(conn, rows[0])
     return RequestUser(**row)
@@ -327,11 +393,21 @@ def _ensure_user_record(
     )
     if existing is not None:
         if email or display_name:
+            safe_email = (email or existing.get("email") or f"{user_id}@local").strip().lower()
+            safe_display_name = (display_name or existing.get("display_name") or user_id).strip() or user_id
+            existing_email = str(existing.get("email") or "").strip().lower()
+            existing_display_name = str(existing.get("display_name") or "").strip()
+            source_state = str(existing.get("source_state") or "active").strip().lower()
+            needs_source_recovery = source_state != "active" or existing.get("source_orphaned_at") is not None
+            needs_identity_update = safe_email != existing_email or safe_display_name != existing_display_name
+            if not needs_identity_update and not needs_source_recovery:
+                existing = _ensure_invite_code_for_row(conn, existing)
+                return RequestUser(**existing)
             return _upsert_user_row(
                 conn,
                 user_id=user_id,
-                email=(email or existing.get("email") or f"{user_id}@local").strip(),
-                display_name=(display_name or existing.get("display_name") or user_id).strip() or user_id,
+                email=safe_email,
+                display_name=safe_display_name,
                 plan_tier=plan_tier or existing.get("plan_tier"),
             )
         existing = _ensure_invite_code_for_row(conn, existing)

@@ -19,18 +19,18 @@ def render_portal_html() -> str:
   <title>虾密小助手 - 我的账户</title>
   <style>
     :root {
-      --bg: #f5efe4;
-      --paper: rgba(255, 251, 245, 0.96);
-      --panel: rgba(255, 251, 245, 0.9);
-      --ink: #1e2a2f;
-      --muted: #68767d;
-      --accent: #114b5f;
-      --accent-soft: rgba(17, 75, 95, 0.08);
-      --accent-2: #d97706;
-      --line: rgba(17, 75, 95, 0.12);
+      --bg: #f7f8fb;
+      --paper: rgba(255, 255, 255, 0.97);
+      --panel: rgba(255, 255, 255, 0.94);
+      --ink: #172033;
+      --muted: #64748b;
+      --accent: #2563eb;
+      --accent-soft: rgba(37, 99, 235, 0.08);
+      --accent-2: #0f766e;
+      --line: rgba(23, 32, 51, 0.12);
       --danger: #b42318;
       --ok: #0f766e;
-      --shadow: 0 18px 48px rgba(30, 42, 47, 0.12);
+      --shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
       --sidebar-w: 228px;
       --content-w: 1220px;
     }
@@ -39,10 +39,7 @@ def render_portal_html() -> str:
       margin: 0;
       font-family: "IBM Plex Sans", "Helvetica Neue", "PingFang SC", sans-serif;
       color: var(--ink);
-      background:
-        radial-gradient(circle at top left, rgba(217, 119, 6, 0.18), transparent 24%),
-        radial-gradient(circle at right top, rgba(17, 75, 95, 0.18), transparent 20%),
-        linear-gradient(180deg, #fffdf8 0%, var(--bg) 100%);
+      background: linear-gradient(180deg, #ffffff 0%, var(--bg) 100%);
       min-height: 100vh;
       overflow: hidden;
     }
@@ -153,7 +150,7 @@ def render_portal_html() -> str:
       top: 0;
       z-index: 10;
       backdrop-filter: blur(12px);
-      background: rgba(255, 251, 245, 0.84);
+      background: rgba(255, 255, 255, 0.86);
       border-bottom: 1px solid var(--line);
     }
     .workspace-topbar-inner {
@@ -194,7 +191,7 @@ def render_portal_html() -> str:
       padding: 0 14px;
       border-radius: 12px;
       border: 1px solid var(--line);
-      background: rgba(255, 251, 245, 0.75);
+      background: rgba(255, 255, 255, 0.84);
       color: var(--muted);
       text-decoration: none;
       font-size: 0.84rem;
@@ -203,7 +200,7 @@ def render_portal_html() -> str:
     }
     .top-route-link:hover {
       color: var(--accent);
-      border-color: rgba(17, 75, 95, 0.24);
+      border-color: rgba(37, 99, 235, 0.24);
     }
       .top-secondary-link {
         display: inline-flex;
@@ -212,8 +209,8 @@ def render_portal_html() -> str:
         min-height: 40px;
         padding: 0 16px;
         border-radius: 12px;
-        border: 1px solid rgba(17, 75, 95, 0.18);
-        background: rgba(255, 251, 245, 0.82);
+        border: 1px solid rgba(37, 99, 235, 0.18);
+        background: rgba(255, 255, 255, 0.88);
         color: var(--accent);
         text-decoration: none;
         font-size: 0.84rem;
@@ -222,14 +219,14 @@ def render_portal_html() -> str:
         transition: background 0.15s, border-color 0.15s, color 0.15s;
       }
       .top-secondary-link:hover {
-        background: rgba(17, 75, 95, 0.08);
-        border-color: rgba(17, 75, 95, 0.3);
-        color: #0f3f50;
+        background: rgba(37, 99, 235, 0.08);
+        border-color: rgba(37, 99, 235, 0.3);
+        color: #1d4ed8;
       }
     .top-route-link.active {
       background: var(--accent-soft);
       color: var(--accent);
-      border-color: rgba(17, 75, 95, 0.18);
+      border-color: rgba(37, 99, 235, 0.18);
     }
       .gate-banner-actions {
         margin-top: 12px;
@@ -246,7 +243,7 @@ def render_portal_html() -> str:
       height: 40px;
       border-radius: 12px;
       border: 1px solid var(--line);
-      background: rgba(255, 251, 245, 0.78);
+      background: rgba(255, 255, 255, 0.86);
       color: var(--ink);
       text-decoration: none;
       font-size: 1.05rem;
@@ -256,7 +253,7 @@ def render_portal_html() -> str:
     .top-icon-link.active {
       background: var(--accent-soft);
       color: var(--accent);
-      border-color: rgba(17, 75, 95, 0.18);
+      border-color: rgba(37, 99, 235, 0.18);
     }
     .top-icon-link svg {
       width: 19px;
@@ -270,14 +267,14 @@ def render_portal_html() -> str:
       height: 18px;
       padding: 0 5px;
       border-radius: 999px;
-      background: #d97706;
+      background: #2563eb;
       color: #fff;
       font-size: 0.67rem;
       font-weight: 700;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 6px 16px rgba(217, 119, 6, 0.28);
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.24);
     }
     .top-home-link {
       display: inline-flex;
@@ -286,7 +283,7 @@ def render_portal_html() -> str:
       min-height: 40px;
       padding: 0 16px;
       border-radius: 12px;
-      border: 1px solid rgba(17, 75, 95, 0.18);
+      border: 1px solid rgba(37, 99, 235, 0.18);
       background: var(--accent);
       color: #fff;
       text-decoration: none;
@@ -295,8 +292,8 @@ def render_portal_html() -> str:
       transition: background 0.15s, border-color 0.15s;
     }
     .top-home-link:hover {
-      background: #0f3f50;
-      border-color: #0f3f50;
+      background: #1d4ed8;
+      border-color: #1d4ed8;
     }
     #dify-chatbot-bubble-button {
       background-color: #1C64F2 !important;
@@ -383,7 +380,7 @@ def render_portal_html() -> str:
       margin: -6px 0 14px;
     }
     .hero-card {
-      background: linear-gradient(135deg, rgba(217, 119, 6, 0.1), rgba(255, 251, 245, 0.98));
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(255, 255, 255, 0.98));
     }
     .hero-grid {
       display: grid;
@@ -426,7 +423,7 @@ def render_portal_html() -> str:
       text-decoration: none;
       font-weight: 700;
       font-size: 0.9rem;
-      border: 1px solid rgba(17, 75, 95, 0.16);
+      border: 1px solid rgba(37, 99, 235, 0.16);
       transition: transform 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
     }
     .hero-route-button:hover {
@@ -438,17 +435,17 @@ def render_portal_html() -> str:
       border-color: var(--accent);
     }
     .hero-route-button.primary:hover {
-      background: #0f3f50;
-      border-color: #0f3f50;
+      background: #1d4ed8;
+      border-color: #1d4ed8;
     }
     .hero-route-button.secondary {
-      background: rgba(17, 75, 95, 0.08);
+      background: rgba(37, 99, 235, 0.08);
       color: var(--accent);
     }
     .hero-redeem-card {
       border: 1px solid var(--line);
       border-radius: 14px;
-      background: rgba(255, 255, 255, 0.78);
+      background: rgba(255, 255, 255, 0.86);
       padding: 14px;
       display: grid;
       gap: 10px;
@@ -496,7 +493,7 @@ def render_portal_html() -> str:
       padding: 16px 18px;
       border: 1px solid var(--line);
       border-radius: 16px;
-      background: linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(244, 236, 223, 0.98));
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
     }
     .kpi .value { font-size: 1.62rem; font-weight: 700; color: var(--ink); }
     .kpi .label { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
@@ -517,7 +514,7 @@ def render_portal_html() -> str:
       border: 1px solid var(--line);
       border-radius: 14px;
       overflow: auto;
-      background: rgba(255, 251, 245, 0.98);
+      background: rgba(255, 255, 255, 0.98);
     }
     .table-toolbar {
       display: flex;
@@ -553,7 +550,7 @@ def render_portal_html() -> str:
     .ledger-policy-card {
       border: 1px solid var(--line);
       border-radius: 16px;
-      background: rgba(255, 251, 245, 0.86);
+      background: rgba(255, 255, 255, 0.9);
       padding: 16px 18px;
     }
     .source-chip-row {
@@ -572,7 +569,7 @@ def render_portal_html() -> str:
       white-space: nowrap;
     }
     .source-chip.subscription {
-      background: rgba(17, 75, 95, 0.12);
+      background: rgba(37, 99, 235, 0.12);
       color: var(--accent);
     }
     .source-chip.recharge {
@@ -580,14 +577,14 @@ def render_portal_html() -> str:
       color: var(--ok);
     }
     .source-chip.other {
-      background: rgba(217, 119, 6, 0.12);
-      color: #9a6700;
+      background: rgba(100, 116, 139, 0.12);
+      color: #475569;
     }
     table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
     thead th {
       text-align: left; font-weight: 600; color: var(--muted);
       padding: 12px 14px; border-bottom: 1px solid var(--line); white-space: nowrap;
-      background: rgba(244, 236, 223, 0.76);
+      background: rgba(248, 250, 252, 0.92);
       position: sticky;
       top: 0;
       z-index: 1;
@@ -601,15 +598,15 @@ def render_portal_html() -> str:
       padding: 38px 14px;
       text-align: center;
       color: var(--muted);
-      background: linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(244, 236, 223, 0.8));
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.92));
     }
 
     /* Pricing pills */
     .pricing-row { display: flex; flex-wrap: wrap; gap: 10px; }
     .pricing-pill {
-      background: rgba(17, 75, 95, 0.07); border-radius: 999px;
+      background: rgba(37, 99, 235, 0.07); border-radius: 999px;
       padding: 8px 14px; font-size: 0.84rem;
-      border: 1px solid rgba(17, 75, 95, 0.08);
+      border: 1px solid rgba(37, 99, 235, 0.08);
     }
     .pricing-pill .name { font-weight: 600; }
     .pricing-pill .cost { color: var(--accent-2); margin-left: 6px; }
@@ -633,7 +630,7 @@ def render_portal_html() -> str:
     .chart-row { display: flex; align-items: flex-end; gap: 6px; height: 180px; margin-top: 18px; }
     .chart-bar {
       flex: 1; min-width: 10px; max-width: 32px;
-      background: linear-gradient(180deg, #4d7a88 0%, var(--accent) 100%);
+      background: linear-gradient(180deg, #60a5fa 0%, var(--accent) 100%);
       border-radius: 8px 8px 0 0;
       position: relative; cursor: default;
     }
@@ -667,13 +664,13 @@ def render_portal_html() -> str:
     .sub-tab {
       border-radius: 999px;
       padding: 8px 14px;
-      background: rgba(255, 251, 245, 0.78);
+      background: rgba(255, 255, 255, 0.88);
       color: var(--muted);
     }
     .sub-tab.active {
       background: var(--accent-soft);
       color: var(--accent);
-      border-color: rgba(17, 75, 95, 0.18);
+      border-color: rgba(37, 99, 235, 0.18);
     }
     .ledger-filter-tabs {
       margin-bottom: 10px;
@@ -697,7 +694,7 @@ def render_portal_html() -> str:
     .notification-card {
       border: 1px solid var(--line);
       border-radius: 16px;
-      background: rgba(255, 251, 245, 0.86);
+      background: rgba(255, 255, 255, 0.9);
       padding: 16px 18px;
     }
     .notifications-shell {
@@ -729,13 +726,13 @@ def render_portal_html() -> str:
       padding: 10px 14px;
       border-radius: 14px;
       text-align: left;
-      background: rgba(255, 251, 245, 0.72);
+      background: rgba(255, 255, 255, 0.82);
       color: var(--muted);
     }
     .notifications-menu-item.active {
       background: var(--accent-soft);
       color: var(--accent);
-      border-color: rgba(17, 75, 95, 0.18);
+      border-color: rgba(37, 99, 235, 0.18);
     }
     .notifications-content {
       min-width: 0;
@@ -827,7 +824,7 @@ def render_portal_html() -> str:
       cursor: pointer;
     }
     .notification-toggle-link:hover {
-      color: #0f3f50;
+      color: #1d4ed8;
       background: transparent;
     }
     .notification-tag {
@@ -843,11 +840,11 @@ def render_portal_html() -> str:
       color: var(--ok);
     }
     .notification-tag.warning {
-      background: rgba(217, 119, 6, 0.12);
-      color: #9a6700;
+      background: rgba(100, 116, 139, 0.12);
+      color: #475569;
     }
     .notification-tag.info {
-      background: rgba(17, 75, 95, 0.12);
+      background: rgba(37, 99, 235, 0.12);
       color: var(--accent);
     }
     .device-session-list {
@@ -890,7 +887,7 @@ def render_portal_html() -> str:
       padding: 0 12px;
       border-radius: 10px;
       border: 1px solid var(--line);
-      background: rgba(255, 251, 245, 0.96);
+      background: rgba(255, 255, 255, 0.96);
       color: var(--ink);
       font-size: 0.84rem;
     }
@@ -912,8 +909,8 @@ def render_portal_html() -> str:
       color: var(--ok);
     }
     .status-badge.pending {
-      background: rgba(217, 119, 6, 0.12);
-      color: #9a6700;
+      background: rgba(100, 116, 139, 0.12);
+      color: #475569;
     }
 
     button {
@@ -929,11 +926,11 @@ def render_portal_html() -> str:
     }
     .gate-banner {
       display: none;
-      background: rgba(217, 119, 6, 0.12);
-      color: #9a6700;
+      background: rgba(37, 99, 235, 0.08);
+      color: var(--accent);
       padding: 14px 16px;
       border-radius: 14px;
-      border: 1px solid rgba(217, 119, 6, 0.22);
+      border: 1px solid rgba(37, 99, 235, 0.16);
       font-size: 0.9rem;
       line-height: 1.7;
     }
@@ -2042,18 +2039,22 @@ def render_portal_html() -> str:
     if (deviceSessionMessage && !securityVerified) {
       deviceSessionMessage.textContent = "退出设备前，请先完成当前浏览器的安全验证码验证。";
     } else if (deviceSessionMessage && sessionAction && sessionAction.action === "revoke_device_session") {
-      deviceSessionMessage.textContent = "已让设备 “" + (sessionAction.revoked_device_label || "指定设备") + "” 重新登录。";
+      var revokedSessionCount = Math.max(1, intVal(sessionAction.revoked_session_count));
+      deviceSessionMessage.textContent = "已让设备 “" + (sessionAction.revoked_device_label || "指定设备") + "” 重新登录" + (revokedSessionCount > 1 ? ("，共退出 " + revokedSessionCount + " 条浏览器会话。") : "。");
     } else if (deviceSessionMessage) {
-      deviceSessionMessage.textContent = "可按设备单独退出登录，当前浏览器不会受影响。";
+      deviceSessionMessage.textContent = "同一浏览器的 cookie 重建会合并为同一设备；可按设备单独退出登录，当前浏览器不会受影响。";
     }
     if (deviceSessionList) {
       deviceSessionList.innerHTML = recentDeviceSessions.length
         ? recentDeviceSessions.map(function(session) {
             var title = session && session.device_label ? session.device_label : "未知设备";
+            var sessionCount = Math.max(1, intVal(session && session.session_count));
+            var activeSessionCount = Math.max(0, intVal(session && session.active_session_count));
             var meta = [
               session && session.is_current ? "当前设备" : "其他设备",
               session && session.last_seen_at ? ("最近活跃 " + fmtTime(session.last_seen_at)) : "最近活跃 -",
-              session && session.revoked_at ? ("已失效 " + fmtTime(session.revoked_at)) : "仍有效"
+              session && session.revoked_at ? ("已失效 " + fmtTime(session.revoked_at)) : "仍有效",
+              sessionCount > 1 ? ("已合并 " + sessionCount + " 条浏览器会话") : "单一浏览器会话"
             ];
             var stableMeta = [];
             var ipSuffix = summarizeIpSuffix(session && (session.last_seen_ip || session.created_ip));
@@ -2063,10 +2064,13 @@ def render_portal_html() -> str:
             if (ipSuffix) {
               stableMeta.push("最近 IP 尾段 " + ipSuffix);
             }
+            if (sessionCount > 1) {
+              stableMeta.push("有效会话 " + activeSessionCount + " 条");
+            }
             var badgeLabel = session && session.is_current ? "当前设备" : (session && session.revoked_at ? "已失效" : "其他设备");
             var badgeTone = session && session.is_current ? "success" : (session && session.revoked_at ? "warning" : "info");
             var actionHtml = "";
-            if (session && !session.is_current && !session.revoked_at) {
+            if (session && !session.is_current && !session.revoked_at && activeSessionCount > 0) {
               actionHtml = '<button type="button" class="device-session-action" data-revoke-device-session="' + esc(session.session_id || "") + '"' + (securityVerified ? '' : ' disabled') + '>退出设备</button>';
             }
             return '<div class="notification-card">' +
