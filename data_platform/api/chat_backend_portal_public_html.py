@@ -1967,17 +1967,17 @@ def render_portal_password_reset_html() -> str:
     openwebui_home_url = escape(_portal_public_base_url())
     body_html = f'''
       <section id="request" class="section-block card">
-        <h2>第一步：发送验证码</h2>
+        <h2>第一步：发送验证邮件</h2>
         <div class="form-grid">
           <div class="field-grid">
             <label class="field-group">
               <span class="field-label">注册邮箱</span>
               <input id="password-reset-email" class="text-field" type="email" autocomplete="email" placeholder="请输入登录邮箱" />
-              <span class="field-hint">如果该邮箱对应 Open WebUI 账户，验证码会发送到该邮箱。</span>
+              <span class="field-hint">如果该邮箱对应 Open WebUI 账户，系统会发送用于找回密码的验证邮件。</span>
             </label>
           </div>
           <div class="checkout-actions">
-            <button type="button" class="offer-cta" id="password-reset-request-button">发送验证码</button>
+            <button type="button" class="offer-cta" id="password-reset-request-button">发送验证邮件</button>
             <a class="ghost-button" href="{openwebui_home_url}">回到登录页</a>
           </div>
           <div id="password-reset-request-status" class="status-banner"></div>
@@ -2020,7 +2020,7 @@ def render_portal_password_reset_html() -> str:
     '''
 
     sidebar_html = _sidebar([
-        ("密码找回", [("request", "发送验证码"), ("confirm", "设置新密码"), ("support", "常见说明")]),
+        ("密码找回", [("request", "发送邮件"), ("confirm", "设置新密码"), ("support", "常见说明")]),
     ])
 
     page = _layout(
@@ -2084,12 +2084,12 @@ def render_portal_password_reset_html() -> str:
         return;
       }
       requestBtn.disabled = true;
-      setStatus(requestStatus, "正在发送验证码，请稍候...", "info");
+      setStatus(requestStatus, "正在发送验证邮件，请稍候...", "info");
       try {
         await postJson("/portal/api/public/password-reset/request", {email: email});
-        setStatus(requestStatus, "验证码已发送，请去邮箱查收后继续下一步。", "success");
+        setStatus(requestStatus, "验证邮件已发送，请去邮箱查看找回密码验证码后继续下一步。", "success");
       } catch (error) {
-        setStatus(requestStatus, error.message || "发送验证码失败，请稍后重试。", "error");
+        setStatus(requestStatus, error.message || "发送验证邮件失败，请稍后重试。", "error");
       } finally {
         requestBtn.disabled = false;
       }
@@ -2144,6 +2144,49 @@ def render_portal_password_reset_html() -> str:
 })();
 </script>'''
     return page.replace("</body>", script + "</body>")
+
+
+def render_portal_email_verification_result_html(
+    *,
+    success: bool,
+    title: str,
+    message: str,
+    email: str | None = None,
+) -> str:
+    openwebui_home_url = escape(_portal_public_base_url())
+    account_url = "/portal/account"
+    state = "success" if success else "error"
+    detail_items = []
+    if email:
+        detail_items.append(
+            f'<div class="guide-item"><div class="guide-title">验证邮箱</div><div class="guide-desc">{escape(email)}</div></div>'
+        )
+    detail_items.append(
+        '<div class="guide-item"><div class="guide-title">下一步</div>'
+        '<div class="guide-desc">返回账户管理页查看邮箱验证状态和新用户权益到账情况。</div></div>'
+    )
+    body_html = f'''
+      <section id="result" class="section-block card">
+        <h2>{escape(title)}</h2>
+        <div class="status-banner" data-state="{state}">{escape(message)}</div>
+        <div class="guide-list" style="margin-top:18px;">{''.join(detail_items)}</div>
+        <div class="checkout-actions" style="margin-top:18px;">
+          <a class="offer-cta" href="{account_url}">打开账户管理</a>
+          <a class="ghost-button" href="{openwebui_home_url}">回到 Open WebUI</a>
+        </div>
+      </section>
+    '''
+    sidebar_html = _sidebar([
+        ("邮箱验证", [("result", "验证结果")]),
+    ])
+    return _layout(
+        active="account",
+        kicker="账户验证",
+        title="邮箱验证结果",
+        subtitle="用于确认注册邮箱并激活账户权益。",
+        sidebar_html=sidebar_html,
+        body_html=body_html,
+    )
 
 
 def render_portal_checkout_html(

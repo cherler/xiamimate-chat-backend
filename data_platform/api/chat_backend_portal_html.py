@@ -1633,7 +1633,7 @@ def render_portal_html() -> str:
           heroSendBtn.addEventListener("click", function() {
             heroSendMsg.textContent = "发送中…";
             apiPost("/portal/api/account/email-verification/request").then(function(data) {
-              heroSendMsg.textContent = "验证码已发送到 " + (data.email || "当前邮箱") + "，请查收邮箱。";
+              heroSendMsg.textContent = "验证邮件已发送到 " + (data.email || "当前邮箱") + "，可点击邮件按钮完成验证，也可输入验证码。";
               if (verificationRequestMessage) verificationRequestMessage.textContent = heroSendMsg.textContent;
             }).catch(function(err) {
               heroSendMsg.textContent = "发送失败：" + err.message;
@@ -1948,8 +1948,8 @@ def render_portal_html() -> str:
       verificationRequestMessage.textContent = emailVerified
         ? ("已于 " + fmtTimeFull(identityVerification.email_verified_at) + " 完成邮箱验证。")
         : (identityVerification.email_verification_required_before_portal_use
-          ? "当前已开启首次登录强制邮箱验证；验证码会发送到当前登录邮箱，验证通过前其他账户能力会被锁定。"
-          : "注册成功以邮箱验证通过为准；验证码会发送到当前登录邮箱。");
+          ? "当前已开启首次登录强制邮箱验证；验证邮件会发送到当前登录邮箱，点击邮件按钮或输入验证码后其他账户能力会解锁。"
+          : "注册成功以邮箱验证通过为准；验证邮件会发送到当前登录邮箱，可点击邮件按钮或输入验证码完成验证。");
     }
     if (verificationConfirmMessage) {
       verificationConfirmMessage.textContent = emailVerified

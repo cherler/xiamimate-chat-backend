@@ -236,6 +236,7 @@ CREATE TABLE IF NOT EXISTS app.email_verification_challenge (
     email             TEXT NOT NULL,
     purpose           TEXT NOT NULL DEFAULT 'signup_email_verify',
     code_hash         TEXT NOT NULL,
+    confirm_token_hash TEXT,
     failed_attempt_count INTEGER NOT NULL DEFAULT 0,
     locked_until      TIMESTAMPTZ,
     last_failed_at    TIMESTAMPTZ,
@@ -249,6 +250,7 @@ CREATE TABLE IF NOT EXISTS app.email_verification_challenge (
 ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS failed_attempt_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
 ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS last_failed_at TIMESTAMPTZ;
+ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS confirm_token_hash TEXT;
 
 CREATE TABLE IF NOT EXISTS app.user_referral_binding (
     binding_id          TEXT PRIMARY KEY,

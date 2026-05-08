@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import logging
 import re
+import secrets
 import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from html import escape as html_escape
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import bcrypt
 from fastapi import HTTPException, Request
@@ -226,6 +228,101 @@ def _build_email_challenge_code_hash(user_id: str, email: str, code: str, purpos
 
 def _build_email_verification_code_hash(user_id: str, email: str, code: str) -> str:
     return _build_email_challenge_code_hash(user_id, email, code, _EMAIL_CHALLENGE_PURPOSE_SIGNUP)
+
+
+def _build_email_challenge_token_hash(user_id: str, email: str, token: str, purpose: str) -> str:
+    return _hash_text(f"{purpose}:link:{user_id}:{email.strip().lower()}:{token.strip()}")
+
+
+def _email_verification_ttl_minutes() -> int:
+    return max(1, (EMAIL_VERIFICATION_CODE_TTL_SECONDS + 59) // 60)
+
+
+def _build_public_portal_url(path: str, params: dict[str, str] | None = None) -> str:
+    base_url = _portal_public_base_url().rstrip("/")
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    if not params:
+        return f"{base_url}{normalized_path}"
+    return f"{base_url}{normalized_path}?{urlencode(params)}"
+
+
+def _build_email_challenge_bodies(
+    *,
+    recipient_name: str,
+    title: str,
+    purpose_label: str,
+    intro: str,
+    code: str,
+    caution: str,
+    action_label: str | None = None,
+    action_url: str | None = None,
+) -> tuple[str, str]:
+    ttl_minutes = _email_verification_ttl_minutes()
+    safe_name = (recipient_name or "用户").strip() or "用户"
+    text_lines = [
+        f"你好，{safe_name}。",
+        "",
+        intro,
+        f"验证目的：{purpose_label}",
+        f"验证码是：{code}",
+        f"验证码 {ttl_minutes} 分钟内有效。",
+    ]
+    if action_url:
+        text_lines.extend([
+            "",
+            f"也可以点击下面的链接完成验证：{action_url}",
+        ])
+    text_lines.extend(["", caution])
+    text_body = "\n".join(text_lines)
+
+    action_html = ""
+    link_hint_html = ""
+    if action_url:
+        escaped_url = html_escape(action_url, quote=True)
+        escaped_label = html_escape(action_label or "完成验证")
+        action_html = (
+            '<div style="text-align:center;margin:28px 0 22px;">'
+            f'<a href="{escaped_url}" style="display:inline-block;background:#2563eb;color:#ffffff;'
+            'text-decoration:none;font-weight:700;border-radius:12px;padding:14px 28px;'
+            'font-size:16px;line-height:1.2;">'
+            f'{escaped_label}</a></div>'
+        )
+        link_hint_html = (
+            '<p style="margin:18px 0 0;color:#64748b;font-size:13px;line-height:1.7;">'
+            '如果按钮无法打开，请复制此链接到浏览器：<br />'
+            f'<a href="{escaped_url}" style="color:#2563eb;word-break:break-all;">{escaped_url}</a></p>'
+        )
+
+    html_body = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<body style="margin:0;padding:0;background:#f7f8fb;font-family:Arial,'PingFang SC','Microsoft YaHei',sans-serif;color:#172033;">
+    <div style="max-width:680px;margin:0 auto;padding:24px 14px;">
+        <div style="background:#ffffff;border:1px solid rgba(23,32,51,0.10);border-radius:18px;overflow:hidden;box-shadow:0 18px 48px rgba(15,23,42,0.08);">
+            <div style="background:#2563eb;padding:28px 30px;color:#ffffff;">
+                <div style="font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;opacity:0.9;">Xiamimate</div>
+                <h1 style="margin:8px 0 0;font-size:24px;line-height:1.3;">{html_escape(title)}</h1>
+                <div style="margin-top:8px;font-size:15px;opacity:0.92;">{html_escape(purpose_label)}</div>
+            </div>
+            <div style="padding:30px;">
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.75;">你好，{html_escape(safe_name)}。</p>
+                <p style="margin:0 0 18px;font-size:16px;line-height:1.75;">{html_escape(intro)}</p>
+                <div style="border:1px solid rgba(37,99,235,0.18);background:rgba(37,99,235,0.06);border-radius:14px;padding:18px 20px;margin:22px 0;">
+                    <div style="font-size:13px;color:#64748b;font-weight:700;">邮箱验证码</div>
+                    <div style="margin-top:8px;font-size:30px;line-height:1.2;letter-spacing:6px;font-weight:800;color:#172033;">{html_escape(code)}</div>
+                    <div style="margin-top:10px;font-size:13px;color:#64748b;">{ttl_minutes} 分钟内有效</div>
+                </div>
+                {action_html}
+                <div style="border:1px solid rgba(15,118,110,0.18);background:rgba(15,118,110,0.06);border-radius:14px;padding:16px 18px;margin-top:22px;">
+                    <div style="font-weight:700;color:#0f766e;margin-bottom:8px;">注意</div>
+                    <div style="font-size:14px;line-height:1.7;color:#334155;">{html_escape(caution)}</div>
+                </div>
+                {link_hint_html}
+            </div>
+        </div>
+    </div>
+</body>
+</html>"""
+    return text_body, html_body
 
 
 def _email_verification_day_window(now: datetime) -> tuple[datetime, datetime]:
@@ -714,15 +811,21 @@ def _request_password_reset(conn, email: str) -> dict[str, Any]:
         ],
     )
     try:
+        text_body, html_body = _build_email_challenge_bodies(
+            recipient_name=user.display_name or user.user_id,
+            title="找回密码邮箱验证",
+            purpose_label="找回并重置虾密小助手登录密码",
+            intro="你正在找回虾密小助手的账户密码，请在密码找回页输入下方验证码并设置新密码。",
+            code=code,
+            caution="如果这不是你本人操作，请忽略此邮件，原密码不会被自动修改。",
+            action_label="打开密码找回页面",
+            action_url=_build_public_portal_url("/portal/recover-password"),
+        )
         _send_email_message(
             normalized_email,
-            "虾米选品密码找回验证码",
-            (
-                f"你好，{user.display_name or user.user_id}。\n\n"
-                f"你正在找回虾米选品的账户密码，验证码是：{code}\n"
-                f"验证码 {EMAIL_VERIFICATION_CODE_TTL_SECONDS // 60} 分钟内有效。\n\n"
-                "如果这不是你本人操作，请忽略此邮件，原密码不会被自动修改。"
-            ),
+            "虾密小助手密码找回验证码",
+            text_body,
+            html_body,
         )
         _LOGGER.info(
             "password reset email sent",
@@ -825,15 +928,19 @@ def _request_security_verification(conn, user_id: str) -> dict[str, Any]:
         ],
     )
     try:
+        text_body, html_body = _build_email_challenge_bodies(
+            recipient_name=user.display_name or user.user_id,
+            title="账户安全验证",
+            purpose_label="确认当前设备上的账户安全敏感操作",
+            intro="你正在执行账户安全敏感操作，请在当前页面输入下方验证码完成二次确认。",
+            code=code,
+            caution="如果这不是你本人操作，请忽略此邮件，并检查账户登录设备。",
+        )
         _send_email_message(
             email,
             "虾密小助手安全验证验证码",
-            (
-                f"你好，{user.display_name or user.user_id}。\n\n"
-                f"你正在执行账户安全敏感操作，验证码是：{code}\n"
-                f"验证码 {EMAIL_VERIFICATION_CODE_TTL_SECONDS // 60} 分钟内有效。\n\n"
-                "如果这不是你本人操作，请忽略此邮件。"
-            ),
+            text_body,
+            html_body,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -1090,6 +1197,7 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
             raise HTTPException(status_code=429, detail=f"请在 {remaining} 秒后再重新发送验证码")
 
     code = _generate_numeric_code(6)
+    confirm_token = secrets.token_urlsafe(32)
     challenge_id = _generate_id("email_verify")
     expires_at = now + timedelta(seconds=EMAIL_VERIFICATION_CODE_TTL_SECONDS)
     _run_pg_dict_query(
@@ -1109,10 +1217,10 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
         conn,
         """
         INSERT INTO app.email_verification_challenge (
-            challenge_id, user_id, email, purpose, code_hash, failed_attempt_count,
+            challenge_id, user_id, email, purpose, code_hash, confirm_token_hash, failed_attempt_count,
             locked_until, last_failed_at, expires_at,
             consumed_at, last_sent_at, created_at, updated_at
-        ) VALUES (%s, %s, %s, %s, %s, 0, NULL, NULL, %s, NULL, NOW(), NOW(), NOW())
+        ) VALUES (%s, %s, %s, %s, %s, %s, 0, NULL, NULL, %s, NULL, NOW(), NOW(), NOW())
         RETURNING challenge_id, email, expires_at, last_sent_at, created_at
         """,
         [
@@ -1121,19 +1229,30 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
             email,
             _EMAIL_CHALLENGE_PURPOSE_SIGNUP,
             _build_email_verification_code_hash(user_id, email, code),
+            _build_email_challenge_token_hash(user_id, email, confirm_token, _EMAIL_CHALLENGE_PURPOSE_SIGNUP),
             expires_at,
         ],
     )
     try:
+        confirm_url = _build_public_portal_url(
+            "/portal/email-verification/confirm",
+            {"challenge_id": challenge_id, "token": confirm_token},
+        )
+        text_body, html_body = _build_email_challenge_bodies(
+            recipient_name=user.display_name or user.user_id,
+            title="注册邮箱验证",
+            purpose_label="完成注册并激活虾密小助手账户权益",
+            intro="你正在注册或首次激活虾密小助手账户。请点击按钮完成邮箱验证，或在账户页输入下方验证码。",
+            code=code,
+            caution="如果这不是你本人操作，请忽略此邮件，当前邮箱不会被自动绑定到其他账户。",
+            action_label="完成邮箱验证",
+            action_url=confirm_url,
+        )
         _send_email_message(
             email,
-            "虾密小助手邮箱验证码",
-            (
-                f"你好，{user.display_name or user.user_id}。\n\n"
-                f"你的邮箱验证码是：{code}\n"
-                f"验证码 {EMAIL_VERIFICATION_CODE_TTL_SECONDS // 60} 分钟内有效。\n\n"
-                "如果这不是你本人操作，请忽略此邮件。"
-            ),
+            "虾密小助手注册邮箱验证",
+            text_body,
+            html_body,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -1145,6 +1264,7 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
         "email_verified_at": None,
         "challenge_id": challenge_id,
         "expires_in_seconds": EMAIL_VERIFICATION_CODE_TTL_SECONDS,
+        "verification_link_available": True,
     }
 
 
@@ -1224,6 +1344,112 @@ def _confirm_email_verification(conn, user_id: str, code: str) -> RequestUser:
         RETURNING challenge_id
         """,
         [challenge["challenge_id"]],
+    )
+    updated = _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.app_user
+        SET email_verified_at = NOW(),
+            updated_at = NOW()
+        WHERE user_id = %s
+        RETURNING user_id, email, display_name, status, plan_tier,
+                  created_at, updated_at, invite_code, email_verified_at
+        """,
+        [user_id],
+    )[0]
+    return RequestUser(**updated)
+
+
+def _confirm_email_verification_link(conn, challenge_id: str, token: str) -> RequestUser:
+    normalized_challenge_id = (challenge_id or "").strip()
+    normalized_token = (token or "").strip()
+    if not normalized_challenge_id or not normalized_token:
+        raise HTTPException(status_code=400, detail="missing email verification link token")
+
+    challenge = _fetch_optional_one(
+        conn,
+        """
+        SELECT challenge_id, user_id, email, confirm_token_hash, expires_at, consumed_at, created_at,
+               failed_attempt_count, locked_until, last_failed_at
+        FROM app.email_verification_challenge
+        WHERE challenge_id = %s
+          AND purpose = %s
+        LIMIT 1
+        """,
+        [normalized_challenge_id, _EMAIL_CHALLENGE_PURPOSE_SIGNUP],
+    )
+    if challenge is None:
+        raise HTTPException(status_code=400, detail="邮箱验证链接不存在或已过期")
+
+    user_id = str(challenge.get("user_id") or "").strip()
+    email = _validate_email_address(str(challenge.get("email") or ""))
+    user = _fetch_user(conn, user_id)
+    if (user.email or "").strip().lower() != email:
+        raise HTTPException(status_code=409, detail="当前账号邮箱已变化，请重新发送验证邮件")
+    if user.email_verified_at is not None:
+        if challenge.get("consumed_at") is None:
+            _run_pg_dict_query(
+                conn,
+                """
+                UPDATE app.email_verification_challenge
+                SET consumed_at = NOW(),
+                    updated_at = NOW()
+                WHERE challenge_id = %s
+                RETURNING challenge_id
+                """,
+                [normalized_challenge_id],
+            )
+        return user
+
+    now = _utc_now()
+    if challenge.get("consumed_at") is not None or challenge.get("expires_at") is None or challenge["expires_at"] < now:
+        raise HTTPException(status_code=400, detail="邮箱验证链接不存在或已过期，请重新获取")
+    if challenge.get("locked_until") is not None and challenge["locked_until"] > now:
+        remaining = int((challenge["locked_until"] - now).total_seconds())
+        raise HTTPException(
+            status_code=429,
+            detail=f"邮箱验证链接已被锁定，请在{_format_retry_after_seconds(remaining)}后重新获取",
+        )
+
+    expected_hash = _build_email_challenge_token_hash(
+        user_id,
+        email,
+        normalized_token,
+        _EMAIL_CHALLENGE_PURPOSE_SIGNUP,
+    )
+    if not challenge.get("confirm_token_hash") or challenge["confirm_token_hash"] != expected_hash:
+        limits = _get_email_verification_security_config(conn)
+        max_failed_attempts = max(1, int(limits.get("max_failed_attempts") or 1))
+        lock_seconds = max(0, int(limits.get("lock_seconds") or 0))
+        failed_attempt_count = int(challenge.get("failed_attempt_count") or 0) + 1
+        locked_until = None
+        if failed_attempt_count >= max_failed_attempts and lock_seconds > 0:
+            locked_until = now + timedelta(seconds=lock_seconds)
+        _run_pg_dict_query(
+            conn,
+            """
+            UPDATE app.email_verification_challenge
+            SET failed_attempt_count = %s,
+                locked_until = %s,
+                last_failed_at = NOW(),
+                updated_at = NOW()
+            WHERE challenge_id = %s
+            RETURNING challenge_id
+            """,
+            [failed_attempt_count, locked_until, normalized_challenge_id],
+        )
+        raise HTTPException(status_code=400, detail="邮箱验证链接无效，请重新获取")
+
+    _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.email_verification_challenge
+        SET consumed_at = NOW(),
+            updated_at = NOW()
+        WHERE challenge_id = %s
+        RETURNING challenge_id
+        """,
+        [normalized_challenge_id],
     )
     updated = _run_pg_dict_query(
         conn,

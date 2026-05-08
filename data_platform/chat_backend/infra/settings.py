@@ -605,7 +605,7 @@ def _portal_email_verification_gate_enabled() -> bool:
     return PORTAL_REQUIRE_EMAIL_VERIFICATION and _smtp_configured()
 
 
-def _send_email_message(to_email: str, subject: str, text_body: str) -> None:
+def _send_email_message(to_email: str, subject: str, text_body: str, html_body: str | None = None) -> None:
     if not _smtp_configured():
         raise RuntimeError("CHAT_BACKEND_SMTP_HOST / CHAT_BACKEND_SMTP_FROM_EMAIL 未配置，无法发送邮箱验证码")
 
@@ -621,6 +621,8 @@ def _send_email_message(to_email: str, subject: str, text_body: str) -> None:
     message["Date"] = format_datetime(datetime.now(timezone.utc))
     message["Message-ID"] = make_msgid(domain=message_id_domain or None)
     message.set_content(text_body)
+    if html_body:
+        message.add_alternative(html_body, subtype="html")
 
     if SMTP_USE_SSL:
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15) as smtp:

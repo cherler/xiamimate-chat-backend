@@ -55,6 +55,7 @@ from data_platform.chat_backend.domains.billing.service import (
 from data_platform.chat_backend.domains.identity.service import (
     _bind_user_referral,
     _confirm_email_verification,
+    _confirm_email_verification_link as _confirm_email_verification_link_token,
     _confirm_password_reset,
     _confirm_security_verification,
     _ensure_user_record,
@@ -101,6 +102,7 @@ from data_platform.api.chat_backend_portal_html import render_portal_html
 from data_platform.api.chat_backend_portal_public_html import (
     render_portal_checkout_html,
     render_portal_guide_html,
+    render_portal_email_verification_result_html,
     render_portal_invite_html,
     render_portal_password_reset_html,
     render_portal_products_html,
@@ -785,6 +787,29 @@ def portal_confirm_email_verification(request: Request, payload: ConfirmEmailVer
         overview,
         "email verified",
     )
+
+
+@router.get("/portal/email-verification/confirm", response_model=None)
+def portal_confirm_email_verification_link(challenge_id: str = "", token: str = "") -> HTMLResponse:
+    try:
+        with _postgres_conn() as conn:
+            verified_user = _confirm_email_verification_link_token(conn, challenge_id, token)
+            _ensure_user_credit_account_state(conn, verified_user)
+        html = render_portal_email_verification_result_html(
+            success=True,
+            title="邮箱验证成功",
+            message="你的注册邮箱已完成验证，新用户权益会按账户规则自动结算。",
+            email=verified_user.email,
+        )
+        return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+    except HTTPException as exc:
+        html = render_portal_email_verification_result_html(
+            success=False,
+            title="邮箱验证未完成",
+            message=str(exc.detail),
+        )
+        status_code = exc.status_code if 400 <= exc.status_code < 500 else 400
+        return HTMLResponse(html, status_code=status_code, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/portal/api/account/referral/bind")
