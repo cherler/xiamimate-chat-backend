@@ -143,6 +143,17 @@ def _dify_dataset_ids() -> list[str]:
     return dataset_ids
 
 
+def _dify_customer_help_dataset_id() -> str:
+    dataset_id = (os.environ.get("DIFY_CUSTOMER_HELP_DATASET_ID") or "").strip()
+    if not dataset_id:
+        raise HTTPException(status_code=500, detail="DIFY_CUSTOMER_HELP_DATASET_ID is not configured")
+    return dataset_id
+
+
+def _dify_customer_help_dataset_api_key() -> str:
+    return (os.environ.get("DIFY_CUSTOMER_HELP_DATASET_API_KEY") or "").strip() or _dify_dataset_api_key()
+
+
 def _openai_base_url() -> str:
     base = (os.environ.get("AGENT_OPENAI_BASE_URL") or "").rstrip("/")
     if not base:
@@ -1330,6 +1341,58 @@ def _proxy_knowledge_retrieve(query: str, top_k: int) -> str:
     if errors:
         result += "\n\n⚠️ 部分知识库检索失败: %s" % "; ".join(errors)
     return result
+
+
+def _proxy_customer_help_retrieve(query: str, top_k: int) -> str:
+    dataset_id = _dify_customer_help_dataset_id()
+    response = None
+    try:
+        response = http_requests.post(
+            f"{_dify_base_url()}/v1/datasets/{dataset_id}/retrieve",
+            json={
+                "query": query,
+                "retrieval_model": {
+                    "search_method": "hybrid_search",
+                    "reranking_enable": False,
+                    "top_k": top_k,
+                    "score_threshold_enabled": False,
+                },
+            },
+            headers={
+                "Authorization": f"Bearer {_dify_customer_help_dataset_api_key()}",
+                "Content-Type": "application/json",
+                "Host": "localhost",
+            },
+            timeout=_dify_timeout(),
+        )
+        response.raise_for_status()
+        data = response.json()
+    except http_requests.RequestException as exc:
+        detail = _request_error_detail(response, exc)[:500]
+        raise HTTPException(status_code=502, detail=f"客服知识库检索失败: {detail}")
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=f"客服知识库返回了无法解析的 JSON: {str(exc)[:500]}")
+
+    records = data.get("records") or []
+    if not records:
+        return f'未找到与 "{query}" 相关的客服知识库内容。'
+
+    records.sort(key=lambda item: item.get("score", 0), reverse=True)
+    snippets: list[str] = []
+    for index, record in enumerate(records[:top_k], 1):
+        segment = record.get("segment") or record
+        content = str(segment.get("content") or "").strip()
+        if not content:
+            continue
+        doc = segment.get("document") or {}
+        title = doc.get("name") or record.get("document_name") or "客服知识库"
+        score = record.get("score", 0)
+        snippets.append(f"【{index}】{title} (相关度: {score:.2f})\n{content}")
+
+    if not snippets:
+        return f'未找到与 "{query}" 相关的客服知识库内容。'
+
+    return "找到 %d 条客服知识:\n\n%s" % (len(snippets), "\n\n---\n\n".join(snippets))
 
 
 # ---------------------------------------------------------------------------

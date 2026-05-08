@@ -19,6 +19,7 @@ from data_platform.chat_backend.domains.provider_proxy.service import (
     _proxy_ima_get_media_info,
     _proxy_ima_retrieve,
     _proxy_ima_search_knowledge_bases,
+    _proxy_customer_help_retrieve,
     _proxy_knowledge_retrieve,
     _proxy_minimax_chat_completion,
     _proxy_minimax_chat_completion_stream,
@@ -159,6 +160,17 @@ def internal_retrieve_knowledge(request: Request, payload: InternalKnowledgeRetr
         "/internal/provider/dify-dataset/retrieve",
         {"result": result},
         "knowledge retrieval proxied",
+    )
+
+
+@router.post("/internal/provider/dify-customer-help/retrieve")
+def internal_retrieve_customer_help(request: Request, payload: InternalKnowledgeRetrieveRequest) -> dict[str, Any]:
+    _require_internal_service(request, request.url.path)
+    result = _proxy_customer_help_retrieve(query=payload.query, top_k=payload.top_k)
+    return _success_response(
+        "/internal/provider/dify-customer-help/retrieve",
+        {"result": result},
+        "customer help retrieval proxied",
     )
 
 
