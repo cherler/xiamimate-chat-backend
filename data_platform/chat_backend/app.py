@@ -1,7 +1,9 @@
 """FastAPI application assembly — startup, exception handling, router wiring."""
 from __future__ import annotations
 
+import logging
 import os
+import time
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -28,7 +30,38 @@ from data_platform.chat_backend.api.internal.router import router as internal_ro
 from data_platform.chat_backend.api.admin_routes import router as admin_router
 from data_platform.chat_backend.api.portal.router import router as portal_router
 
+_ACCESS_LOGGER = logging.getLogger("xiamimate.chat_backend.request_timing")
+
 app = FastAPI(title="xiamimate Chat Backend", version="2026-04-13")
+
+
+@app.middleware("http")
+async def log_request_timing(request: Request, call_next):
+    started_at = time.perf_counter()
+    client_host = request.client.host if request.client else "-"
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (time.perf_counter() - started_at) * 1000
+        _ACCESS_LOGGER.exception(
+            "request method=%s path=%s status=500 duration_ms=%.1f client=%s",
+            request.method,
+            request.url.path,
+            duration_ms,
+            client_host,
+        )
+        raise
+
+    duration_ms = (time.perf_counter() - started_at) * 1000
+    _ACCESS_LOGGER.info(
+        "request method=%s path=%s status=%s duration_ms=%.1f client=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+        client_host,
+    )
+    return response
 
 
 @app.on_event("startup")
