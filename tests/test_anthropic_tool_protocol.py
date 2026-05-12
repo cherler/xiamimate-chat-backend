@@ -119,7 +119,8 @@ class AnthropicToolProtocolTests(unittest.TestCase):
         )
 
         payload = json.loads(formatted)
-        self.assertIn("优先原样使用 opportunity_cards_text", payload["instruction"])
+        self.assertIn("工具证据块", payload["instruction"])
+        self.assertIn("不要改写成平铺列表", payload["instruction"])
         self.assertIn("样本ASIN数", payload["opportunity_cards_text"])
         self.assertEqual(payload["opportunities_for_llm"][0]["candidate_count"], 12)
         self.assertIn("Offer 不是供应商数量", json.dumps(payload["metric_definitions"], ensure_ascii=False))

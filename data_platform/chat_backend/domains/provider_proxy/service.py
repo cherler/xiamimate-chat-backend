@@ -1488,7 +1488,7 @@ def _format_theme_api_tool_result(operation: str, payload: dict[str, Any]) -> st
     compact = {
         "success": payload.get("success", True),
         "operation": operation,
-        "instruction": "优先原样使用 opportunity_cards_text 作为面向用户的机会发现展示文本；opportunities_for_llm 包含可继续分析的结构化机会入口。",
+        "instruction": "将 opportunity_cards_text 作为机会发现的工具证据块展示，保留表格、字段解释和工具返回数值；可自行组织摘要和解读，但不要改写成平铺列表。opportunities_for_llm 包含可继续分析的结构化机会入口。",
         "opportunity_count": data.get("opportunity_count"),
         "opportunity_cards_text": data.get("opportunity_cards_text") or llm_presentation.get("opportunity_cards_text"),
         "opportunities_for_llm": data.get("opportunities_for_llm") or llm_presentation.get("opportunities_for_llm"),
