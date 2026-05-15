@@ -20,7 +20,7 @@ from data_platform.chat_backend.infra.postgres import _postgres_conn
 
 P0_HOT_PRODUCTS = "/api/v1/tiktok/shop/web/fetch_hot_selling_products_list"
 P0_SEARCH_SUGGESTIONS = "/api/v1/tiktok/shop/web/fetch_search_word_suggestion_v2"
-P0_SEARCH_PRODUCTS = "/api/v1/tiktok/shop/web/fetch_search_products_list_v3"
+P0_SEARCH_PRODUCTS = "/api/v1/tiktok/shop/web/fetch_search_products_list_v2"
 P0_PRODUCT_DETAIL = "/api/v1/tiktok/shop/web/fetch_product_detail"
 P1_TRENDING_POST = "/api/v1/tiktok/web/fetch_trending_post"
 P1_TRENDING_SEARCHWORDS = "/api/v1/tiktok/web/fetch_trending_searchwords"
@@ -152,7 +152,7 @@ def _build_agent_tool_policy(payload: dict[str, Any], query: str, target_market:
         "cache_ttl_minutes": AGENT_CACHE_TTL_MINUTES,
         "has_candidate_context": has_candidate_context,
         "is_clear_query": is_clear_query and not is_generic,
-        "shop_web_replacement_mode": "web_ads_fallback_until_shop_web_recovers",
+        "shop_web_replacement_mode": "shop_web_search_products_v2",
         "fallback_sources": ["tiktok_web_trending_searchwords", "tiktok_web_trending_posts", "tiktok_ads_keyword_insights", "tiktok_ads_top_products"],
         "strong_supply_evidence_requires": ["shop_search_products", "shop_product_details"],
     }
@@ -269,8 +269,17 @@ def run_tiktok_opportunity(payload: dict[str, Any]) -> dict[str, Any]:
     expanded_keywords = normalize_keywords(_result_payload(results[1]))
     trend_keywords = normalize_keywords(_result_payload(results[2])) if config.enable_p1_content_heat and len(results) > 2 else []
     search_keyword = (expanded_keywords[0] if expanded_keywords else query) or query
-    search_result = client.get(P0_SEARCH_PRODUCTS, {"keyword": search_keyword, "offset": 0, "region": target_market, "sort_by": "RELEVANCE"})
-    results.append(search_result)
+    search_result = client.get(P0_SEARCH_PRODUCTS, {"search_word": search_keyword, "offset": 0, "region": target_market})
+    if not search_result.ok and search_keyword != query and query:
+        fallback_search_result = client.get(P0_SEARCH_PRODUCTS, {"search_word": query, "offset": 0, "region": target_market})
+        if fallback_search_result.ok:
+            search_result = fallback_search_result
+            results.append(search_result)
+        else:
+            results.extend([search_result, fallback_search_result])
+            search_result = fallback_search_result
+    else:
+        results.append(search_result)
     search_products = normalize_search_products(_result_payload(search_result))
 
     product_details: list[dict[str, Any]] = []

@@ -81,12 +81,53 @@ class TikTokShopOpportunityTests(unittest.TestCase):
         params_by_endpoint = {endpoint: params for endpoint, params in calls}
         self.assertEqual(params_by_endpoint[tiktok_service.P0_HOT_PRODUCTS], {"region": "US", "count": 5})
         self.assertEqual(params_by_endpoint[tiktok_service.P0_SEARCH_SUGGESTIONS], {"search_word": "portable blender", "lang": "en-US", "region": "US"})
-        self.assertEqual(params_by_endpoint[tiktok_service.P0_SEARCH_PRODUCTS], {"keyword": "portable blender", "offset": 0, "region": "US", "sort_by": "RELEVANCE"})
+        self.assertEqual(params_by_endpoint[tiktok_service.P0_SEARCH_PRODUCTS], {"search_word": "portable blender", "offset": 0, "region": "US"})
         self.assertEqual(params_by_endpoint[tiktok_service.P0_PRODUCT_DETAIL], {"product_id": "p1", "region": "US"})
         self.assertEqual(params_by_endpoint[tiktok_service.P1_TRENDING_SEARCHWORDS], {})
         self.assertEqual(params_by_endpoint[tiktok_service.P1_TRENDING_POST], {})
         self.assertEqual(params_by_endpoint[tiktok_service.P2_KEYWORD_INSIGHTS]["country_code"], "US")
         self.assertEqual(params_by_endpoint[tiktok_service.P2_TOP_PRODUCTS]["country_code"], "US")
+
+    def test_product_search_retries_original_query_when_expanded_keyword_fails(self) -> None:
+        calls = []
+
+        class FakeTikHubClient:
+            def __init__(self, config):
+                self.config = config
+
+            def get(self, endpoint, params):
+                calls.append((endpoint, params))
+                if endpoint == tiktok_service.P0_SEARCH_SUGGESTIONS:
+                    return TikHubCallResult(endpoint=endpoint, params=params, ok=True, status_code=200, data={"data": ["bad expanded keyword"]})
+                if endpoint == tiktok_service.P0_SEARCH_PRODUCTS and params["search_word"] == "bad expanded keyword":
+                    return TikHubCallResult(endpoint=endpoint, params=params, ok=False, status_code=400, error="http_400")
+                data_by_endpoint = {
+                    tiktok_service.P0_HOT_PRODUCTS: {"data": {"products": [{"product_id": "hot-1", "shop_name": "Hot Shop"}]}},
+                    tiktok_service.P1_TRENDING_SEARCHWORDS: {"data": []},
+                    tiktok_service.P0_SEARCH_PRODUCTS: {"data": {"products": [{"product_id": "p1", "shop_name": "Shop A"}]}},
+                    tiktok_service.P0_PRODUCT_DETAIL: {"data": {"product": {"product_id": "p1", "shop_name": "Shop A"}}},
+                    tiktok_service.P1_TRENDING_POST: {"data": []},
+                }
+                return TikHubCallResult(endpoint=endpoint, params=params, ok=True, status_code=200, data=data_by_endpoint.get(endpoint, {}))
+
+        env = {
+            "THIRD_PARTY_MARKET_ENABLED": "true",
+            "TIKTOK_OPPORTUNITY_ENABLED": "true",
+            "TIKTOK_PROVIDER": "tikhub",
+            "TIKTOK_API_KEY": "test-key",
+            "TIKTOK_TOPN": "5",
+            "TIKTOK_DETAIL_TOPK": "1",
+            "TIKTOK_ENABLE_P1_CONTENT_HEAT": "true",
+            "TIKTOK_ENABLE_P2_ADS": "false",
+        }
+        with patch.dict(os.environ, env, clear=False), patch.object(tiktok_service, "TikHubClient", FakeTikHubClient):
+            result = run_tiktok_opportunity({"query": "portable blender", "target_market": "US", "keywords": ["portable blender"], "limit": 5})
+
+        product_search_params = [params for endpoint, params in calls if endpoint == tiktok_service.P0_SEARCH_PRODUCTS]
+        self.assertEqual(product_search_params[0]["search_word"], "bad expanded keyword")
+        self.assertEqual(product_search_params[1]["search_word"], "portable blender")
+        self.assertEqual(result["degradation"]["status"], "ok")
+        self.assertEqual(result["signals"]["product_candidate_count"], 1)
 
     def test_agent_policy_skips_broad_query_before_network(self) -> None:
         class FailingTikHubClient:
@@ -201,7 +242,7 @@ class TikTokShopOpportunityTests(unittest.TestCase):
         self.assertEqual(result["evidence_level"], "medium")
         self.assertFalse(result["evidence_profile"]["shop_supply_verified"])
         self.assertEqual(result["agent_tool_policy"]["action"], "call_tikhub")
-        self.assertEqual(result["agent_tool_policy"]["shop_web_replacement_mode"], "web_ads_fallback_until_shop_web_recovers")
+        self.assertEqual(result["agent_tool_policy"]["shop_web_replacement_mode"], "shop_web_search_products_v2")
         self.assertEqual(result["supplier_issue"]["issue_type"], "shop_web_endpoint_failure")
 
     def test_normalizer_extracts_keywords_and_products_from_nested_payload(self) -> None:
