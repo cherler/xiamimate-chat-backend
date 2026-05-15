@@ -89,6 +89,11 @@ def _dify_report_api_key(profile: str) -> str:
     api_key = (os.environ.get(env_var_name) or "").strip()
     if api_key:
         return api_key
+    if normalized == "research":
+        raise HTTPException(
+            status_code=503,
+            detail="report research is not available yet: DIFY_REPORT_RESEARCH_APP_API_KEY is not configured",
+        )
     return _dify_workflow_api_key()
 
 
