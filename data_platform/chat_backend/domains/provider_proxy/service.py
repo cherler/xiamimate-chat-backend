@@ -64,6 +64,10 @@ def _dify_timeout() -> int:
     return max(1, int(os.environ.get("DIFY_REQUEST_TIMEOUT", "180")))
 
 
+def _dify_report_stream_idle_timeout() -> int:
+    return max(15, int(os.environ.get("DIFY_REPORT_STREAM_IDLE_TIMEOUT", "120")))
+
+
 def _dify_workflow_api_key() -> str:
     api_key = (os.environ.get("DIFY_WORKFLOW_APP_API_KEY") or "").strip()
     if not api_key:
@@ -1048,7 +1052,13 @@ def _proxy_dify_chat_blocking(query: str, user: str, api_key: str, inputs: dict[
         raise HTTPException(status_code=502, detail=f"invalid Dify JSON response: {str(exc)}")
 
 
-def _proxy_dify_chat_stream(query: str, user: str, api_key: str, inputs: dict[str, Any] | None = None) -> http_requests.Response:
+def _proxy_dify_chat_stream(
+    query: str,
+    user: str,
+    api_key: str,
+    inputs: dict[str, Any] | None = None,
+    read_timeout: int | None = None,
+) -> http_requests.Response:
     response = None
     try:
         response = http_requests.post(
@@ -1064,7 +1074,7 @@ def _proxy_dify_chat_stream(query: str, user: str, api_key: str, inputs: dict[st
                 "Content-Type": "application/json",
                 "Host": "localhost",
             },
-            timeout=(10, _dify_timeout()),
+            timeout=(10, read_timeout or _dify_timeout()),
             stream=True,
         )
         response.raise_for_status()
@@ -1102,6 +1112,7 @@ def _proxy_report_stream(query: str, user: str, profile: str) -> http_requests.R
         query=query,
         user=user,
         api_key=_dify_report_api_key(normalized),
+        read_timeout=_dify_report_stream_idle_timeout(),
         inputs={
             "report_profile": normalized,
             "report_binding": _resolve_report_binding(normalized),

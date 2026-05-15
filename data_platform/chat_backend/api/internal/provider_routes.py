@@ -1,8 +1,10 @@
 """Internal provider proxy routes."""
 from __future__ import annotations
 
+import json
 from typing import Any
 
+import requests as http_requests
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
@@ -11,6 +13,7 @@ from data_platform.chat_backend.infra.http import _require_internal_service, _su
 from data_platform.chat_backend.infra.postgres import _postgres_conn
 from data_platform.chat_backend.domains.memory_profile.service import build_memory_profile
 from data_platform.chat_backend.domains.provider_proxy.service import (
+    _dify_report_stream_idle_timeout,
     _proxy_anthropic_message,
     _proxy_dify_workflow_blocking,
     _proxy_dify_workflow_stream,
@@ -44,6 +47,96 @@ from data_platform.chat_backend.api.models import (
 
 
 router = APIRouter()
+
+
+def _sse_data_event(payload: dict[str, Any]) -> bytes:
+    return ("data: %s\n\n" % json.dumps(payload, ensure_ascii=False)).encode("utf-8")
+
+
+def _report_stream_finished_title(payload: dict[str, Any]) -> str:
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    title = str(data.get("title") or data.get("node_id") or "").strip()
+    return title[:120]
+
+
+def _report_evidence_nodes_completed(finished_titles: list[str]) -> bool:
+    evidence_markers = {
+        "候选池统计整理",
+        "趋势结果整理",
+        "类目基准整理",
+        "弱信号结果整理",
+        "头部 ASIN 结果整理",
+        "知识结果整理",
+    }
+    return bool(evidence_markers.intersection(finished_titles))
+
+
+def _report_stream_timeout_event(
+    *,
+    profile: str,
+    idle_timeout_seconds: int,
+    finished_titles: list[str],
+    error_text: str,
+) -> bytes:
+    evidence_completed = _report_evidence_nodes_completed(finished_titles)
+    error_code = "report_final_answer_timeout" if evidence_completed else "report_stream_idle_timeout"
+    if evidence_completed:
+        message = (
+            "证据节点已完成，但最终总结在 %d 秒内未返回。"
+            "本次已停止等待，避免报告流停在 98%%。请稍后重试，或收窄问题后重跑。"
+        ) % idle_timeout_seconds
+    else:
+        message = (
+            "Dify report 上游在 %d 秒内没有返回新事件，已停止本次流式请求。"
+            "请稍后重试。"
+        ) % idle_timeout_seconds
+    return _sse_data_event(
+        {
+            "event": "error",
+            "message": message,
+            "error": error_code,
+            "data": {
+                "error": error_code,
+                "message": message,
+                "profile": profile,
+                "phase": "final_answer" if evidence_completed else "upstream_stream",
+                "idle_timeout_seconds": idle_timeout_seconds,
+                "completed_node_count": len(finished_titles),
+                "completed_nodes_tail": finished_titles[-8:],
+                "recoverable": True,
+                "upstream_error": error_text[:500],
+            },
+        }
+    )
+
+
+def _iter_report_stream_chunks(upstream_response: http_requests.Response, *, profile: str) -> Any:
+    idle_timeout_seconds = _dify_report_stream_idle_timeout()
+    finished_titles: list[str] = []
+    try:
+        for raw_line in upstream_response.iter_lines(decode_unicode=True):
+            line = "" if raw_line is None else str(raw_line)
+            if line.startswith("data:"):
+                raw_payload = line[5:].strip()
+                if raw_payload and raw_payload != "[DONE]":
+                    try:
+                        payload = json.loads(raw_payload)
+                    except json.JSONDecodeError:
+                        payload = {}
+                    if isinstance(payload, dict) and str(payload.get("event") or "") == "node_finished":
+                        title = _report_stream_finished_title(payload)
+                        if title and title not in finished_titles:
+                            finished_titles.append(title)
+            yield (line + "\n").encode("utf-8")
+    except http_requests.RequestException as exc:
+        yield _report_stream_timeout_event(
+            profile=profile,
+            idle_timeout_seconds=idle_timeout_seconds,
+            finished_titles=finished_titles,
+            error_text=str(exc),
+        )
+    finally:
+        upstream_response.close()
 
 
 @router.post("/internal/provider/dify-workflow/run")
@@ -93,16 +186,8 @@ def internal_run_report_stream(request: Request, payload: InternalReportRunReque
     _require_internal_service(request, request.url.path)
     upstream_response = _proxy_report_stream(query=payload.query, user=payload.user, profile=payload.profile)
 
-    def iterate_stream() -> Any:
-        try:
-            for chunk in upstream_response.iter_content(chunk_size=4096):
-                if chunk:
-                    yield chunk
-        finally:
-            upstream_response.close()
-
     return StreamingResponse(
-        iterate_stream(),
+        _iter_report_stream_chunks(upstream_response, profile=payload.profile),
         media_type=upstream_response.headers.get("content-type") or "text/event-stream",
         headers={"Cache-Control": "no-cache"},
     )
