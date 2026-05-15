@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 
@@ -12,8 +12,6 @@ from data_platform.chat_backend.infra.postgres import _postgres_conn
 from data_platform.chat_backend.domains.memory_profile.service import build_memory_profile
 from data_platform.chat_backend.domains.provider_proxy.service import (
     _proxy_anthropic_message,
-    _proxy_dify_web_search_blocking,
-    _proxy_dify_web_search_stream,
     _proxy_dify_workflow_blocking,
     _proxy_dify_workflow_stream,
     _proxy_ima_get_media_info,
@@ -113,31 +111,18 @@ def internal_run_report_stream(request: Request, payload: InternalReportRunReque
 @router.post("/internal/provider/dify-web-search/run")
 def internal_run_dify_web_search(request: Request, payload: InternalWorkflowRunRequest) -> dict[str, Any]:
     _require_internal_service(request, request.url.path)
-    provider_response = _proxy_dify_web_search_blocking(query=payload.query, user=payload.user)
-    return _success_response(
-        "/internal/provider/dify-web-search/run",
-        provider_response,
-        "dify web search proxied",
+    raise HTTPException(
+        status_code=410,
+        detail="Dify web-search chatflow is deprecated. Use /internal/provider/web-search/tavily instead.",
     )
 
 
 @router.post("/internal/provider/dify-web-search/run-stream")
 def internal_run_dify_web_search_stream(request: Request, payload: InternalWorkflowRunRequest) -> StreamingResponse:
     _require_internal_service(request, request.url.path)
-    upstream_response = _proxy_dify_web_search_stream(query=payload.query, user=payload.user)
-
-    def iterate_stream() -> Any:
-        try:
-            for chunk in upstream_response.iter_content(chunk_size=4096):
-                if chunk:
-                    yield chunk
-        finally:
-            upstream_response.close()
-
-    return StreamingResponse(
-        iterate_stream(),
-        media_type=upstream_response.headers.get("content-type") or "text/event-stream",
-        headers={"Cache-Control": "no-cache"},
+    raise HTTPException(
+        status_code=410,
+        detail="Dify web-search chatflow streaming is deprecated. Use /internal/provider/web-search/tavily instead.",
     )
 
 
