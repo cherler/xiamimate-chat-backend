@@ -1263,7 +1263,7 @@ def render_portal_html() -> str:
   <div id="page-billing" class="page">
     <div class="card">
       <h2>完整账单</h2>
-      <div class="card-note">默认按时间倒序展示全部积分变动；你也可以按消费、退款、充值/赠送、每日额度重置或其他来源筛选查看。</div>
+      <div class="card-note">默认按时间倒序展示全部积分变动；报告门控失败、工具异常等自动退款会写入这里，你也可以按消费、退款、充值/赠送、每日额度重置或其他来源筛选查看。</div>
       <div class="ledger-policy-grid" id="billing-policy-grid"></div>
       <div class="subnav-tabs ledger-filter-tabs" id="ledger-filter-tabs">
         <button type="button" class="sub-tab active" data-ledger-filter="all">全部</button>
@@ -1274,7 +1274,7 @@ def render_portal_html() -> str:
         <button type="button" class="sub-tab" data-ledger-filter="other">其他</button>
       </div>
       <div class="table-toolbar">
-        <div><strong>完整账单</strong>，每条记录都会展示账单项目、来源、变动后余额和原因说明，方便你按时间回看完整积分流水。</div>
+        <div><strong>完整账单</strong>，每条记录都会展示账单项目、来源、变动后余额和原因说明；如需核对退款，请切换到“退款”筛选查看对应流水。</div>
         <div id="ledger-meta">加载中…</div>
       </div>
       <div class="table-wrap">
