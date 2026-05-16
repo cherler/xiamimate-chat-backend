@@ -1693,7 +1693,7 @@ def render_portal_invite_html() -> str:
       </section>
       <section id="product" class="section-block card">
         <h2>你将注册的是什么产品</h2>
-        <div class="card-note">虾米选品（XiaMimate）是一款面向跨境电商卖家的选品智能体，围绕 Amazon、TikTok Shop、Temu 等主流平台构建行业知识库，整合 Keepa 商品数据、Google Trends 趋势信号与联网实时查询能力，为用户提供从市场扫描、趋势验证、竞品洞察、主题分析到选品报告生成的一站式决策支持；同时结合智能算法的商品预测能力，对商品热度变化、需求潜力、竞争强度和上新机会进行辅助判断，帮助卖家更快发现值得跟进的方向，降低试错成本，提升选品效率与决策质量。</div>
+        <div class="card-note">虾米选品（XiaMimate）是面向跨境电商卖家的选品智能体，融合 Amazon\TikTok Shop\Temu 知识库、Keepa 商品数据、Google Trends 趋势信号、实时联网查询、商品预测与主题分析能力，帮助用户快速完成选品分析与决策。</div>
         <div class="tip-banner">它不是泛聊天工具，而是一套围绕跨境电商选品、测品和市场调研的分析工作台，重点帮助你判断“这个方向值不值得做、风险在哪里、下一步该怎么继续”。</div>
         <div style="height:18px"></div>
         <div class="mini-kpi-row">
