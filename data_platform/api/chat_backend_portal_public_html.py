@@ -1193,13 +1193,13 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>虾密小助手 - {escape(title)}</title>
+  <title>虾米选品 - {escape(title)}</title>
   <style>{_BASE_CSS}</style>
 </head>
 <body>
 <div class="portal-shell">
   <nav class="sidebar">
-    <div class="brand">🦐 虾密小助手<span class="brand-subtitle">公开产品页与使用指南</span></div>
+    <div class="brand">🦐 虾米选品<span class="brand-subtitle">公开产品页与使用指南</span></div>
     {sidebar_html}
   </nav>
   <div class="workspace">
@@ -1693,19 +1693,22 @@ def render_portal_invite_html() -> str:
       </section>
       <section id="product" class="section-block card">
         <h2>你将注册的是什么产品</h2>
-        <div class="card-note">虾密小助手是一款面向跨境电商卖家的垂直选品与分析助手，不是泛聊天工具。它把问答、/report 报告编排、知识库和账户体系放在一个统一入口里，帮助你从方向判断走到可执行结论。</div>
-        <div class="tip-banner">不是让你多聊一轮，而是帮你更快判断“这个方向值不值得做、风险在哪里、下一步该怎么继续”。如果你正在做跨境电商选品、测品或市场调研，这个产品更像一套可直接上手的分析工作台。</div>
+        <div class="card-note">虾米选品（XiaMimate）是一款面向跨境电商卖家的选品智能体，围绕 Amazon、TikTok Shop、Temu 等主流平台构建行业知识库，整合 Keepa 商品数据、Google Trends 趋势信号与联网实时查询能力，为用户提供从市场扫描、趋势验证、竞品洞察、主题分析到选品报告生成的一站式决策支持；同时结合智能算法的商品预测能力，对商品热度变化、需求潜力、竞争强度和上新机会进行辅助判断，帮助卖家更快发现值得跟进的方向，降低试错成本，提升选品效率与决策质量。</div>
+        <div class="tip-banner">它不是泛聊天工具，而是一套围绕跨境电商选品、测品和市场调研的分析工作台，重点帮助你判断“这个方向值不值得做、风险在哪里、下一步该怎么继续”。</div>
         <div style="height:18px"></div>
         <div class="mini-kpi-row">
-          <div class="mini-kpi"><div class="mini-kpi-value">更快收窄方向</div><div class="mini-kpi-label">先问，再筛，再决定要不要继续投入</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-value">减少盲目试错</div><div class="mini-kpi-label">先看竞争、风险和规则，再决定是否进入</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-value">输出可执行结论</div><div class="mini-kpi-label">结果不只是一句话，还包含依据、风险和下一步</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">市场扫描</div><div class="mini-kpi-label">从模糊商品词拆出可分析候选池</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">趋势验证</div><div class="mini-kpi-label">结合数据、趋势和外部信号交叉判断</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">选品报告</div><div class="mini-kpi-label">输出结论、依据、风险和下一步动作</div></div>
         </div>
         <div style="height:18px"></div>
         <div class="notice-grid">
-          <div class="notice-card accent"><h3 class="notice-title">适合谁</h3><p class="notice-desc">适合正在做跨境电商选品、测品、调研和市场观察的卖家、运营和团队用户。</p></div>
-          <div class="notice-card"><h3 class="notice-title">能帮你做什么</h3><p class="notice-desc">帮助你更快做方向发现、竞争判断、风险排除、规则检索和成本管理，而不是只给一段泛泛回答。</p></div>
-          <div class="notice-card"><h3 class="notice-title">你最终拿到什么</h3><p class="notice-desc">更接近一份可落地的判断结果：是否值得做、为什么、风险点在哪里、下一步怎么验证。</p></div>
+          <div class="notice-card accent"><h3 class="notice-title">多平台知识整合</h3><p class="notice-desc">不只是 Amazon，还覆盖 TikTok Shop、Temu 的平台规则、类目特点、履约与合规知识。</p></div>
+          <div class="notice-card"><h3 class="notice-title">实时外部信号验证</h3><p class="notice-desc">可以联网补充政策变化、社媒热点、搜索趋势、节庆季节性等外部信息，不只看静态数据库。</p></div>
+          <div class="notice-card"><h3 class="notice-title">候选池解析与机会发现</h3><p class="notice-desc">能先帮用户把模糊商品词拆成可分析的候选池，再筛出值得继续看的方向。</p></div>
+          <div class="notice-card"><h3 class="notice-title">竞品与价格带分析</h3><p class="notice-desc">支持头部商品特征、价格区间、销量表现、评论规模、竞争密度的综合判断。</p></div>
+          <div class="notice-card"><h3 class="notice-title">风险识别能力</h3><p class="notice-desc">识别合规风险、侵权风险、季节性风险、履约风险和过热竞争风险。</p></div>
+          <div class="notice-card"><h3 class="notice-title">主题分析分层报告能力</h3><p class="notice-desc">支持 quick / standard / deep 不同深度的分析路径，满足“先快速判断，再深入研究”的工作流。</p></div>
         </div>
         <div style="height:18px"></div>
         <h2 style="margin-top:0">核心能力链路</h2>

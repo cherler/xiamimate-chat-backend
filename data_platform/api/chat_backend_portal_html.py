@@ -16,7 +16,7 @@ def render_portal_html() -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>虾密小助手 - 我的账户</title>
+  <title>虾米选品 - 我的账户</title>
   <style>
     :root {
       --bg: #f7f8fb;
@@ -963,7 +963,7 @@ def render_portal_html() -> str:
 <body>
 <div class="portal-shell">
 <nav class="sidebar">
-  <div class="brand">🦐 虾密小助手<span class="brand-subtitle">统一门户账户中心</span></div>
+  <div class="brand">🦐 虾米选品<span class="brand-subtitle">统一门户账户中心</span></div>
   <div class="nav-group">
     <div class="nav-group-title">📋 账户管理</div>
     <a class="nav-item" data-page="notifications"><span class="nav-item-label">通知中心</span><span class="nav-item-badge" id="notifications-nav-badge" style="display:none;">0</span></a>
