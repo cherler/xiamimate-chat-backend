@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 import requests as http_requests
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 
 try:
     import psycopg2.extras
@@ -540,7 +540,7 @@ def _post_internal_payment_callback(provider: str, payload: dict[str, Any], *, i
 
 
 @router.post("/internal/payments/provider-notify/wechat")
-async def internal_wechat_payment_notify(request: Request) -> dict[str, str]:
+async def internal_wechat_payment_notify(request: Request) -> Response:
     raw_body = await request.body()
     safe_headers = _safe_wechat_notify_headers(request)
     try:
@@ -599,7 +599,7 @@ async def internal_wechat_payment_notify(request: Request) -> dict[str, str]:
                             "last_notify_payload": decrypted,
                         },
                     )
-                return {"code": "SUCCESS", "message": "成功"}
+                return Response(status_code=204)
         except HTTPException as exc:
             _insert_payment_callback_event(
                 conn,
@@ -674,7 +674,7 @@ async def internal_wechat_payment_notify(request: Request) -> dict[str, str]:
             processed_status="processed",
             processed_at=_utc_now(),
         )
-    return {"code": "SUCCESS", "message": "成功"}
+    return Response(status_code=204)
 
 @router.post("/internal/payments/provider-callback/{provider}")
 def internal_payment_provider_callback(provider: str, request: Request, payload: PaymentProviderCallbackRequest) -> dict[str, Any]:
