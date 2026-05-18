@@ -5,6 +5,7 @@ from typing import Any
 
 import requests as http_requests
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.concurrency import run_in_threadpool
 
 try:
     import psycopg2.extras
@@ -627,7 +628,8 @@ async def internal_wechat_payment_notify(request: Request) -> Response:
         },
     }
     try:
-        _post_internal_payment_callback(
+        await run_in_threadpool(
+            _post_internal_payment_callback,
             "wechat",
             callback_payload,
             idempotency_key=f"wechat-notify:{provider_trade_no or order_id}",
