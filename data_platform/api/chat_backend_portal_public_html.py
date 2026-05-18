@@ -12,6 +12,7 @@ from data_platform.chat_backend.domains.site_config import _get_contact_config
 from data_platform.chat_backend.infra.postgres import _postgres_conn, _run_pg_dict_query
 from data_platform.chat_backend.infra.settings import (
     DEFAULT_BILLING_PACKAGES,
+    DEFAULT_EVENT_PRICING,
     DEFAULT_PROMOTION_RULES,
   _resolve_promotion_rule_seed_status,
 )
@@ -420,10 +421,6 @@ _BASE_CSS = """
   .support-inline-link:hover {
     color: #1d4ed8;
   }
-  .cta-hint {
-    color: var(--muted);
-    font-size: 0.8rem;
-  }
   .offer-card.featured {
     border-color: rgba(37, 99, 235, 0.24);
     box-shadow: 0 20px 42px rgba(37, 99, 235, 0.08);
@@ -694,6 +691,12 @@ _BASE_CSS = """
   }
   .checkout-price-value.emphasis {
     color: var(--accent-2);
+  }
+  .checkout-price-sub {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.5;
   }
   .promo-list {
     display: grid;
@@ -1397,6 +1400,7 @@ def _sidebar(groups: list[tuple[str, list[tuple[str, str]]]]) -> str:
 def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html: str, body_html: str) -> str:
     openwebui_home_url = escape(_portal_public_base_url())
     chatbot_snippet = _render_portal_chatbot_snippet()
+    subtitle_html = f'<div class="subtitle">{escape(subtitle)}</div>' if subtitle else ""
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1416,7 +1420,7 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
       <div class="workspace-topbar-inner">
         <div>
           <div class="page-title-row"><h1>{escape(title)}</h1></div>
-          <div class="subtitle">{escape(subtitle)}</div>
+          {subtitle_html}
         </div>
         <div class="topbar-actions">
           <div class="top-route-nav">{_top_nav(active)}</div>
@@ -1468,6 +1472,21 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
 def render_portal_products_html() -> str:
     monthly_packages, recharge_packages, signup_rule, first_discount_rule, cumulative_rules, single_bonus_by_package = _split_catalog()
     first_discount_text = escape(str((first_discount_rule.get("meta_json") or {}).get("display_text") or first_discount_rule.get("rule_name") or ""))
+    event_cost_by_type = {str(row.get("event_type") or ""): int(row.get("points_per_unit") or 0) for row in DEFAULT_EVENT_PRICING}
+    usage_cards = "".join(
+        f'''
+        <div class="notice-card{' accent' if index == 0 else ''}">
+          <h3 class="notice-title">{escape(title)}</h3>
+          <p class="notice-desc">{escape(desc)}</p>
+        </div>
+        '''
+        for index, (title, desc) in enumerate([
+            (f"{event_cost_by_type.get('llm_request', 1)} 积分 / 次", "LLM 单独请求：适合普通问答、规则解释和轻量分析。"),
+            (f"{event_cost_by_type.get('kb_retrieve', 2)} 积分 / 次", "工具/检索请求：知识库检索、商品 API 检索、网络搜索等能力按次扣减。"),
+            (f"{event_cost_by_type.get('report_quick_run', 8)} / {event_cost_by_type.get('report_standard_run', 16)} / {event_cost_by_type.get('report_deep_run', 24)} 积分", "报告编排：快速、标准、深度报告按任务深度分档计费。"),
+            (f"{event_cost_by_type.get('report_research_run', 32)} 积分 / 次", "研究报告：包含更完整的外部补证和下钻分析，适合高价值决策。"),
+        ])
+    )
 
     monthly_cards = []
     for package in monthly_packages:
@@ -1499,7 +1518,6 @@ def render_portal_products_html() -> str:
               </div>
               <div class="offer-actions">
                 <a class="offer-cta" data-checkout-link="1" data-package-code="{package_code}" data-product-type="monthly_subscription" href="/portal/checkout?package_code={package_code}">立即下单</a>
-                <span class="cta-hint" data-cta-hint="{package_code}">登录后进入受保护结算页，当前阶段按单月购买，不自动续费。</span>
               </div>
             </div>
             '''
@@ -1532,7 +1550,6 @@ def render_portal_products_html() -> str:
               </div>
               <div class="offer-actions">
                   <a class="offer-cta" data-checkout-link="1" data-package-code="{package_code}" data-product-type="recharge" href="/portal/checkout?package_code={package_code}">立即下单</a>
-                  <span class="cta-hint" data-cta-hint="{package_code}">下单后可在同页查看支付状态与到账结果。</span>
               </div>
             </div>
             '''
@@ -1586,10 +1603,17 @@ def render_portal_products_html() -> str:
     )
 
     body_html = f'''
+      <section id="usage" class="section-block card">
+        <h2>积分消费能力</h2>
+        <div class="card-note">积分用于驱动虾米选品的问答、工具检索和报告编排。系统会优先扣减月包积分，月包不足时再扣充值包积分。</div>
+        <div class="notice-grid">{usage_cards}</div>
+      </section>
       <section id="monthly" class="section-block card">
         <h2>月包区</h2>
         <div class="card-note">适合持续稳定使用。月包积分会在当前套餐有效期内优先扣减，到期后自动清零。</div>
         <div class="offer-grid">{"".join(monthly_cards)}</div>
+        <div style="height:18px"></div>
+        <div class="tip-banner">套餐切换说明：已有生效月包时不支持升降级；到期后可更换，积分不够可购买充值包补量。</div>
       </section>
       <section id="recharge" class="section-block card">
         <h2>充值区</h2>
@@ -1613,13 +1637,13 @@ def render_portal_products_html() -> str:
     '''
 
     sidebar_html = _sidebar([
-        ("订阅方案", [("monthly", "月包区"), ("recharge", "充值区"), ("newcomer", "新用户区")]),
+        ("订阅与充值", [("usage", "消费能力"), ("monthly", "月包区"), ("recharge", "充值区"), ("newcomer", "新用户区")]),
     ])
     return _layout(
         active="products",
         kicker="订阅与充值",
-        title="产品方案与充值说明",
-        subtitle="说明不同方案的积分额度、有效期和到账方式，便于按使用强度选择合适的订阅或充值方案。",
+        title="订阅与充值",
+        subtitle="",
         sidebar_html=sidebar_html,
         body_html=body_html,
     ).replace("</body>", '''
@@ -1679,16 +1703,12 @@ def render_portal_products_html() -> str:
     return rows[0] || null;
   }
 
-  function setCheckoutLinkState(link, text, hint, disabled) {
+  function setCheckoutLinkState(link, text, disabled) {
     if (!link) {
       return;
     }
     var packageCode = link.getAttribute('data-package-code') || '';
-    var hintEl = packageCode ? document.querySelector('[data-cta-hint="' + packageCode + '"]') : null;
     link.textContent = text;
-    if (hintEl && hint) {
-      hintEl.textContent = hint;
-    }
     if (disabled) {
       link.setAttribute('aria-disabled', 'true');
       link.classList.add('disabled');
@@ -1706,18 +1726,18 @@ def render_portal_products_html() -> str:
       var packageCode = link.getAttribute('data-package-code') || '';
       var productType = link.getAttribute('data-product-type') || '';
       if (productType !== 'monthly_subscription') {
-        setCheckoutLinkState(link, '立即下单', '下单后可在同页查看支付状态与到账结果。', false);
+        setCheckoutLinkState(link, '立即下单', false);
         return;
       }
       if (!activeSubscription) {
-        setCheckoutLinkState(link, '立即下单', '登录后进入受保护结算页，当前阶段按单月购买，不自动续费。', false);
+        setCheckoutLinkState(link, '立即下单', false);
         return;
       }
       if (String(activeSubscription.package_code || '') === packageCode) {
-        setCheckoutLinkState(link, '当前订阅', '当前月包已生效；本阶段不支持重复购买同一套餐。', true);
+        setCheckoutLinkState(link, '当前订阅', true);
         return;
       }
-      setCheckoutLinkState(link, '套餐切换待上线', '当前账号已有生效中的月包；升降级切换后续再开放。', true);
+      setCheckoutLinkState(link, '到期后可更换', true);
     });
   }
 
@@ -2428,7 +2448,10 @@ def render_portal_checkout_html(
                 or ("持续月度权益" if selected_package.get("product_type") == "monthly_subscription" else "灵活补量方案")
             )
         )
-        total_points = int(pricing.get("points_amount") or selected_package.get("points_amount") or 0)
+        base_points = int(pricing.get("points_amount") or selected_package.get("points_amount") or 0)
+        reward_points = sum(int(item.get("reward_points") or item.get("benefit_value") or 0) for item in reward_promotions)
+        total_points = base_points + reward_points
+        entitlement_sub = f'<div class="checkout-price-sub">基础 {base_points} + 赠送 {reward_points}</div>' if reward_points > 0 else ""
         summary_html = f'''
           <div class="checkout-package-name">{package_name}</div>
           <div class="checkout-package-subtitle">{package_subtitle}</div>
@@ -2436,7 +2459,7 @@ def render_portal_checkout_html(
             <div class="checkout-price-card"><div class="checkout-price-label">原价</div><div class="checkout-price-value">{escape(_cny(int(pricing.get('list_amount_cents') or selected_package.get('price_cents') or 0)))}</div></div>
             <div class="checkout-price-card"><div class="checkout-price-label">优惠</div><div class="checkout-price-value">{escape(_cny(int(pricing.get('discount_amount_cents') or 0)))}</div></div>
             <div class="checkout-price-card"><div class="checkout-price-label">当前应付</div><div class="checkout-price-value emphasis">{escape(_cny(int(pricing.get('payable_amount_cents') or selected_package.get('price_cents') or 0)))}</div></div>
-            <div class="checkout-price-card"><div class="checkout-price-label">到账权益</div><div class="checkout-price-value">{total_points} 积分</div></div>
+            <div class="checkout-price-card"><div class="checkout-price-label">到账权益</div><div class="checkout-price-value">{total_points} 积分</div>{entitlement_sub}</div>
           </div>
         '''
     else:
@@ -2628,6 +2651,15 @@ def render_portal_checkout_html(
           var expiresAt = new Date(session.expires_at);
           return !isNaN(expiresAt.getTime()) && expiresAt.getTime() <= Date.now();
         }
+        function totalEntitlementPoints(pricingSnapshot, order) {
+          var pricing = pricingSnapshot && pricingSnapshot.pricing ? pricingSnapshot.pricing : null;
+          var basePoints = parseInt(pricing ? pricing.points_amount : (order && order.points_amount), 10) || 0;
+          var rewards = pricingSnapshot && Array.isArray(pricingSnapshot.reward_promotions) ? pricingSnapshot.reward_promotions : [];
+          var rewardPoints = rewards.reduce(function(sum, item) {
+            return sum + (parseInt((item && (item.reward_points || item.benefit_value)), 10) || 0);
+          }, 0);
+          return basePoints + rewardPoints;
+        }
         function renderPaymentLog(payload) {
           var rows = payload && payload.payment_log ? payload.payment_log : [];
           if (!rows.length) {
@@ -2811,7 +2843,7 @@ def render_portal_checkout_html(
               '<div class="status-card"><div class="status-card-label">订单号</div><div class="status-card-value">' + esc(order.order_id || '-') + '</div></div>' +
               '<div class="status-card"><div class="status-card-label">支付方式</div><div class="status-card-value">' + esc(order.provider === 'wechat' ? '微信支付' : (order.provider || '-')) + '</div></div>' +
               '<div class="status-card"><div class="status-card-label">应付金额</div><div class="status-card-value">' + esc(toCny(pricing ? pricing.payable_amount_cents : order.amount_cents)) + '</div></div>' +
-              '<div class="status-card"><div class="status-card-label">套餐权益</div><div class="status-card-value">' + esc(String(pricing ? (pricing.points_amount || 0) : (order.points_amount || 0))) + ' 积分</div></div>' +
+              '<div class="status-card"><div class="status-card-label">套餐权益</div><div class="status-card-value">' + esc(String(totalEntitlementPoints(pricingSnapshot, order))) + ' 积分</div></div>' +
             '</div>' +
             '<div class="checkout-note">套餐：' + esc(packageName) + '；创建时间：' + esc(fmtTime(order.created_at)) + '；支付时间：' + esc(fmtTime(order.paid_at)) + '。</div>' +
             actionHtml;
@@ -2868,6 +2900,8 @@ def render_portal_checkout_html(
           createButton.disabled = true;
           createButton.textContent = purchaseGuardButtonLabel || '当前不可下单';
           orderPanel.innerHTML = '<div class="checkout-note">' + esc(purchaseGuardMessage || '当前月包暂不可重复购买。') + '</div>';
+        } else if (purchaseGuardMessage) {
+          noteEl.textContent = purchaseGuardMessage;
         }
 
         orderPanel.addEventListener('click', function(event) {
@@ -2961,7 +2995,7 @@ def render_portal_checkout_html(
     '''
 
     body_html = body_html.replace("__CHECKOUT_SUMMARY__", summary_html)
-    body_html = body_html.replace("__SUBSCRIPTION_PURCHASE_BLOCKED__", "true" if subscription_purchase_guard else "false")
+    body_html = body_html.replace("__SUBSCRIPTION_PURCHASE_BLOCKED__", "true" if subscription_purchase_guard and subscription_purchase_guard.get("blocked") else "false")
     body_html = body_html.replace("__SUBSCRIPTION_PURCHASE_BLOCK_LABEL__", '"{}"'.format(purchase_guard_button_label_js.replace('"', '\\"')))
     body_html = body_html.replace("__SUBSCRIPTION_PURCHASE_BLOCK_MESSAGE__", '"{}"'.format(purchase_guard_message_js.replace('"', '\\"')))
     body_html = body_html.replace("__SELECTED_PACKAGE_NAME__", '"{}"'.format(selected_package_name_js.replace('"', '\\"')))

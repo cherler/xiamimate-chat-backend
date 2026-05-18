@@ -298,11 +298,11 @@ def _build_monthly_package_purchase_guard(conn, user_id: str, package: dict[str,
     return {
         "blocked": True,
         "active_subscription": active_subscription,
-        "button_label": "当前订阅" if is_current_package else "套餐切换待上线",
+        "button_label": "当前订阅" if is_current_package else "到期后可更换",
         "message": (
-            "当前套餐已经生效，本阶段不支持重复购买同一月包；当前按单月购买，到期后如需继续使用，再手动续购。"
+            "当前套餐已生效；本阶段不支持重复购买同一月包。"
             if is_current_package
-            else "当前账号已有生效中的月包；套餐升降级切换后续再开放，本阶段先不支持新的月包下单。"
+            else "当前已有生效月包；本阶段不支持升降级切换，到期后可重新选择。积分不够时可购买充值包补量。"
         ),
         "reason_code": "current_subscription_active" if is_current_package else "subscription_switch_not_supported",
         "is_current_package": is_current_package,
