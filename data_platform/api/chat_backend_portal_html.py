@@ -1762,14 +1762,14 @@ def render_portal_html() -> str:
     var d = new Date(ts);
     if (isNaN(d.getTime())) return String(ts).slice(0, 19);
     var pad = function(n) { return String(n).padStart(2, "0"); };
-    return pad(d.getMonth()+1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    return pad(d.getMonth()+1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
   }
   function fmtTimeFull(ts) {
     if (!ts) return "-";
     var d = new Date(ts);
     if (isNaN(d.getTime())) return String(ts).slice(0, 19);
     var pad = function(n) { return String(n).padStart(2, "0"); };
-    return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
   }
   function summarizeIpSuffix(ip) {
     var normalized = String(ip || "").trim();
