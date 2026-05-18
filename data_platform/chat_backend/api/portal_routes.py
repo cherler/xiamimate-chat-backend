@@ -4,6 +4,8 @@ from __future__ import annotations
 import threading
 import time
 from collections import defaultdict, deque
+from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 from typing import Any
@@ -30,6 +32,7 @@ from data_platform.chat_backend.infra.settings import (
     INTERNAL_SERVICE_SECRET,
     INTERNAL_SERVICE_SECRET_HEADER_NAME,
     PORTAL_MOCK_PAYMENT_ENABLED,
+    WECHAT_NATIVE_QR_TTL_SECONDS,
     _portal_email_verification_gate_enabled,
     _generate_id,
     _utc_now,
@@ -82,6 +85,19 @@ from data_platform.chat_backend.domains.notifications.service import (
     _set_notification_read_state,
 )
 from data_platform.chat_backend.domains.payments.service import _fetch_payment_order_for_user
+from data_platform.chat_backend.domains.payments.service import (
+    _create_payment_session,
+    _fetch_latest_payment_session,
+    _fetch_payment_session,
+    _update_payment_session_status,
+)
+from data_platform.chat_backend.domains.payments.wechat_pay import (
+    close_wechat_order_by_out_trade_no,
+    create_wechat_native_prepay,
+    extract_wechat_trade_payload,
+    query_wechat_order_by_out_trade_no,
+    wechat_trade_state_to_session_status,
+)
 from data_platform.chat_backend.domains.site_config import (
     _get_contact_config,
     _get_email_verification_security_config,
@@ -94,6 +110,7 @@ from data_platform.chat_backend.api.models import (
     ConfirmEmailVerificationRequest,
     ConfirmSecurityVerificationRequest,
     CreatePaymentOrderRequest,
+    CreatePaymentSessionRequest,
     RedeemCodeRedeemRequest,
     RequestPasswordResetRequest,
     UpdateNotificationReadStateRequest,
@@ -110,6 +127,7 @@ from data_platform.api.chat_backend_portal_public_html import (
 
 router = APIRouter()
 _WECHAT_QR_IMAGE_PATH = Path(__file__).resolve().parents[3] / "微信二维码.jpg"
+_WECHAT_PAY_LOGO_PATH = Path(__file__).resolve().parents[3] / "data_platform" / "api" / "assets" / "wechat-pay-logo.svg"
 
 
 _PORTAL_PROVIDER_LABELS = {
@@ -434,12 +452,308 @@ def _normalize_portal_provider(provider: str) -> str:
 
 def _build_portal_payment_response(conn, order_row: dict[str, Any]) -> dict[str, Any]:
     package = _fetch_billing_package(conn, order_row["package_code"])
+    latest_session = _fetch_latest_payment_session(conn, order_row["order_id"])
+    payment_log = _build_portal_payment_log(order_row, latest_session)
     return {
         "order": order_row,
         "package": package,
         "pricing_snapshot": order_row.get("promotion_snapshot_json") or {},
+        "payment_session": latest_session,
+        "payment_log": payment_log,
         "mock_payment_enabled": PORTAL_MOCK_PAYMENT_ENABLED,
     }
+
+
+def _build_portal_payment_log(order_row: dict[str, Any], latest_session: dict[str, Any] | None) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if order_row.get("created_at"):
+        rows.append({"time": order_row.get("created_at"), "message": "订单已创建"})
+    if latest_session:
+        if latest_session.get("created_at"):
+            rows.append({"time": latest_session.get("created_at"), "message": "微信支付二维码已生成"})
+        session_meta = dict(latest_session.get("prepay_payload_json") or {})
+        if session_meta.get("last_query_at"):
+            message = "已向微信支付查询订单状态"
+            if session_meta.get("last_query_error"):
+                message = "微信支付查单暂未成功，页面会继续重试"
+            rows.append({"time": session_meta.get("last_query_at"), "message": message})
+        if str(latest_session.get("status") or "").lower() == "expired":
+            rows.append({"time": latest_session.get("updated_at"), "message": "二维码已过期"})
+        if str(latest_session.get("status") or "").lower() == "paid":
+            rows.append({"time": latest_session.get("paid_at") or latest_session.get("updated_at"), "message": "微信支付已确认"})
+    if str(order_row.get("status") or "").lower() == "paid":
+        rows.append({"time": order_row.get("paid_at") or order_row.get("updated_at"), "message": "积分已到账"})
+    if str(order_row.get("status") or "").lower() == "closed":
+        rows.append({"time": order_row.get("updated_at"), "message": "支付订单已取消"})
+    return [row for row in rows if row.get("time") or row.get("message")]
+
+
+def _portal_payment_order_status_label(status: Any) -> str:
+    normalized = str(status or "").strip().lower()
+    return {
+        "paid": "成功",
+        "pending": "待支付",
+        "closed": "已取消",
+        "expired": "已过期",
+        "failed": "失败",
+        "refunded": "已退款",
+    }.get(normalized, str(status or "未知"))
+
+
+def _build_portal_payment_order_list_row(row: dict[str, Any]) -> dict[str, Any]:
+    package_meta = dict(row.get("package_meta_json") or {})
+    package_name = str(
+        package_meta.get("display_name")
+        or row.get("package_name")
+        or row.get("package_code")
+        or "充值订单"
+    )
+    provider = str(row.get("provider") or "").strip().lower()
+    return {
+        "order_id": row.get("order_id"),
+        "package_code": row.get("package_code"),
+        "package_name": package_name,
+        "product_type": row.get("product_type"),
+        "provider": provider,
+        "provider_label": _PORTAL_PROVIDER_LABELS.get(provider) or provider or "-",
+        "amount_cents": int(row.get("amount_cents") or 0),
+        "points_amount": int(row.get("points_amount") or 0),
+        "status": row.get("status"),
+        "status_label": _portal_payment_order_status_label(row.get("status")),
+        "paid_at": row.get("paid_at"),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def _close_pending_payment_order_locally(conn, order_row: dict[str, Any], *, reason: str) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    close_meta = {
+        "closed_via": "portal_wechat_modal",
+        "closed_reason": reason,
+        "closed_at": now.isoformat(),
+    }
+    _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.payment_session
+        SET status = 'closed',
+            prepay_payload_json = COALESCE(prepay_payload_json, '{}'::jsonb) || %s::jsonb,
+            updated_at = NOW()
+        WHERE order_id = %s
+          AND status = 'pending'
+        RETURNING session_id
+        """,
+        [psycopg2.extras.Json(close_meta), order_row["order_id"]],
+    )
+    rows = _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.payment_order
+        SET status = 'closed',
+            callback_payload_json = COALESCE(callback_payload_json, '{}'::jsonb) || %s::jsonb,
+            updated_at = NOW()
+        WHERE order_id = %s
+          AND user_id = %s
+          AND status = 'pending'
+        RETURNING order_id, user_id, package_code, product_type, provider, list_amount_cents,
+                  discount_amount_cents, amount_cents, points_amount, status,
+                  provider_order_id, provider_trade_no, promotion_snapshot_json,
+                  callback_payload_json, paid_at, created_at, updated_at
+        """,
+        [psycopg2.extras.Json(close_meta), order_row["order_id"], order_row["user_id"]],
+    )
+    return rows[0] if rows else _fetch_payment_order_for_user(conn, order_row["order_id"], order_row["user_id"])
+
+
+def _close_expired_pending_wechat_orders(conn, *, user_id: str | None = None) -> list[dict[str, Any]]:
+    params: list[Any] = [WECHAT_NATIVE_QR_TTL_SECONDS]
+    user_clause = ""
+    if user_id:
+        user_clause = " AND payment_order.user_id = %s"
+        params.append(user_id)
+    now = datetime.now(timezone.utc)
+    close_meta = {
+        "closed_via": "wechat_qr_ttl_guard",
+        "closed_reason": "wechat_qr_expired",
+        "closed_at": now.isoformat(),
+        "ttl_seconds": WECHAT_NATIVE_QR_TTL_SECONDS,
+    }
+    params.append(psycopg2.extras.Json(close_meta))
+    params.append(psycopg2.extras.Json(close_meta))
+    return _run_pg_dict_query(
+        conn,
+        """
+        WITH expired_orders AS (
+            SELECT payment_order.order_id
+            FROM app.payment_order AS payment_order
+            WHERE payment_order.provider = 'wechat'
+              AND payment_order.status = 'pending'
+              AND payment_order.created_at <= NOW() - (%s * INTERVAL '1 second')
+              {user_clause}
+        ), closed_sessions AS (
+            UPDATE app.payment_session AS payment_session
+            SET status = 'closed',
+                prepay_payload_json = COALESCE(payment_session.prepay_payload_json, '{{}}'::jsonb) || %s::jsonb,
+                updated_at = NOW()
+            FROM expired_orders
+            WHERE payment_session.order_id = expired_orders.order_id
+              AND payment_session.status = 'pending'
+            RETURNING payment_session.session_id
+        )
+        UPDATE app.payment_order AS payment_order
+        SET status = 'closed',
+            callback_payload_json = COALESCE(payment_order.callback_payload_json, '{{}}'::jsonb) || %s::jsonb,
+            updated_at = NOW()
+        FROM expired_orders
+        WHERE payment_order.order_id = expired_orders.order_id
+          AND payment_order.status = 'pending'
+        RETURNING payment_order.order_id, payment_order.user_id, payment_order.package_code,
+                  payment_order.product_type, payment_order.provider, payment_order.list_amount_cents,
+                  payment_order.discount_amount_cents, payment_order.amount_cents,
+                  payment_order.points_amount, payment_order.status, payment_order.provider_order_id,
+                  payment_order.provider_trade_no, payment_order.promotion_snapshot_json,
+                  payment_order.callback_payload_json, payment_order.paid_at,
+                  payment_order.created_at, payment_order.updated_at
+        """.format(user_clause=user_clause),
+        params,
+    )
+
+
+def _parse_optional_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _call_internal_payment_callback(provider: str, payload: dict[str, Any], *, idempotency_key: str, service_name: str) -> dict[str, Any]:
+    if not INTERNAL_SERVICE_SECRET:
+        raise HTTPException(status_code=503, detail="internal service secret is not configured")
+    callback_url = _backend_base_url() + f"/internal/payments/provider-callback/{provider}"
+    headers = {
+        INTERNAL_SERVICE_SECRET_HEADER_NAME: INTERNAL_SERVICE_SECRET,
+        INTERNAL_SERVICE_NAME_HEADER_NAME: service_name,
+        IDEMPOTENCY_KEY_HEADER_NAME: idempotency_key,
+    }
+    try:
+        response = http_requests.post(callback_url, headers=headers, json=payload, timeout=12)
+    except Exception as exc:  # pragma: no cover - network failure only
+        raise HTTPException(status_code=502, detail=f"payment callback failed: {exc}") from exc
+    try:
+        response_json = response.json()
+    except Exception:
+        response_json = {"message": response.text.strip() or response.reason}
+    if response.status_code != 200 or response_json.get("success") is not True:
+        raise HTTPException(
+            status_code=502,
+            detail=response_json.get("detail") or response_json.get("message") or "payment callback failed",
+        )
+    return response_json
+
+
+def _maybe_refresh_wechat_order_from_provider(order_row: dict[str, Any], latest_session: dict[str, Any] | None) -> None:
+    if str(order_row.get("provider") or "").strip().lower() != "wechat":
+        return
+    if str(order_row.get("status") or "").strip().lower() != "pending":
+        return
+    if not latest_session:
+        return
+    session_meta = dict(latest_session.get("prepay_payload_json") or {})
+    last_query_at = _parse_optional_datetime(session_meta.get("last_query_at"))
+    now = datetime.now(timezone.utc)
+    expires_at = _parse_optional_datetime(latest_session.get("expires_at"))
+    if expires_at is not None and expires_at <= now:
+        with _postgres_conn() as conn:
+            _update_payment_session_status(
+                conn,
+                session_id=str(latest_session["session_id"]),
+                status="expired",
+                prepay_payload_json={
+                    **session_meta,
+                    "expired_by": "portal_order_polling",
+                    "expired_at": now.isoformat(),
+                },
+            )
+        return
+    if last_query_at is not None and (now - last_query_at).total_seconds() < 8:
+        return
+
+    try:
+        trade_response = query_wechat_order_by_out_trade_no(str(order_row["order_id"]))
+    except HTTPException as exc:
+        with _postgres_conn() as conn:
+            updated_meta = {
+                **session_meta,
+                "last_query_at": now.isoformat(),
+                "last_query_error": str(exc.detail),
+            }
+            _update_payment_session_status(
+                conn,
+                session_id=str(latest_session["session_id"]),
+                status=str(latest_session.get("status") or "pending"),
+                prepay_payload_json=updated_meta,
+            )
+        return
+
+    trade = extract_wechat_trade_payload(trade_response)
+    session_status = wechat_trade_state_to_session_status(str(trade.get("trade_state") or ""))
+    updated_meta = {
+        **session_meta,
+        "last_query_at": now.isoformat(),
+        "last_query_response": trade_response,
+    }
+
+    if session_status == "paid":
+        callback_payload = {
+            "order_id": order_row["order_id"],
+            "provider_order_id": trade.get("provider_order_id") or order_row["order_id"],
+            "provider_trade_no": trade.get("provider_trade_no"),
+            "paid_amount_cents": trade.get("paid_amount_cents"),
+            "meta": {
+                "source": "wechat_order_query",
+                "trade_state": trade.get("trade_state"),
+                "wechat_payload": trade.get("raw") or trade_response,
+            },
+        }
+        _call_internal_payment_callback(
+            "wechat",
+            callback_payload,
+            idempotency_key=f"wechat-query:{trade.get('provider_trade_no') or order_row['order_id']}",
+            service_name="wechat-order-query",
+        )
+        with _postgres_conn() as conn:
+            _update_payment_session_status(
+                conn,
+                session_id=str(latest_session["session_id"]),
+                status="paid",
+                provider_trade_no=trade.get("provider_trade_no"),
+                prepay_payload_json=updated_meta,
+                paid_at=now,
+            )
+        return
+
+    with _postgres_conn() as conn:
+        _update_payment_session_status(
+            conn,
+            session_id=str(latest_session["session_id"]),
+            status=session_status,
+            provider_trade_no=trade.get("provider_trade_no"),
+            prepay_payload_json=updated_meta,
+        )
+        if session_status in {"closed", "failed"}:
+            _run_pg_dict_query(
+                conn,
+                "UPDATE app.payment_order SET status = %s, updated_at = NOW() WHERE order_id = %s AND status = 'pending' RETURNING order_id",
+                [session_status, order_row["order_id"]],
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -652,6 +966,17 @@ def portal_wechat_qr_image() -> FileResponse:
         path=str(_WECHAT_QR_IMAGE_PATH),
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@router.get("/portal/assets/wechat-pay-logo.svg")
+def portal_wechat_pay_logo() -> FileResponse:
+    if not _WECHAT_PAY_LOGO_PATH.exists():
+        raise HTTPException(status_code=404, detail="wechat pay logo not found")
+    return FileResponse(
+        path=str(_WECHAT_PAY_LOGO_PATH),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 
@@ -1011,6 +1336,50 @@ def portal_get_ledger(request: Request) -> dict[str, Any]:
     )
 
 
+@router.get("/portal/api/payments/orders")
+def portal_list_payment_orders(request: Request) -> dict[str, Any]:
+    user_id = _require_portal_user(request)
+    page = max(1, int(request.query_params.get("page", "1")))
+    page_size = min(100, max(1, int(request.query_params.get("page_size", "20"))))
+    offset = (page - 1) * page_size
+    with _postgres_conn() as conn:
+        _enforce_verified_portal_user(conn, user_id)
+        _close_expired_pending_wechat_orders(conn, user_id=user_id)
+        rows = _run_pg_dict_query(
+            conn,
+            """
+            SELECT payment_order.order_id, payment_order.user_id, payment_order.package_code,
+                   payment_order.product_type, payment_order.provider, payment_order.amount_cents,
+                   payment_order.points_amount, payment_order.status, payment_order.paid_at,
+                   payment_order.created_at, payment_order.updated_at,
+                   billing_package.package_name, billing_package.meta_json AS package_meta_json
+            FROM app.payment_order AS payment_order
+            LEFT JOIN app.billing_package AS billing_package
+              ON billing_package.package_code = payment_order.package_code
+            WHERE payment_order.user_id = %s
+            ORDER BY payment_order.created_at DESC, payment_order.order_id DESC
+            LIMIT %s OFFSET %s
+            """,
+            [user_id, page_size, offset],
+        )
+        total_row = _fetch_optional_one(
+            conn,
+            "SELECT COUNT(*) AS cnt FROM app.payment_order WHERE user_id = %s",
+            [user_id],
+        )
+    total = int((total_row or {}).get("cnt", 0))
+    return _success_response(
+        "/portal/api/payments/orders",
+        {
+            "rows": [_build_portal_payment_order_list_row(row) for row in rows],
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+        },
+        "payment orders loaded",
+    )
+
+
 @router.get("/portal/api/usage-daily")
 def portal_get_usage_daily(request: Request) -> dict[str, Any]:
     user_id = _require_portal_user(request)
@@ -1100,9 +1469,78 @@ def portal_create_payment_order(request: Request, payload: CreatePaymentOrderReq
     )
 
 
+@router.post("/portal/api/payments/orders/{order_id}/cancel")
+def portal_cancel_payment_order(order_id: str, request: Request) -> dict[str, Any]:
+    user_id = _require_portal_user(request)
+    reason = str(request.query_params.get("reason") or "user_close_modal").strip()[:80] or "user_close_modal"
+    with _postgres_conn() as conn:
+        _enforce_verified_portal_user(conn, user_id)
+        order_row = _fetch_payment_order_for_user(conn, order_id, user_id)
+        latest_session = _fetch_latest_payment_session(conn, order_id)
+
+    if str(order_row.get("status") or "").strip().lower() != "pending":
+        with _postgres_conn() as conn:
+            payload = _build_portal_payment_response(conn, order_row)
+        return _success_response(
+            f"/portal/api/payments/orders/{order_id}/cancel",
+            payload,
+            "payment order is already terminal",
+        )
+
+    if str(order_row.get("provider") or "").strip().lower() == "wechat" and latest_session:
+        _maybe_refresh_wechat_order_from_provider(order_row, latest_session)
+        with _postgres_conn() as conn:
+            _enforce_verified_portal_user(conn, user_id)
+            order_row = _fetch_payment_order_for_user(conn, order_id, user_id)
+            latest_session = _fetch_latest_payment_session(conn, order_id)
+        if str(order_row.get("status") or "").strip().lower() == "paid":
+            with _postgres_conn() as conn:
+                payload = _build_portal_payment_response(conn, order_row)
+            return _success_response(
+                f"/portal/api/payments/orders/{order_id}/cancel",
+                payload,
+                "payment order paid before cancel",
+            )
+        try:
+            close_wechat_order_by_out_trade_no(order_id)
+        except HTTPException as exc:
+            detail = str(exc.detail or "").upper()
+            if "ORDERPAID" in detail or "PAID" in detail or "已支付" in detail:
+                _maybe_refresh_wechat_order_from_provider(order_row, latest_session)
+                with _postgres_conn() as conn:
+                    _enforce_verified_portal_user(conn, user_id)
+                    order_row = _fetch_payment_order_for_user(conn, order_id, user_id)
+                    payload = _build_portal_payment_response(conn, order_row)
+                return _success_response(
+                    f"/portal/api/payments/orders/{order_id}/cancel",
+                    payload,
+                    "payment order paid before cancel",
+                )
+            if not ("CLOSED" in detail or "已关闭" in detail or "NOTEXIST" in detail or "不存在" in detail):
+                raise
+
+    with _postgres_conn() as conn:
+        _enforce_verified_portal_user(conn, user_id)
+        current_order = _fetch_payment_order_for_user(conn, order_id, user_id)
+        if str(current_order.get("status") or "").strip().lower() == "pending":
+            current_order = _close_pending_payment_order_locally(conn, current_order, reason=reason)
+        payload = _build_portal_payment_response(conn, current_order)
+    return _success_response(
+        f"/portal/api/payments/orders/{order_id}/cancel",
+        payload,
+        "payment order cancelled",
+    )
+
+
 @router.get("/portal/api/payments/orders/{order_id}")
 def portal_get_payment_order(order_id: str, request: Request) -> dict[str, Any]:
     user_id = _require_portal_user(request)
+    with _postgres_conn() as conn:
+        _enforce_verified_portal_user(conn, user_id)
+        _close_expired_pending_wechat_orders(conn, user_id=user_id)
+        order_row = _fetch_payment_order_for_user(conn, order_id, user_id)
+        latest_session = _fetch_latest_payment_session(conn, order_id)
+    _maybe_refresh_wechat_order_from_provider(order_row, latest_session)
     with _postgres_conn() as conn:
         _enforce_verified_portal_user(conn, user_id)
         order_row = _fetch_payment_order_for_user(conn, order_id, user_id)
@@ -1111,6 +1549,99 @@ def portal_get_payment_order(order_id: str, request: Request) -> dict[str, Any]:
         f"/portal/api/payments/orders/{order_id}",
         payload,
         "portal payment order loaded",
+    )
+
+
+@router.post("/portal/api/payments/orders/{order_id}/session")
+def portal_create_payment_session(order_id: str, request: Request, payload: CreatePaymentSessionRequest) -> dict[str, Any]:
+    user_id = _require_portal_user(request)
+    provider = _normalize_portal_provider(payload.provider)
+    channel = str(payload.channel or "native").strip().lower() or "native"
+    if provider != "wechat" or channel != "native":
+        raise HTTPException(status_code=400, detail="only wechat native payment session is supported")
+
+    with _postgres_conn() as conn:
+        _enforce_verified_portal_user(conn, user_id)
+        _close_expired_pending_wechat_orders(conn, user_id=user_id)
+        order_row = _fetch_payment_order_for_user(conn, order_id, user_id)
+        if str(order_row.get("provider") or "").strip().lower() != "wechat":
+            raise HTTPException(status_code=409, detail="payment order provider is not wechat")
+        if str(order_row.get("status") or "").strip().lower() != "pending":
+            raise HTTPException(status_code=409, detail="payment order is not pending")
+        package = _fetch_billing_package(conn, order_row["package_code"])
+        latest_session = _fetch_latest_payment_session(conn, order_id)
+        if latest_session and not payload.force_refresh:
+            expires_at = _parse_optional_datetime(latest_session.get("expires_at"))
+            if (
+                str(latest_session.get("status") or "").strip().lower() == "pending"
+                and latest_session.get("qr_code_url")
+                and (expires_at is None or expires_at > datetime.now(timezone.utc))
+            ):
+                response_payload = _build_portal_payment_response(conn, order_row)
+                response_payload["payment_session"] = latest_session
+                return _success_response(
+                    f"/portal/api/payments/orders/{order_id}/session",
+                    response_payload,
+                    "existing payment session reused",
+                )
+
+    prepay = create_wechat_native_prepay(order_row, package)
+    session_meta = {
+        "request_payload": prepay.get("request_payload") or {},
+        "response_payload": prepay.get("response_payload") or {},
+        "code_url_expires_in_seconds": WECHAT_NATIVE_QR_TTL_SECONDS,
+    }
+    with _postgres_conn() as conn:
+        _enforce_verified_portal_user(conn, user_id)
+        current_order = _fetch_payment_order_for_user(conn, order_id, user_id)
+        if str(current_order.get("status") or "").strip().lower() != "pending":
+            raise HTTPException(status_code=409, detail="payment order is no longer pending")
+        session_row = _create_payment_session(
+            conn,
+            order_row=current_order,
+            provider="wechat",
+            channel="native",
+            status="pending",
+            provider_order_id=str(prepay.get("provider_order_id") or order_id),
+            qr_code_url=str(prepay["qr_code_url"]),
+            prepay_payload_json=session_meta,
+            expires_at=prepay.get("expires_at"),
+        )
+        response_payload = _build_portal_payment_response(conn, current_order)
+        response_payload["payment_session"] = session_row
+    return _success_response(
+        f"/portal/api/payments/orders/{order_id}/session",
+        response_payload,
+        "wechat native payment session created",
+    )
+
+
+@router.get("/portal/api/payments/sessions/{session_id}/qr.svg")
+def portal_get_payment_session_qr(session_id: str, request: Request) -> Response:
+    user_id = _require_portal_user(request)
+    with _postgres_conn() as conn:
+        _enforce_verified_portal_user(conn, user_id)
+        session_row = _fetch_payment_session(conn, session_id)
+    if session_row.get("user_id") != user_id:
+        raise HTTPException(status_code=404, detail="payment session not found")
+    code_url = str(session_row.get("qr_code_url") or "").strip()
+    if not code_url:
+        raise HTTPException(status_code=404, detail="payment session qr code not found")
+    try:
+        import qrcode
+        import qrcode.image.svg
+    except ImportError as exc:  # pragma: no cover - depends on runtime env
+        raise HTTPException(status_code=503, detail="qrcode package is required for payment QR rendering") from exc
+    qr = qrcode.QRCode(image_factory=qrcode.image.svg.SvgImage, border=2)
+    qr.add_data(code_url)
+    qr.make(fit=True)
+    image = qr.make_image()
+    output = BytesIO()
+    image.save(output)
+    return Response(
+        content=output.getvalue(),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "no-store"},
     )
 
 

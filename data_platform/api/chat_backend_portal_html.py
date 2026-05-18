@@ -580,6 +580,32 @@ def render_portal_html() -> str:
       background: rgba(100, 116, 139, 0.12);
       color: #475569;
     }
+    .payment-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 76px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .payment-status-pill::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #94a3b8;
+    }
+    .payment-status-pill.paid::before {
+      background: var(--ok);
+    }
+    .payment-status-pill.pending::before {
+      background: #f59e0b;
+    }
+    .payment-status-pill.closed::before,
+    .payment-status-pill.expired::before,
+    .payment-status-pill.failed::before {
+      background: #94a3b8;
+    }
     table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
     thead th {
       text-align: left; font-weight: 600; color: var(--muted);
@@ -1215,14 +1241,28 @@ def render_portal_html() -> str:
   <div id="page-topup" class="page">
     <div class="card">
       <h2>充值/赠送记录</h2>
-      <div class="card-note">展示所有正向入账记录，包括新用户赠送、手工加额和充值到账。</div>
+      <div class="card-note">展示充值订单和所有正向入账记录，包括新用户赠送、手工加额和充值到账。</div>
       <div class="subnav-tabs">
-        <button type="button" class="sub-tab active" data-topup-view="records">到账记录</button>
+        <button type="button" class="sub-tab active" data-topup-view="orders">充值账单</button>
+        <button type="button" class="sub-tab" data-topup-view="records">赠送账单</button>
         <button type="button" class="sub-tab" data-topup-view="invoice">发票管理</button>
       </div>
-      <div id="topup-records-view" class="subview active">
+      <div id="topup-orders-view" class="subview active">
         <div class="table-toolbar">
-          <div><strong>正向入账账本</strong>，支持分页查看最近的充值和赠送。</div>
+          <div><strong>充值账单</strong>，展示微信支付订单的状态、金额和创建时间。</div>
+          <div id="topup-orders-meta">加载中…</div>
+        </div>
+        <div class="table-wrap">
+        <table>
+          <thead><tr><th>订单编号</th><th>状态</th><th>金额</th><th>创建时间</th></tr></thead>
+          <tbody id="topup-orders-body"></tbody>
+        </table>
+        </div>
+        <div class="pager" id="topup-orders-pager"></div>
+      </div>
+      <div id="topup-records-view" class="subview">
+        <div class="table-toolbar">
+          <div><strong>赠送账单</strong>，支持分页查看最近的赠送和到账流水。</div>
           <div id="topup-meta">加载中…</div>
         </div>
         <div class="table-wrap">
@@ -1380,7 +1420,7 @@ def render_portal_html() -> str:
 
   topupViewButtons.forEach(function(button) {
     button.addEventListener("click", function() {
-      setTopupView(button.getAttribute("data-topup-view") || "records");
+      setTopupView(button.getAttribute("data-topup-view") || "orders");
     });
   });
 
@@ -1579,6 +1619,7 @@ def render_portal_html() -> str:
   }
 
   var usageLoaded = false, ledgerLoaded = false, topupLoaded = false;
+  var currentTopupView = "orders";
 
   function setActivePage(target, syncHash) {
     if (verificationGateState.enforced && !verificationGateState.verified && target !== "account") {
@@ -1599,7 +1640,7 @@ def render_portal_html() -> str:
     }
     if (target === "usage" && !usageLoaded) { loadUsageChart(); usageLoaded = true; }
     if (target === "billing" && !ledgerLoaded) { loadLedger(1); ledgerLoaded = true; }
-    if (target === "topup" && !topupLoaded) { loadTopup(1); topupLoaded = true; }
+    if (target === "topup" && !topupLoaded) { setTopupView(currentTopupView || "orders"); topupLoaded = true; }
   }
 
   function applyVerificationGate(identityVerification) {
@@ -1758,7 +1799,10 @@ def render_portal_html() -> str:
 
   function withPortalToken(path) {
     if (!portalToken) return path;
-    return path + (path.indexOf("?") === -1 ? "?" : "&") + "t=" + encodeURIComponent(portalToken);
+    var hashIndex = path.indexOf("#");
+    var basePath = hashIndex === -1 ? path : path.slice(0, hashIndex);
+    var hashPart = hashIndex === -1 ? "" : path.slice(hashIndex);
+    return basePath + (basePath.indexOf("?") === -1 ? "?" : "&") + "t=" + encodeURIComponent(portalToken) + hashPart;
   }
 
   document.getElementById("route-account-link").href = withPortalToken("/portal/account");
@@ -2516,12 +2560,19 @@ def render_portal_html() -> str:
   }
 
   function setTopupView(target) {
-    var nextTarget = target === "invoice" ? "invoice" : "records";
+    var nextTarget = target === "invoice" ? "invoice" : (target === "records" ? "records" : "orders");
+    currentTopupView = nextTarget;
     topupViewButtons.forEach(function(button) {
       button.classList.toggle("active", button.getAttribute("data-topup-view") === nextTarget);
     });
+    document.getElementById("topup-orders-view").classList.toggle("active", nextTarget === "orders");
     document.getElementById("topup-records-view").classList.toggle("active", nextTarget === "records");
     document.getElementById("topup-invoice-view").classList.toggle("active", nextTarget === "invoice");
+    if (nextTarget === "orders") {
+      loadTopupOrders(currentTopupOrdersPage || 1);
+    } else if (nextTarget === "records") {
+      loadTopup(currentTopupPage || 1);
+    }
   }
 
   // ── Usage chart ──
@@ -2571,6 +2622,24 @@ def render_portal_html() -> str:
       return "credit";
     }
     return "all";
+  }
+
+  function formatMoneyFromCents(cents) {
+    var amount = intVal(cents);
+    return amount % 100 === 0 ? '¥' + (amount / 100) : '¥' + (amount / 100).toFixed(2);
+  }
+
+  function localizePaymentStatus(status, fallback) {
+    var mapping = {
+      paid: '成功',
+      pending: '待支付',
+      closed: '已取消',
+      expired: '已过期',
+      failed: '失败',
+      refunded: '已退款'
+    };
+    var normalized = String(status || '').trim().toLowerCase();
+    return mapping[normalized] || fallback || status || '未知';
   }
 
   function getLedgerFilterLabel(filter) {
@@ -2644,6 +2713,41 @@ def render_portal_html() -> str:
   }
 
   // ── Topup records (充值/赠送记录) ──
+  var currentTopupOrdersPage = 1;
+  function loadTopupOrders(page) {
+    if (verificationGateState.enforced && !verificationGateState.verified) {
+      return;
+    }
+    currentTopupOrdersPage = page || 1;
+    apiFetch("/portal/api/payments/orders?page=" + currentTopupOrdersPage + "&page_size=20").then(function(data) {
+      renderTopupOrders(data);
+    }).catch(function() {});
+  }
+
+  function renderTopupOrders(data) {
+    var rows = data.rows || [];
+    var total = data.total || 0;
+    var pageSize = data.page_size || 20;
+    var totalPages = Math.max(1, Math.ceil(total / pageSize));
+    document.getElementById("topup-orders-meta").textContent = "共 " + total + " 条，本页 " + rows.length + " 条";
+
+    document.getElementById("topup-orders-body").innerHTML = rows.length ? rows.map(function(order) {
+      var status = String(order.status || '').trim().toLowerCase();
+      var packageName = order.package_name || order.package_code || '充值订单';
+      return '<tr><td><div class="table-main-text">' + esc(order.order_id || '-') + '</div><div class="table-sub-text">' + esc(packageName) + ' · ' + esc(order.provider_label || '-') + '</div></td>' +
+        '<td><span class="payment-status-pill ' + esc(status || 'other') + '">' + esc(localizePaymentStatus(status, order.status_label)) + '</span></td>' +
+        '<td><div class="table-main-text">' + esc(formatMoneyFromCents(order.amount_cents)) + '</div><div class="table-sub-text">到账权益 ' + intVal(order.points_amount) + ' 积分</div></td>' +
+        '<td>' + fmtTimeFull(order.created_at) + '</td></tr>';
+    }).join("") : renderEmptyRow(4, "暂无充值账单");
+
+    document.getElementById("topup-orders-pager").innerHTML =
+      '<button id="tpo-prev" ' + (currentTopupOrdersPage <= 1 ? 'disabled' : '') + '>上一页</button>' +
+      '<span class="pager-status">第 ' + currentTopupOrdersPage + ' / ' + totalPages + ' 页</span>' +
+      '<button id="tpo-next" ' + (currentTopupOrdersPage >= totalPages ? 'disabled' : '') + '>下一页</button>';
+    document.getElementById("tpo-prev").onclick = function() { loadTopupOrders(currentTopupOrdersPage - 1); };
+    document.getElementById("tpo-next").onclick = function() { loadTopupOrders(currentTopupOrdersPage + 1); };
+  }
+
   var currentTopupPage = 1;
   function loadTopup(page) {
     if (verificationGateState.enforced && !verificationGateState.verified) {

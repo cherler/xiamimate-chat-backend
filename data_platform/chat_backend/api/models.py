@@ -198,6 +198,12 @@ class CreatePaymentOrderRequest(BaseModel):
     provider: str = Field(default=DEFAULT_PAYMENT_PROVIDER, min_length=1)
 
 
+class CreatePaymentSessionRequest(BaseModel):
+    provider: str = Field(default="wechat", min_length=1)
+    channel: str = Field(default="native", min_length=1)
+    force_refresh: bool = False
+
+
 class PaymentProviderCallbackRequest(BaseModel):
     order_id: str = Field(..., min_length=1)
     provider_order_id: str | None = None

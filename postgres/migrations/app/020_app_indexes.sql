@@ -10,6 +10,12 @@ CREATE INDEX IF NOT EXISTS idx_promotion_rule_status_order ON app.promotion_rule
 CREATE INDEX IF NOT EXISTS idx_payment_order_user_created ON app.payment_order(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payment_order_status_created ON app.payment_order(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payment_order_user_product_status ON app.payment_order(user_id, product_type, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_session_order_created ON app.payment_session(order_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_session_user_created ON app.payment_session(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_session_provider_order ON app.payment_session(provider, provider_order_id);
+CREATE INDEX IF NOT EXISTS idx_payment_session_status_expires ON app.payment_session(status, expires_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_callback_event_provider_order ON app.payment_callback_event(provider, order_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_callback_event_trade ON app.payment_callback_event(provider, provider_trade_no, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_subscription_user_status ON app.billing_subscription(user_id, status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_subscription_grant_subscription_created ON app.subscription_grant(subscription_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_promotion_claim_user_created ON app.promotion_claim(user_id, created_at DESC);

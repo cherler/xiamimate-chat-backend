@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 236 64" role="img" aria-label="微信支付">
+  <path fill="#04BE02" d="M34.3 8.5c17.8 0 32.2 11.1 32.2 24.8S52.1 58.1 34.3 58.1c-4.2 0-8.2-.6-11.9-1.8L8.8 61.8l4.5-10.9C6.3 46.4 2 40.1 2 33.3 2 19.6 16.5 8.5 34.3 8.5Z"/>
+  <path fill="#FFFFFF" d="M53.2 22.3 27.6 37.1c-2.4 1.4-5.5.6-6.9-1.8l-6.2-10.5c-.8-1.4-.3-3.2 1.1-4 1.3-.8 3.1-.4 3.9 1l6 10.1c.3.5.9.6 1.4.4l23.2-13.4c1.3-.8 3.1-.3 3.9 1.1.8 1.4.4 3.2-.8 4.3Z"/>
+  <text x="84" y="43" fill="#4A4A4A" font-family="PingFang SC, Microsoft YaHei, Arial, sans-serif" font-size="38" font-weight="400" letter-spacing="0">微信支付</text>
+</svg>

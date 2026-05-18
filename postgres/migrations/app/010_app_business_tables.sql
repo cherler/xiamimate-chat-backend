@@ -132,6 +132,38 @@ WHERE list_amount_cents IS NULL
    OR discount_amount_cents IS NULL
    OR promotion_snapshot_json IS NULL;
 
+CREATE TABLE IF NOT EXISTS app.payment_session (
+    session_id            TEXT PRIMARY KEY,
+    order_id              TEXT NOT NULL REFERENCES app.payment_order(order_id) ON DELETE CASCADE,
+    user_id               TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    provider              TEXT NOT NULL,
+    channel               TEXT NOT NULL DEFAULT 'native',
+    status                TEXT NOT NULL DEFAULT 'pending',
+    provider_order_id     TEXT,
+    provider_trade_no     TEXT,
+    cashier_url           TEXT,
+    qr_code_url           TEXT,
+    prepay_payload_json   JSONB NOT NULL DEFAULT '{}'::JSONB,
+    expires_at            TIMESTAMPTZ,
+    paid_at               TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.payment_callback_event (
+    event_id              TEXT PRIMARY KEY,
+    provider              TEXT NOT NULL,
+    order_id              TEXT,
+    provider_order_id     TEXT,
+    provider_trade_no     TEXT,
+    event_type            TEXT,
+    signature_verified    BOOLEAN NOT NULL DEFAULT FALSE,
+    payload_json          JSONB NOT NULL DEFAULT '{}'::JSONB,
+    processed_status      TEXT NOT NULL DEFAULT 'received',
+    processed_at          TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS app.billing_subscription (
     subscription_id           TEXT PRIMARY KEY,
     user_id                   TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,

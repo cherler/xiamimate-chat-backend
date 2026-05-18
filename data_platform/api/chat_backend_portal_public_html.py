@@ -713,6 +713,215 @@ _BASE_CSS = """
     display: grid;
     gap: 16px;
   }
+  .wechat-pay-button {
+    min-width: 190px;
+    min-height: 46px;
+    border-radius: 12px;
+    border: 1px solid #111827;
+    background: #111827;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-weight: 700;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  .wechat-pay-button:hover:not(:disabled) {
+    background: #020617;
+    transform: translateY(-1px);
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.16);
+  }
+  .wechat-pay-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+    transform: none;
+    box-shadow: none;
+  }
+  .wechat-pay-logo {
+    display: inline-block;
+    width: 116px;
+    height: 30px;
+    object-fit: contain;
+  }
+  .payment-logo-heading {
+    display: flex;
+    align-items: center;
+    min-height: 42px;
+  }
+  .payment-logo-heading .wechat-pay-logo {
+    width: 142px;
+    height: 38px;
+  }
+  .wechat-pay-button .wechat-pay-logo {
+    width: 104px;
+    height: 28px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    background: #fff;
+  }
+  .wechat-modal-title .wechat-pay-logo {
+    width: 126px;
+    height: 32px;
+  }
+  .payment-log-list {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.88);
+    padding: 12px 14px;
+    display: grid;
+    gap: 10px;
+  }
+  .payment-log-item {
+    display: grid;
+    grid-template-columns: 128px 1fr;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+  .payment-log-time {
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+  }
+  .payment-log-text {
+    color: var(--ink);
+  }
+  .wechat-pay-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.32);
+    backdrop-filter: blur(5px);
+  }
+  .wechat-pay-modal.open {
+    display: flex;
+  }
+  .wechat-success-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1010;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.28);
+    backdrop-filter: blur(5px);
+  }
+  .wechat-success-modal.open {
+    display: flex;
+  }
+  .wechat-success-dialog {
+    width: min(478px, calc(100vw - 40px));
+    border-radius: 26px;
+    background: #fff;
+    box-shadow: 0 28px 70px rgba(15, 23, 42, 0.22);
+    padding: 32px 32px 30px;
+    position: relative;
+  }
+  .wechat-success-title {
+    margin: 0 0 18px;
+    font-size: 1.14rem;
+    line-height: 1.35;
+    font-weight: 800;
+    color: #111827;
+  }
+  .wechat-success-message {
+    color: #334155;
+    line-height: 1.8;
+    margin: 0 0 26px;
+  }
+  .wechat-success-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .wechat-success-actions button {
+    min-width: 72px;
+    min-height: 44px;
+    border-radius: 12px;
+    border: 0;
+    background: #111827;
+    color: #fff;
+    font-weight: 700;
+  }
+  .wechat-pay-dialog {
+    width: min(370px, calc(100vw - 40px));
+    border-radius: 24px;
+    background: #fff;
+    box-shadow: 0 28px 70px rgba(15, 23, 42, 0.22);
+    padding: 24px 26px 26px;
+    text-align: center;
+    position: relative;
+  }
+  .wechat-modal-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    border: 0;
+    background: #f1f5f9;
+    color: #334155;
+    font-size: 1.4rem;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+  }
+  .wechat-modal-title {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: 1.05rem;
+    color: #334155;
+    margin: 0 auto 18px;
+  }
+  .wechat-modal-subtitle {
+    color: #334155;
+    font-size: 0.88rem;
+    margin-bottom: 8px;
+  }
+  .wechat-modal-amount {
+    font-size: 2.05rem;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-bottom: 22px;
+    color: #111827;
+  }
+  .wechat-modal-qr-wrap {
+    width: 206px;
+    height: 206px;
+    margin: 0 auto 18px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    display: grid;
+    place-items: center;
+    padding: 10px;
+  }
+  .wechat-modal-qr-wrap img {
+    width: 184px;
+    height: 184px;
+    display: block;
+  }
+  .wechat-modal-status {
+    color: #64748b;
+    font-size: 0.84rem;
+    line-height: 1.7;
+    min-height: 44px;
+  }
+  .wechat-modal-actions {
+    margin-top: 16px;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
   .status-badge {
     display: inline-flex;
     align-items: center;
@@ -2260,55 +2469,81 @@ def render_portal_checkout_html(
     body_html = '''
       <section id="summary" class="section-block card">
         <h2>订单确认</h2>
-        <div class="card-note">下单前先确认套餐、应付金额与支付后到账权益。当前页只处理单次订单，不直接修改账户余额。</div>
         <div class="checkout-summary" id="checkout-summary">__CHECKOUT_SUMMARY__</div>
       </section>
       <section id="payment" class="section-block card">
-        <h2>支付方式</h2>
-        <div class="card-note">MVP 阶段先把结算页、订单状态和到账联动打通。真实支付宝与微信下单通道后续接入，当前页面已经按两种支付方式组织。</div>
-        <div class="payment-method-row" id="payment-method-row">
-          <button type="button" class="payment-method active" data-provider="alipay">支付宝</button>
-          <button type="button" class="payment-method" data-provider="wechat">微信支付</button>
-        </div>
-        <div style="height:16px"></div>
+        <h2 class="payment-logo-heading"><img class="wechat-pay-logo" src="/portal/assets/wechat-pay-logo.svg" alt="微信支付"></h2>
         <div class="checkout-actions">
-          <button type="button" id="create-order-btn">创建支付订单</button>
-          <button type="button" id="simulate-paid-btn" style="display:none;">模拟支付成功</button>
+          <button type="button" id="create-order-btn" class="wechat-pay-button"><span>去支付</span></button>
           <a class="ghost-button" id="back-products-link" href="/portal/products">回到套餐页</a>
         </div>
         <div style="height:14px"></div>
-        <div class="checkout-note" id="payment-note">创建订单后会进入待支付状态；如果当前是本地联调环境，可以直接触发模拟支付成功，验证到账链路。</div>
+        <div class="checkout-note" id="payment-note">请使用微信扫一扫完成支付。支付成功后积分会自动到账；当前暂不支持线上原路退款，如需退款请联系人工处理。</div>
       </section>
       <section id="status" class="section-block card">
         <h2>订单状态</h2>
-        <div class="card-note">支付成功后，这里的状态会更新为已支付，并可以直接跳到账户页核对余额、账本和套餐状态。</div>
         <div class="order-status-panel" id="order-status-panel">
-          <div class="checkout-note">还没有创建订单。请选择支付方式后点击“创建支付订单”。</div>
+          <div class="checkout-note">还没有创建订单。点击“去支付”后即可扫码支付。</div>
         </div>
       </section>
-      <section id="help" class="section-block card">
-        <h2>促销与到账说明</h2>
-        <div class="card-note">订单在创建时会固化 pricing snapshot。即使之后活动规则发生变化，这一笔订单仍按下单当刻的优惠和奖励执行。</div>
-        <div class="promo-list">__PROMO_ITEMS__</div>
+      <section id="payment-log" class="section-block card">
+        <h2>支付日志</h2>
+        <div class="payment-log-list" id="payment-log-list">
+          <div class="checkout-note">生成订单后会显示支付进度。</div>
+        </div>
       </section>
+      <div class="wechat-pay-modal" id="wechat-pay-modal" aria-hidden="true">
+        <div class="wechat-pay-dialog" role="dialog" aria-modal="true" aria-labelledby="wechat-modal-title">
+          <button type="button" class="wechat-modal-close" id="wechat-modal-close" aria-label="关闭">×</button>
+          <div class="wechat-modal-title" id="wechat-modal-title"><img class="wechat-pay-logo" src="/portal/assets/wechat-pay-logo.svg" alt="微信支付"></div>
+          <div class="wechat-modal-subtitle">扫一扫付款</div>
+          <div class="wechat-modal-amount" id="wechat-modal-amount">-</div>
+          <div class="wechat-modal-qr-wrap" id="wechat-modal-qr-wrap">
+            <div class="checkout-note">正在生成二维码...</div>
+          </div>
+          <div class="wechat-modal-status" id="wechat-modal-status">请尽快完成付款</div>
+          <div class="wechat-modal-actions" id="wechat-modal-actions"></div>
+        </div>
+      </div>
+      <div class="wechat-success-modal" id="wechat-success-modal" aria-hidden="true">
+        <div class="wechat-success-dialog" role="dialog" aria-modal="true" aria-labelledby="wechat-success-title">
+          <button type="button" class="wechat-modal-close" id="wechat-success-close" aria-label="关闭">×</button>
+          <h3 class="wechat-success-title" id="wechat-success-title">微信支付</h3>
+          <p class="wechat-success-message">支付成功，点击确定查看交易记录</p>
+          <div class="wechat-success-actions"><button type="button" id="wechat-success-confirm">确定</button></div>
+        </div>
+      </div>
       <script>
       (function() {
         var params = new URLSearchParams(location.search);
         var portalToken = params.get("t") || "";
         var packageCode = params.get("package_code") || "";
         var currentOrderId = params.get("order_id") || "";
-        var mockPaymentEnabled = __MOCK_PAYMENT_ENABLED__;
         var subscriptionPurchaseBlocked = __SUBSCRIPTION_PURCHASE_BLOCKED__;
         var purchaseGuardButtonLabel = __SUBSCRIPTION_PURCHASE_BLOCK_LABEL__;
         var purchaseGuardMessage = __SUBSCRIPTION_PURCHASE_BLOCK_MESSAGE__;
-        var selectedProvider = "alipay";
+        var selectedProvider = "wechat";
         var selectedPackageName = __SELECTED_PACKAGE_NAME__;
         var orderPanel = document.getElementById("order-status-panel");
+        var logPanel = document.getElementById("payment-log-list");
         var noteEl = document.getElementById("payment-note");
         var createButton = document.getElementById("create-order-btn");
-        var simulateButton = document.getElementById("simulate-paid-btn");
         var backProductsLink = document.getElementById("back-products-link");
+        var modalEl = document.getElementById("wechat-pay-modal");
+        var modalClose = document.getElementById("wechat-modal-close");
+        var modalAmount = document.getElementById("wechat-modal-amount");
+        var modalQrWrap = document.getElementById("wechat-modal-qr-wrap");
+        var modalStatus = document.getElementById("wechat-modal-status");
+        var modalActions = document.getElementById("wechat-modal-actions");
+        var successModal = document.getElementById("wechat-success-modal");
+        var successClose = document.getElementById("wechat-success-close");
+        var successConfirm = document.getElementById("wechat-success-confirm");
         var pollTimer = null;
+        var modalCountdownTimer = null;
+        var lastPaymentPayload = null;
+        var activeQrSessionId = "";
+        var lastOrderStatus = "";
+        var paymentSuccessShown = false;
 
         function esc(s) {
           var el = document.createElement("span");
@@ -2319,6 +2554,12 @@ def render_portal_checkout_html(
           var amount = parseInt(cents, 10) || 0;
           return amount % 100 === 0 ? (amount / 100) + "元" : (amount / 100).toFixed(2) + "元";
         }
+        function secondsToText(seconds) {
+          var safeSeconds = Math.max(0, parseInt(seconds, 10) || 0);
+          var minutes = Math.floor(safeSeconds / 60);
+          var rest = safeSeconds % 60;
+          return String(minutes).padStart(2, "0") + ":" + String(rest).padStart(2, "0");
+        }
         function fmtTime(ts) {
           if (!ts) return "-";
           var d = new Date(ts);
@@ -2327,7 +2568,10 @@ def render_portal_checkout_html(
         }
         function withPortalToken(path) {
           if (!portalToken || !path || /[?&]t=/.test(path)) return path;
-          return path + (path.indexOf("?") === -1 ? "?" : "&") + "t=" + encodeURIComponent(portalToken);
+          var hashIndex = path.indexOf("#");
+          var basePath = hashIndex === -1 ? path : path.slice(0, hashIndex);
+          var hashPart = hashIndex === -1 ? "" : path.slice(hashIndex);
+          return basePath + (basePath.indexOf("?") === -1 ? "?" : "&") + "t=" + encodeURIComponent(portalToken) + hashPart;
         }
         function updateSearchParams(nextOrderId) {
           var updated = new URLSearchParams(location.search);
@@ -2360,51 +2604,224 @@ def render_portal_checkout_html(
             return;
           }
           createButton.disabled = loading;
-          createButton.textContent = loading ? "创建中..." : "创建支付订单";
-        }
-        function setSelectedProvider(provider) {
-          selectedProvider = provider;
-          document.querySelectorAll(".payment-method[data-provider]").forEach(function(button) {
-            button.classList.toggle("active", button.getAttribute("data-provider") === provider);
-          });
-          noteEl.textContent = provider === "wechat"
-            ? "当前选择微信支付。真实通道接入后，这里会展示微信 Native 下单二维码。"
-            : "当前选择支付宝。真实通道接入后，这里会展示支付宝扫码下单信息。";
+          createButton.innerHTML = '<span>' + (loading ? '处理中...' : '去支付') + '</span>';
         }
         function statusClass(status) {
           if (status === "paid") return "paid";
           if (status === "pending") return "pending";
           return "other";
         }
-        function maybeToggleSimulate(order) {
-          simulateButton.style.display = mockPaymentEnabled && order && order.status === "pending" ? "inline-flex" : "none";
-          simulateButton.disabled = !(mockPaymentEnabled && order && order.status === "pending");
+        function statusLabel(status) {
+          var normalized = String(status || '').toLowerCase();
+          if (normalized === 'paid') return '成功';
+          if (normalized === 'pending') return '待支付';
+          if (normalized === 'closed') return '已取消';
+          if (normalized === 'expired') return '已过期';
+          if (normalized === 'failed') return '失败';
+          return status || '未知状态';
+        }
+        function isSessionExpired(session) {
+          if (!session) return false;
+          var status = String(session.status || '').toLowerCase();
+          if (['expired', 'closed', 'failed'].indexOf(status) !== -1) return true;
+          if (!session.expires_at) return false;
+          var expiresAt = new Date(session.expires_at);
+          return !isNaN(expiresAt.getTime()) && expiresAt.getTime() <= Date.now();
+        }
+        function renderPaymentLog(payload) {
+          var rows = payload && payload.payment_log ? payload.payment_log : [];
+          if (!rows.length) {
+            logPanel.innerHTML = '<div class="checkout-note">生成订单后会显示支付进度。</div>';
+            return;
+          }
+          logPanel.innerHTML = rows.map(function(row) {
+            return '<div class="payment-log-item"><div class="payment-log-time">' + esc(fmtTime(row.time)) + '</div><div class="payment-log-text">' + esc(row.message || '-') + '</div></div>';
+          }).join('');
+        }
+        function openWechatModal() {
+          modalEl.classList.add('open');
+          modalEl.setAttribute('aria-hidden', 'false');
+        }
+        function hideWechatModal() {
+          modalEl.classList.remove('open');
+          modalEl.setAttribute('aria-hidden', 'true');
+        }
+        function openSuccessModal() {
+          successModal.classList.add('open');
+          successModal.setAttribute('aria-hidden', 'false');
+        }
+        function hideSuccessModal() {
+          successModal.classList.remove('open');
+          successModal.setAttribute('aria-hidden', 'true');
+        }
+        function shouldCancelCurrentPayment() {
+          var data = lastPaymentPayload || {};
+          var order = data.order || null;
+          return !!(order && currentOrderId && String(order.status || '').toLowerCase() === 'pending' && modalEl.classList.contains('open'));
+        }
+        function cancelCurrentPayment(reason, keepalive) {
+          if (!currentOrderId) return Promise.resolve(null);
+          var path = '/portal/api/payments/orders/' + encodeURIComponent(currentOrderId) + '/cancel?reason=' + encodeURIComponent(reason || 'user_close_modal');
+          return apiFetch(path, { method: 'POST', keepalive: !!keepalive }).then(function(data) {
+            renderOrderState(data);
+            return data;
+          });
+        }
+        function closeWechatModal(reason) {
+          if (!shouldCancelCurrentPayment()) {
+            hideWechatModal();
+            return;
+          }
+          modalStatus.textContent = '正在取消本次支付订单...';
+          modalActions.innerHTML = '';
+          cancelCurrentPayment(reason || 'user_close_modal', false).then(function(data) {
+            hideWechatModal();
+            if (data && data.order && data.order.status === 'paid') {
+              openSuccessModal();
+            }
+          }).catch(function(err) {
+            modalStatus.textContent = '取消订单失败：' + esc(err.message || '请稍后重试');
+            modalActions.innerHTML = '<button type="button" class="ghost-button" data-close-wechat-modal="1">继续取消</button>';
+          });
+        }
+        function renderWechatModal(payload, shouldOpen) {
+          lastPaymentPayload = payload || lastPaymentPayload;
+          var data = payload || lastPaymentPayload || {};
+          var order = data.order || null;
+          var session = data.payment_session || null;
+          var pricingSnapshot = data.pricing_snapshot || null;
+          var pricing = pricingSnapshot && pricingSnapshot.pricing ? pricingSnapshot.pricing : null;
+          if (!order) return;
+          modalAmount.textContent = toCny(pricing ? pricing.payable_amount_cents : order.amount_cents);
+          if (order.status === 'paid') {
+            if (modalCountdownTimer) {
+              clearInterval(modalCountdownTimer);
+              modalCountdownTimer = null;
+            }
+            activeQrSessionId = '';
+            hideWechatModal();
+            modalQrWrap.innerHTML = '<div class="checkout-note">支付成功</div>';
+            modalStatus.textContent = '积分已到账，可前往账户页查看。';
+            modalActions.innerHTML = '<a class="offer-cta" href="' + esc(withPortalToken('/portal/account#balance')) + '">查看余额</a>';
+            return;
+          }
+          if (order.status === 'closed') {
+            if (modalCountdownTimer) {
+              clearInterval(modalCountdownTimer);
+              modalCountdownTimer = null;
+            }
+            activeQrSessionId = '';
+            modalQrWrap.innerHTML = '<div class="checkout-note">订单已取消</div>';
+            modalStatus.textContent = '本次支付订单已取消，可在充值账单查看记录。';
+            modalActions.innerHTML = '<a class="offer-cta" href="' + esc(withPortalToken('/portal/account#topup')) + '">查看充值账单</a>';
+            if (shouldOpen) openWechatModal();
+            return;
+          }
+          if (!session || !session.session_id || !session.qr_code_url) {
+            if (modalCountdownTimer) {
+              clearInterval(modalCountdownTimer);
+              modalCountdownTimer = null;
+            }
+            activeQrSessionId = '';
+            modalQrWrap.innerHTML = '<div class="checkout-note">正在生成二维码...</div>';
+            modalStatus.textContent = '请稍候';
+            modalActions.innerHTML = '';
+            if (shouldOpen) openWechatModal();
+            return;
+          }
+          if (isSessionExpired(session)) {
+            if (modalCountdownTimer) {
+              clearInterval(modalCountdownTimer);
+              modalCountdownTimer = null;
+            }
+            activeQrSessionId = '';
+            modalQrWrap.innerHTML = '<div class="checkout-note">二维码已过期</div>';
+            modalStatus.textContent = '请重新生成二维码后扫码支付。';
+            modalActions.innerHTML = '<button type="button" data-refresh-payment-session="1">重新生成二维码</button>';
+            if (shouldOpen) openWechatModal();
+            return;
+          }
+          var qrSrc = withPortalToken('/portal/api/payments/sessions/' + encodeURIComponent(session.session_id) + '/qr.svg');
+          if (activeQrSessionId !== String(session.session_id) || !modalQrWrap.querySelector('img')) {
+            activeQrSessionId = String(session.session_id);
+            modalQrWrap.innerHTML = '<img alt="微信支付二维码" src="' + esc(qrSrc) + '" />';
+          }
+          modalActions.innerHTML = '<button type="button" class="ghost-button" data-close-wechat-modal="1">取消支付</button>';
+          if (modalCountdownTimer) {
+            clearInterval(modalCountdownTimer);
+            modalCountdownTimer = null;
+          }
+          function updateCountdown() {
+            var expiresAt = new Date(session.expires_at);
+            if (isNaN(expiresAt.getTime())) {
+              modalStatus.textContent = '请尽快完成付款';
+              return;
+            }
+            var remaining = Math.floor((expiresAt.getTime() - Date.now()) / 1000);
+            if (remaining <= 0) {
+              modalStatus.textContent = '二维码已过期，请重新生成';
+              modalActions.innerHTML = '<button type="button" data-refresh-payment-session="1">重新生成二维码</button>';
+              if (modalCountdownTimer) clearInterval(modalCountdownTimer);
+              modalCountdownTimer = null;
+              return;
+            }
+            modalStatus.innerHTML = '二维码有效期 ' + esc(secondsToText(remaining)) + '<br>请尽快完成付款';
+          }
+          updateCountdown();
+          modalCountdownTimer = setInterval(updateCountdown, 1000);
+          if (shouldOpen) openWechatModal();
         }
         function renderOrderState(payload) {
+          lastPaymentPayload = payload;
           var order = payload && payload.order ? payload.order : null;
+          var session = payload && payload.payment_session ? payload.payment_session : null;
           var packageData = payload && payload.package ? payload.package : null;
           var pricingSnapshot = payload && payload.pricing_snapshot ? payload.pricing_snapshot : null;
           if (!order) {
-            orderPanel.innerHTML = '<div class="checkout-note">还没有创建订单。请选择支付方式后点击“创建支付订单”。</div>';
-            maybeToggleSimulate(null);
+            orderPanel.innerHTML = '<div class="checkout-note">还没有创建订单。点击“去支付”后即可扫码支付。</div>';
+            renderPaymentLog(payload);
             return;
           }
+          var normalizedStatus = String(order.status || '').toLowerCase();
+          var shouldShowSuccess = normalizedStatus === 'paid' && lastOrderStatus && lastOrderStatus !== 'paid' && !paymentSuccessShown;
+          lastOrderStatus = normalizedStatus;
           var pricing = pricingSnapshot && pricingSnapshot.pricing ? pricingSnapshot.pricing : null;
           var packageName = packageData && ((packageData.meta_json || {}).display_name || packageData.package_name || packageData.package_code) || selectedPackageName || order.package_code || "当前套餐";
-          var actionHtml = order.status === "paid"
-            ? '<div class="checkout-actions"><a class="offer-cta" href="' + esc(withPortalToken('/portal/account#balance')) + '">到账户页查看余额</a><a class="ghost-button" href="' + esc(withPortalToken('/portal/account#topup')) + '">查看到账记录</a></div>'
-            : '<div class="checkout-note">订单已创建，等待支付结果。真实支付接入后这里将展示二维码或跳转支付链接。</div>';
+          var actionHtml = '';
+          if (normalizedStatus === "paid") {
+            actionHtml = '<div class="checkout-actions"><a class="offer-cta" href="' + esc(withPortalToken('/portal/account#balance')) + '">到账户页查看余额</a><a class="ghost-button" href="' + esc(withPortalToken('/portal/account#topup')) + '">查看到账记录</a></div>';
+          } else if (normalizedStatus === "closed") {
+            actionHtml = '<div class="checkout-note">本次微信支付订单已取消，可重新从套餐页发起支付。</div><div class="checkout-actions" style="margin-top:14px;"><a class="offer-cta" href="' + esc(withPortalToken('/portal/account#topup')) + '">查看充值账单</a><a class="ghost-button" href="' + esc(withPortalToken('/portal/products')) + '">重新选择套餐</a></div>';
+          } else if (session && session.qr_code_url && session.session_id && order.provider === 'wechat' && !isSessionExpired(session)) {
+            actionHtml = '' +
+              '<div class="checkout-note">微信支付二维码已生成，请在弹窗中扫码完成付款。</div>' +
+              '<div class="checkout-actions" style="margin-top:14px;"><button type="button" data-open-wechat-modal="1">打开二维码</button><button type="button" class="ghost-button" data-refresh-payment-session="1">重新生成二维码</button></div>';
+          } else if (session && session.session_id && order.provider === 'wechat' && isSessionExpired(session)) {
+            actionHtml = '' +
+              '<div class="checkout-note">当前二维码已过期，请重新生成后再扫码支付。</div>' +
+              '<div class="checkout-actions" style="margin-top:14px;"><button type="button" data-refresh-payment-session="1">重新生成二维码</button></div>';
+          } else if (order.provider === 'wechat' && order.status === 'pending') {
+            actionHtml = '<div class="checkout-note">订单已创建，正在准备微信支付二维码。</div>';
+          } else {
+            actionHtml = '<div class="checkout-note">订单已创建，等待支付结果。</div>';
+          }
           orderPanel.innerHTML = '' +
-            '<div><span class="status-badge ' + statusClass(order.status) + '">' + esc(order.status === 'paid' ? '已支付' : (order.status === 'pending' ? '待支付' : order.status || '未知状态')) + '</span></div>' +
+            '<div><span class="status-badge ' + statusClass(normalizedStatus) + '">' + esc(statusLabel(normalizedStatus)) + '</span></div>' +
             '<div class="status-grid">' +
               '<div class="status-card"><div class="status-card-label">订单号</div><div class="status-card-value">' + esc(order.order_id || '-') + '</div></div>' +
-              '<div class="status-card"><div class="status-card-label">支付方式</div><div class="status-card-value">' + esc(order.provider === 'wechat' ? '微信支付' : (order.provider === 'alipay' ? '支付宝' : (order.provider || '-'))) + '</div></div>' +
+              '<div class="status-card"><div class="status-card-label">支付方式</div><div class="status-card-value">' + esc(order.provider === 'wechat' ? '微信支付' : (order.provider || '-')) + '</div></div>' +
               '<div class="status-card"><div class="status-card-label">应付金额</div><div class="status-card-value">' + esc(toCny(pricing ? pricing.payable_amount_cents : order.amount_cents)) + '</div></div>' +
               '<div class="status-card"><div class="status-card-label">套餐权益</div><div class="status-card-value">' + esc(String(pricing ? (pricing.points_amount || 0) : (order.points_amount || 0))) + ' 积分</div></div>' +
             '</div>' +
             '<div class="checkout-note">套餐：' + esc(packageName) + '；创建时间：' + esc(fmtTime(order.created_at)) + '；支付时间：' + esc(fmtTime(order.paid_at)) + '。</div>' +
             actionHtml;
-          maybeToggleSimulate(order);
+          renderPaymentLog(payload);
+          renderWechatModal(payload, false);
+          if (shouldShowSuccess) {
+            paymentSuccessShown = true;
+            hideWechatModal();
+            openSuccessModal();
+          }
         }
         function clearPolling() {
           if (pollTimer) {
@@ -2435,20 +2852,75 @@ def render_portal_checkout_html(
             }
           });
         }
-
-        document.querySelectorAll('.payment-method[data-provider]').forEach(function(button) {
-          button.addEventListener('click', function() {
-            setSelectedProvider(button.getAttribute('data-provider') || 'alipay');
+        function createPaymentSession(orderId, forceRefresh) {
+          return apiFetch('/portal/api/payments/orders/' + encodeURIComponent(orderId) + '/session', {
+            method: 'POST',
+            body: JSON.stringify({ provider: 'wechat', channel: 'native', force_refresh: !!forceRefresh })
+          }).then(function(data) {
+            renderOrderState(data);
+            return data;
           });
-        });
+        }
+
         backProductsLink.href = withPortalToken('/portal/products');
-        setSelectedProvider(selectedProvider);
         if (subscriptionPurchaseBlocked) {
           noteEl.textContent = purchaseGuardMessage || '当前月包暂不可重复购买。';
           createButton.disabled = true;
           createButton.textContent = purchaseGuardButtonLabel || '当前不可下单';
-          simulateButton.style.display = 'none';
           orderPanel.innerHTML = '<div class="checkout-note">' + esc(purchaseGuardMessage || '当前月包暂不可重复购买。') + '</div>';
+        }
+
+        orderPanel.addEventListener('click', function(event) {
+          var refreshButton = event.target.closest('[data-refresh-payment-session]');
+          var openButton = event.target.closest('[data-open-wechat-modal]');
+          if (openButton) {
+            renderWechatModal(lastPaymentPayload, true);
+            return;
+          }
+          if (refreshButton) refreshPaymentSession(refreshButton);
+        });
+        modalActions.addEventListener('click', function(event) {
+          var refreshButton = event.target.closest('[data-refresh-payment-session]');
+          var closeButton = event.target.closest('[data-close-wechat-modal]');
+          if (closeButton) closeWechatModal('user_close_modal');
+          if (refreshButton) refreshPaymentSession(refreshButton);
+        });
+        modalClose.addEventListener('click', function() { closeWechatModal('user_close_modal'); });
+        modalEl.addEventListener('click', function(event) {
+          if (event.target === modalEl) closeWechatModal('user_click_backdrop');
+        });
+        successClose.addEventListener('click', hideSuccessModal);
+        successConfirm.addEventListener('click', function() {
+          window.location.href = withPortalToken('/portal/account#topup');
+        });
+        successModal.addEventListener('click', function(event) {
+          if (event.target === successModal) hideSuccessModal();
+        });
+        window.addEventListener('pagehide', function() {
+          if (!shouldCancelCurrentPayment()) return;
+          var path = '/portal/api/payments/orders/' + encodeURIComponent(currentOrderId) + '/cancel?reason=pagehide';
+          var url = withPortalToken(path);
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon(url, new Blob([], { type: 'application/json' }));
+            return;
+          }
+          try {
+            fetch(url, { method: 'POST', credentials: 'same-origin', keepalive: true });
+          } catch (err) {}
+        });
+
+        function refreshPaymentSession(button) {
+          if (!currentOrderId) return;
+          if (button) {
+            button.disabled = true;
+            button.textContent = '生成中...';
+          }
+          createPaymentSession(currentOrderId, true).then(function(data) {
+            renderWechatModal(data, true);
+            if (data.order && data.order.status === 'pending') startPolling();
+          }).catch(function(err) {
+            orderPanel.innerHTML = '<div class="checkout-note">重新生成二维码失败：' + esc(err.message) + '</div>';
+          });
         }
 
         createButton.addEventListener('click', function() {
@@ -2463,34 +2935,21 @@ def render_portal_checkout_html(
           setLoading(true);
           apiFetch('/portal/api/payments/orders', {
             method: 'POST',
-            body: JSON.stringify({ package_code: packageCode, provider: selectedProvider })
+            body: JSON.stringify({ package_code: packageCode, provider: 'wechat' })
           }).then(function(data) {
             currentOrderId = data.order && data.order.order_id ? data.order.order_id : '';
             updateSearchParams(currentOrderId);
             renderOrderState(data);
             if (data.order && data.order.status === 'pending') {
-              startPolling();
+              return createPaymentSession(currentOrderId, false).then(function(sessionData) {
+                renderWechatModal(sessionData, true);
+                if (sessionData.order && sessionData.order.status === 'pending') startPolling();
+              });
             }
           }).catch(function(err) {
             orderPanel.innerHTML = '<div class="checkout-note">创建订单失败：' + esc(err.message) + '</div>';
           }).finally(function() {
             setLoading(false);
-          });
-        });
-
-        simulateButton.addEventListener('click', function() {
-          if (!currentOrderId) return;
-          simulateButton.disabled = true;
-          simulateButton.textContent = '处理中...';
-          apiFetch('/portal/api/payments/orders/' + encodeURIComponent(currentOrderId) + '/simulate-paid', {
-            method: 'POST'
-          }).then(function(data) {
-            renderOrderState(data);
-            clearPolling();
-          }).catch(function(err) {
-            orderPanel.innerHTML = '<div class="checkout-note">模拟支付失败：' + esc(err.message) + '</div>';
-          }).finally(function() {
-            simulateButton.textContent = '模拟支付成功';
           });
         });
 
@@ -2502,21 +2961,19 @@ def render_portal_checkout_html(
     '''
 
     body_html = body_html.replace("__CHECKOUT_SUMMARY__", summary_html)
-    body_html = body_html.replace("__PROMO_ITEMS__", promo_html)
-    body_html = body_html.replace("__MOCK_PAYMENT_ENABLED__", "true" if mock_payment_enabled else "false")
     body_html = body_html.replace("__SUBSCRIPTION_PURCHASE_BLOCKED__", "true" if subscription_purchase_guard else "false")
     body_html = body_html.replace("__SUBSCRIPTION_PURCHASE_BLOCK_LABEL__", '"{}"'.format(purchase_guard_button_label_js.replace('"', '\\"')))
     body_html = body_html.replace("__SUBSCRIPTION_PURCHASE_BLOCK_MESSAGE__", '"{}"'.format(purchase_guard_message_js.replace('"', '\\"')))
     body_html = body_html.replace("__SELECTED_PACKAGE_NAME__", '"{}"'.format(selected_package_name_js.replace('"', '\\"')))
 
     sidebar_html = _sidebar([
-        ("结算流程", [("summary", "订单确认"), ("payment", "支付方式"), ("status", "订单状态"), ("help", "促销与到账说明")]),
+      ("结算流程", [("summary", "订单确认"), ("payment", "微信支付"), ("status", "订单状态")]),
     ])
     return _layout(
         active="products",
         kicker="订阅与充值",
         title="结算与支付",
-        subtitle="先把用户下单、查单、支付结果和账户到账联通起来，后续再将真实支付宝与微信通道接进同一页面。",
+        subtitle="确认订单后生成微信支付二维码，支付成功后自动到账。",
         sidebar_html=sidebar_html,
         body_html=body_html,
     )

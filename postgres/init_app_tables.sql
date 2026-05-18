@@ -145,6 +145,38 @@ WHERE list_amount_cents IS NULL
    OR discount_amount_cents IS NULL
    OR promotion_snapshot_json IS NULL;
 
+CREATE TABLE IF NOT EXISTS app.payment_session (
+    session_id            TEXT PRIMARY KEY,
+    order_id              TEXT NOT NULL REFERENCES app.payment_order(order_id) ON DELETE CASCADE,
+    user_id               TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    provider              TEXT NOT NULL,
+    channel               TEXT NOT NULL DEFAULT 'native',
+    status                TEXT NOT NULL DEFAULT 'pending',
+    provider_order_id     TEXT,
+    provider_trade_no     TEXT,
+    cashier_url           TEXT,
+    qr_code_url           TEXT,
+    prepay_payload_json   JSONB NOT NULL DEFAULT '{}'::JSONB,
+    expires_at            TIMESTAMPTZ,
+    paid_at               TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.payment_callback_event (
+    event_id              TEXT PRIMARY KEY,
+    provider              TEXT NOT NULL,
+    order_id              TEXT,
+    provider_order_id     TEXT,
+    provider_trade_no     TEXT,
+    event_type            TEXT,
+    signature_verified    BOOLEAN NOT NULL DEFAULT FALSE,
+    payload_json          JSONB NOT NULL DEFAULT '{}'::JSONB,
+    processed_status      TEXT NOT NULL DEFAULT 'received',
+    processed_at          TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS app.billing_subscription (
     subscription_id           TEXT PRIMARY KEY,
     user_id                   TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
@@ -236,7 +268,6 @@ CREATE TABLE IF NOT EXISTS app.email_verification_challenge (
     email             TEXT NOT NULL,
     purpose           TEXT NOT NULL DEFAULT 'signup_email_verify',
     code_hash         TEXT NOT NULL,
-    confirm_token_hash TEXT,
     failed_attempt_count INTEGER NOT NULL DEFAULT 0,
     locked_until      TIMESTAMPTZ,
     last_failed_at    TIMESTAMPTZ,
@@ -250,7 +281,6 @@ CREATE TABLE IF NOT EXISTS app.email_verification_challenge (
 ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS failed_attempt_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
 ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS last_failed_at TIMESTAMPTZ;
-ALTER TABLE app.email_verification_challenge ADD COLUMN IF NOT EXISTS confirm_token_hash TEXT;
 
 CREATE TABLE IF NOT EXISTS app.user_referral_binding (
     binding_id          TEXT PRIMARY KEY,
@@ -470,6 +500,12 @@ CREATE INDEX IF NOT EXISTS idx_promotion_rule_status_order ON app.promotion_rule
 CREATE INDEX IF NOT EXISTS idx_payment_order_user_created ON app.payment_order(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payment_order_status_created ON app.payment_order(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payment_order_user_product_status ON app.payment_order(user_id, product_type, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_session_order_created ON app.payment_session(order_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_session_user_created ON app.payment_session(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_session_provider_order ON app.payment_session(provider, provider_order_id);
+CREATE INDEX IF NOT EXISTS idx_payment_session_status_expires ON app.payment_session(status, expires_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_callback_event_provider_order ON app.payment_callback_event(provider, order_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_callback_event_trade ON app.payment_callback_event(provider, provider_trade_no, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_subscription_user_status ON app.billing_subscription(user_id, status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_subscription_grant_subscription_created ON app.subscription_grant(subscription_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_promotion_claim_user_created ON app.promotion_claim(user_id, created_at DESC);
