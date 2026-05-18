@@ -590,6 +590,16 @@ _BASE_CSS = """
     padding: 18px;
     text-align: center;
   }
+  .demo-media video,
+  .demo-media iframe {
+    width: 100%;
+    height: 100%;
+    min-height: 220px;
+    border: 0;
+    border-radius: inherit;
+    background: #0f172a;
+    object-fit: cover;
+  }
   .demo-placeholder-title {
     font-size: 1rem;
     font-weight: 700;
@@ -1766,69 +1776,89 @@ def render_portal_products_html() -> str:
 def render_portal_guide_html() -> str:
     body_html = '''
       <section id="start" class="section-block card">
-        <h2>新手上手路径</h2>
-        <div class="card-note">第一次使用时，不建议一上来就跑很大的任务。先按下面这条路径走一遍，通常 5 分钟内就能完成第一次有效体验。</div>
+        <h2>上手三步</h2>
+        <div class="card-note">第一次使用虾米选品，不需要先学全所有命令。直接按这三步走，通常 3 到 5 分钟就能完成第一次有效体验。</div>
         <div class="guide-list">
-          <div class="guide-item"><div class="guide-title">1. 先登录，再确认账户可用</div><div class="guide-desc">从 Open WebUI 首页进入产品，首次登录后系统会自动初始化账户。建议先用 /me 或 /points 看一下当前套餐、积分余额和是否已经完成邮箱验证。</div></div>
-          <div class="guide-item"><div class="guide-title">2. 有完整任务时优先用 /report</div><div class="guide-desc">如果你已经知道目标市场、类目和问题，直接用 /report 最省事。它适合输出一份相对完整的分析结果，并且可以按 quick、standard、deep、research 选择报告深度；旧命令 /workflow 当前仍兼容保留。</div></div>
-          <div class="guide-item"><div class="guide-title">3. 不知道怎么提问时，先查提示词知识库</div><div class="guide-desc">如果你还不知道该怎么开口，直接输入“新手卖家提示词”“决策层提示词”或“客服常用提示词”这类短句。系统会先检索提示词知识库，返回可直接复制的示例和对应使用说明。</div></div>
-          <div class="guide-item"><div class="guide-title">4. 只是验证一个点时用 /tool 或 /web</div><div class="guide-desc">如果你只想先验证趋势、规则或某个市场变化，不要急着跑完整报告。先用 /tool 做局部分析，或者用 /web 查最新外部信息，会更稳也更省积分。</div></div>
-          <div class="guide-item"><div class="guide-title">5. 看结果时先看结论，再看证据</div><div class="guide-desc">优先关注结论、关键指标、风险提示；如果结果和预期不一致，再回看工具返回、知识库引用和输入条件，判断是不是问题范围太大或条件不够明确。</div></div>
-          <div class="guide-item"><div class="guide-title">6. 用完回到账户页核对消费</div><div class="guide-desc">每次使用后，都可以回到账户管理页看消费记录、扣减来源和使用趋势。系统会优先扣减月包积分，月包不足时再扣充值包积分。</div></div>
+          <div class="guide-item"><div class="guide-title">1. 先从 /help 拿一组可复制提示词</div><div class="guide-desc">如果你是第一次进入产品，不建议先自己硬想问题。直接输入“/help 新手卖家第一次使用虾米选品，给我 5 条可以直接复制的提示词，并说明分别适合什么场景”，先拿一批现成问法。</div></div>
+          <div class="guide-item"><div class="guide-title">2. 复制其中 1 条，先跑 /tool 或 /report quick</div><div class="guide-desc">如果你只是想先验证一个点，优先用 /tool；如果你已经有候选方向，先用 /report quick 做第一轮筛选。这样比一上来就跑大任务更稳，也更省积分。</div></div>
+          <div class="guide-item"><div class="guide-title">3. 方向明确后，再升级到 /report standard 并回看消费</div><div class="guide-desc">当 quick 结果值得继续深挖时，再上 /report standard 做完整分析。任务结束后，用 /points、/usage 或账户页回看余额、消费记录和扣减来源，形成第一次完整闭环。</div></div>
+        </div>
+        <div style="height:18px"></div>
+        <div class="tip-banner">推荐第一条实操口令：/help 新手卖家第一次使用虾米选品，给我 5 条可以直接复制的提示词，并说明分别适合什么场景。</div>
+        <div style="height:18px"></div>
+        <div class="demo-card">
+          <h3 class="demo-title">60 秒上手演示视频</h3>
+          <p class="demo-desc">这里预留给第一次使用虾米选品的实操演示视频。后续可直接替换成视频播放器，帮助新用户按“先 /help、再 /tool 或 /report quick、最后回看消费”的顺序快速上手。</p>
+          <div class="demo-media" id="guide-getting-started-video-slot" data-demo-slot="guide-getting-started-video">
+            <div>
+              <div class="demo-placeholder-title">实操视频占位</div>
+              <p class="demo-placeholder-note">视频上线后，这里会展示 60 秒左右的新手上手演示；当前可先参考下方命令示例开始使用。</p>
+            </div>
+          </div>
         </div>
       </section>
       <section id="commands" class="section-block card">
-        <h2>常用命令示例</h2>
-        <div class="card-note">下面这些命令可以直接复制后再替换商品、市场和时间范围。对于新手来说，先照着示例改，比从零组织问题更容易成功。</div>
+        <h2>新手常用命令</h2>
+        <div class="card-note">下面这些命令已经按新手最常见的使用顺序排好。建议先从 /help 拿提示词，再进入 /tool、/report quick、/report standard 和 /web。</div>
         <div class="example-grid">
           <div class="example-card highlight">
-            <div class="example-kicker">报告编排</div>
-            <h3 class="example-title">/report：拿一份完整的选品分析报告</h3>
-            <p class="example-desc">适合已经有目标商品或类目，希望系统自动调工具、拉数据、形成结论，并按报告深度选择 quick、standard、deep、research 的场景。</p>
-            <div class="command-block">/report standard 帮我调研一下 portable blender 在 Amazon 美国站近 90 天的需求、竞争和进入机会，重点看价格带、销量趋势和风险点</div>
+            <div class="example-kicker">第一次先用</div>
+            <h3 class="example-title">/help：先拿一批适合当前阶段的可复制提示词</h3>
+            <p class="example-desc">适合第一次使用产品、还不知道先跑哪个命令、想先看系统推荐问法的时候。</p>
+            <div class="command-block">/help 新手卖家第一次使用虾米选品，给我 5 条可以直接复制的提示词，并说明分别适合什么场景。</div>
             <div class="example-meta">
-              <div class="example-meta-item">适合：第一次做完整市场判断、要拿结构化结论时。</div>
-              <div class="example-meta-item">提示：问题里尽量带上市场、类目、时间范围和你最关心的输出；旧入口 /workflow 当前兼容保留，默认可理解为标准完整分析。</div>
+              <div class="example-meta-item">适合：刚注册、第一次打开产品、不知道怎么提问时。</div>
+              <div class="example-meta-item">提示：返回结果里通常会直接给你 /tool、/report quick、/report standard、/web 等可复制命令。</div>
             </div>
           </div>
           <div class="example-card">
             <div class="example-kicker">局部验证</div>
-            <h3 class="example-title">/tool：先查一个点，再决定要不要跑大任务</h3>
-            <p class="example-desc">适合你已经有一个猜想，只想先验证趋势、竞争强度或类目情况。</p>
-            <div class="command-block">/tool 帮我先判断 pet grooming vacuum 在 TikTok 美国市场最近是否明显升温，并告诉我下一步最值得调用哪些工具验证</div>
+            <h3 class="example-title">/tool：先拆路径，再决定要不要继续放大任务</h3>
+            <p class="example-desc">适合你已经有一个大致品类方向，但还不确定该先看哪些数据和验证步骤。</p>
+            <div class="command-block">/tool 请用原生工具帮我拆解 humidifier 在 Amazon 美国站的选品验证路径：先解析候选池，再说明应该继续看 stats、trends、benchmark、top ASIN 还是补池。</div>
             <div class="example-meta">
-              <div class="example-meta-item">适合：快速试水、缩小问题范围、减少无效消耗。</div>
-              <div class="example-meta-item">提示：如果只是查一个指标或一个判断，不要一开始就跑完整报告。</div>
+              <div class="example-meta-item">适合：快速试水、建立分析路径、减少无效消耗。</div>
+              <div class="example-meta-item">提示：如果你还没有完整目标，先用 /tool，比直接跑完整报告更稳。</div>
+            </div>
+          </div>
+          <div class="example-card">
+            <div class="example-kicker">快速筛选</div>
+            <h3 class="example-title">/report quick：先判断值不值得继续看</h3>
+            <p class="example-desc">适合你手里有多个候选方向，想先筛掉明显不值得深挖的选项。</p>
+            <div class="command-block">/report quick 请快速判断 pet hair remover 在 Amazon 美国站是否值得继续看，并给出 3 个最关键验证指标。</div>
+            <div class="example-meta">
+              <div class="example-meta-item">适合：早期漏斗过滤、快速判断一个方向要不要继续投入。</div>
+              <div class="example-meta-item">提示：quick 更适合第一轮筛选，方向成立后再升级到 standard。</div>
+            </div>
+          </div>
+          <div class="example-card">
+            <div class="example-kicker">完整分析</div>
+            <h3 class="example-title">/report standard：把值得看的方向做成完整判断</h3>
+            <p class="example-desc">适合你已经确认一个品类值得继续分析，想拿到更完整的市场机会、价格带和切入建议。</p>
+            <div class="command-block">/report standard 请调研 kitchen organizer 在 Amazon 美国市场的机会，并输出适合新卖家的切入建议、目标价格带和差异化方向。</div>
+            <div class="example-meta">
+              <div class="example-meta-item">适合：立项前深挖、准备做一次更完整的进入判断时。</div>
+              <div class="example-meta-item">提示：问题里尽量带上市场、类目、目标用户和你最关心的输出。</div>
             </div>
           </div>
           <div class="example-card">
             <div class="example-kicker">最新信息</div>
-            <h3 class="example-title">/web：查最新政策、站外情报和外部变化</h3>
-            <p class="example-desc">适合政策变化、平台动态、行业新闻这类需要最新外部信息的问题。</p>
-            <div class="command-block">/web 帮我搜索并总结 2026 年 TikTok Shop 美国站最近的入驻政策和合规变化，重点列出卖家最容易踩坑的点</div>
+            <h3 class="example-title">/web：查最新政策、平台变化和站外信号</h3>
+            <p class="example-desc">适合政策变化、平台动态、行业新闻这类强依赖最新外部信息的问题。</p>
+            <div class="command-block">/web 请搜索最近 30 天 TikTok Shop 美国站入驻、履约、广告和合规政策变化，并按卖家影响排序。</div>
             <div class="example-meta">
-              <div class="example-meta-item">适合：知识库不一定覆盖、你又需要最新信息的时候。</div>
-              <div class="example-meta-item">提示：实时外部变化优先用 /web，不要只靠知识库回答。</div>
+              <div class="example-meta-item">适合：知识库未必覆盖、又需要最新信息的时候。</div>
+              <div class="example-meta-item">提示：平台政策、新闻、突发变化优先用 /web，不要只靠旧知识判断。</div>
             </div>
           </div>
           <div class="example-card">
-            <div class="example-kicker">提示词知识库</div>
-            <h3 class="example-title">先查提示词：不会提问时先拿一批可复制示例</h3>
-            <p class="example-desc">适合你刚打开产品，还不知道应该先用 /report、/tool 还是 /web，或者想先看系统已经整理好的典型问法。</p>
-            <div class="command-block">新手卖家提示词</div>
-            <div class="example-meta">
-              <div class="example-meta-item">适合：刚上手、不知道怎么组织问题、想先找可直接复制命令的时候。</div>
-              <div class="example-meta-item">提示：也可以直接输入“决策层提示词”“客服常用提示词”，系统会优先检索知识库并返回示例和使用指南。</div>
-            </div>
-          </div>
-          <div class="example-card">
-            <div class="example-kicker">账户自查</div>
-            <h3 class="example-title">/points 和 /usage：看余额、消费和使用趋势</h3>
-            <p class="example-desc">适合你做完几轮分析之后，快速确认积分是否够用、最近主要消耗在哪类请求上。</p>
+            <div class="example-kicker">消费回看</div>
+            <h3 class="example-title">/points 和 /usage：用完及时看余额和消耗</h3>
+            <p class="example-desc">适合你完成一轮分析之后，确认积分是否够用，以及最近主要消耗在哪类请求上。</p>
             <div class="command-block">/points
 /usage</div>
             <div class="example-meta">
-              <div class="example-meta-item">适合：复盘最近消耗、判断是否需要月包或充值包。</div>
+              <div class="example-meta-item">适合：做完第一次体验后复盘成本，判断是否需要继续订阅或充值。</div>
               <div class="example-meta-item">提示：账户页会展示更完整的消费记录、扣减来源和中文解释。</div>
             </div>
           </div>
@@ -1836,63 +1866,36 @@ def render_portal_guide_html() -> str:
       </section>
       <section id="scenes" class="section-block card">
         <h2>什么时候用哪种模式</h2>
-        <div class="card-note">如果你不知道该用哪个命令，先按下面的判断来，通常不会错。</div>
+        <div class="card-note">如果你还在犹豫要不要直接跑完整任务，先按下面这张任务地图判断，通常不会错。</div>
         <div class="notice-grid">
-          <div class="notice-card accent"><h3 class="notice-title">我有完整问题，想一次拿到结论</h3><p class="notice-desc">优先用 /report。它更适合做“某商品在某市场是否值得做”这类完整分析；如果你还习惯旧命令，/workflow 当前仍可作为兼容入口使用。</p></div>
-          <div class="notice-card"><h3 class="notice-title">我还不知道怎么提问</h3><p class="notice-desc">先直接输入“新手卖家提示词”“决策层提示词”这类短句。系统会先查提示词知识库，给你可直接复制的示例和怎么用的说明。</p></div>
-          <div class="notice-card"><h3 class="notice-title">我只想先验证一个局部判断</h3><p class="notice-desc">优先用 /tool。它更适合先做小范围验证，再决定要不要继续扩大任务。</p></div>
-          <div class="notice-card"><h3 class="notice-title">我需要最新外部信息</h3><p class="notice-desc">优先用 /web。平台政策、行业新闻、外部舆情和近期变化都更适合走联网搜索。</p></div>
-          <div class="notice-card"><h3 class="notice-title">我想知道余额和最近消耗</h3><p class="notice-desc">优先用 /points、/usage，或者直接去账户页看消费记录、使用趋势和扣减来源。</p></div>
+          <div class="notice-card accent"><h3 class="notice-title">我还不会提问</h3><p class="notice-desc">先用 /help。目标不是马上得到大结论，而是先拿到 3 到 5 条靠谱的可复制问法。</p></div>
+          <div class="notice-card"><h3 class="notice-title">我想先试一个点</h3><p class="notice-desc">优先用 /tool。它更适合拆路径、查局部趋势、决定下一步该补哪类证据。</p></div>
+          <div class="notice-card"><h3 class="notice-title">我有多个候选方向，想先筛掉一批</h3><p class="notice-desc">优先用 /report quick。先做第一轮漏斗过滤，再把值得继续看的方向升级到 standard。</p></div>
+          <div class="notice-card"><h3 class="notice-title">我已经有明确主题，想一次拿到完整判断</h3><p class="notice-desc">优先用 /report standard；如果任务更重、需要更完整补证，再考虑更深层级。</p></div>
+          <div class="notice-card"><h3 class="notice-title">我需要最新外部变化</h3><p class="notice-desc">优先用 /web。平台政策、行业新闻、近期舆情和外部变化都更适合走联网搜索。</p></div>
+          <div class="notice-card"><h3 class="notice-title">我想复盘成本和余额</h3><p class="notice-desc">优先用 /points、/usage，或者直接去账户页看消费记录、使用趋势和扣减来源。</p></div>
         </div>
       </section>
       <section id="support" class="section-block card">
         <h2>遇到问题先这样处理</h2>
-        <div class="card-note">新手最容易卡在“不知道怎么提问”或者“结果看不懂”。先用下面这套办法排查，通常比反复重跑更有效。</div>
+        <div class="card-note">新手最容易卡在“不知道怎么提问”“结果看不懂”或者“一上来就跑太大任务”。先用下面这套办法排查，通常比反复重跑更有效。</div>
         <div class="guide-list">
-          <div class="guide-item"><div class="guide-title">先把问题说完整</div><div class="guide-desc">尽量一次写清楚市场、类目、时间范围、目标用户和你想要的输出，避免系统反复追问或跑偏。</div></div>
-          <div class="guide-item"><div class="guide-title">第一次先小范围试跑</div><div class="guide-desc">如果任务很大，先从单市场、单类目开始。确认方向对了，再扩大到更多国家或更多商品段。</div></div>
-          <div class="guide-item"><div class="guide-title">右下角智能客服可以直接问</div><div class="guide-desc">如果你不知道命令怎么写、套餐怎么选、消费为什么这样扣，或者某个页面怎么用，可以直接问右下角的智能客服。它更适合回答操作问题和产品规则。</div></div>
-          <div class="guide-item"><div class="guide-title">结果异常时先看证据和工具返回</div><div class="guide-desc">不要只盯最终一句结论。优先检查输入条件是否过宽、是否用了错误市场，以及工具返回的数据是不是不完整。</div></div>
-        </div>
-      </section>
-      <section id="demo" class="section-block card">
-        <h2>演示区预留</h2>
-        <div class="card-note">这里已经预留好后续演示位。等你准备好实际操作 GIF 或截图后，可以直接替换，不需要再改导航结构。</div>
-        <div class="demo-grid">
-          <div class="demo-card">
-            <h3 class="demo-title">演示 1：如何发起一次 /report</h3>
-            <p class="demo-desc">建议后续放一张或一段演示“输入命令 -> 等待执行 -> 查看结论”的 GIF 或截图。</p>
-            <div class="demo-media" data-demo-slot="workflow">
-              <div>
-                <div class="demo-placeholder-title">预留 GIF / 截图区</div>
-                <p class="demo-placeholder-note">后续可替换成实际使用虾米选品智能体的演示 GIF；如果暂时没有 GIF，也可以先放一张实操截图。</p>
-              </div>
-            </div>
-            <p class="demo-caption">建议内容：输入 /report 命令、等待进度、查看最终结果；如需说明兼容关系，可补一张 /workflow 仍可用的过渡提示图。</p>
-          </div>
-          <div class="demo-card">
-            <h3 class="demo-title">演示 2：如何查看消费记录和扣减来源</h3>
-            <p class="demo-desc">建议后续放一张账户页截图，让新手理解“为什么扣费”和“月包/充值包是怎么被扣的”。</p>
-            <div class="demo-media" data-demo-slot="billing">
-              <div>
-                <div class="demo-placeholder-title">预留 GIF / 截图区</div>
-                <p class="demo-placeholder-note">后续可替换成账户页实操截图，例如消费记录页、使用趋势页或积分概览页。</p>
-              </div>
-            </div>
-            <p class="demo-caption">建议内容：消费记录、扣减来源、当前余额与使用趋势。</p>
-          </div>
+          <div class="guide-item"><div class="guide-title">不会提问时，不要硬写，先回到 /help</div><div class="guide-desc">直接问“新手卖家提示词”“决策层提示词”，或者复用本页最上面的 /help 示例，比从零组织问题更稳定。</div></div>
+          <div class="guide-item"><div class="guide-title">第一次先小范围试跑</div><div class="guide-desc">如果任务很大，先从单市场、单类目、单方向开始。确认方向对了，再扩大到更多国家或更多商品段。</div></div>
+          <div class="guide-item"><div class="guide-title">结果异常时先看结论、证据和输入条件</div><div class="guide-desc">不要只盯最终一句话。优先检查市场、时间范围、商品词是不是太宽，工具返回的数据是不是不完整。</div></div>
+          <div class="guide-item"><div class="guide-title">右下角智能客服适合问操作问题</div><div class="guide-desc">如果你不知道命令怎么写、套餐怎么选、消费为什么这样扣，或者某个页面怎么用，可以直接问右下角的智能客服。</div></div>
         </div>
       </section>
     '''
 
     sidebar_html = _sidebar([
-        ("使用说明", [("start", "新手上手"), ("commands", "命令示例"), ("scenes", "模式选择"), ("support", "常见卡点"), ("demo", "演示区预留")]),
+        ("使用说明", [("start", "上手三步"), ("commands", "新手命令"), ("scenes", "模式判断"), ("support", "常见卡点")]),
     ])
     return _layout(
         active="guide",
         kicker="使用指南",
         title="产品使用指南",
-        subtitle="把新手最常见的使用路径、命令示例和操作提醒整理成一页，方便你快速开始并少走弯路。",
+        subtitle="把新手最常见的上手路径、命令顺序和操作提醒整理成一页，方便你快速开始并少走弯路。",
         sidebar_html=sidebar_html,
         body_html=body_html,
     )
