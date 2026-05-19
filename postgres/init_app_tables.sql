@@ -485,6 +485,40 @@ CREATE TABLE IF NOT EXISTS app.admin_audit_log (
     result_json   JSONB NOT NULL DEFAULT '{}'::JSONB,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS app.user_admin_note (
+    note_id     TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    operator_id TEXT NOT NULL,
+    note_text   TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.user_tag (
+    tag_id       TEXT PRIMARY KEY,
+    tag_key      TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    description  TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.user_tag_assignment (
+    user_id     TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    tag_id      TEXT NOT NULL REFERENCES app.user_tag(tag_id) ON DELETE CASCADE,
+    assigned_by TEXT NOT NULL,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, tag_id)
+);
+
+CREATE TABLE IF NOT EXISTS app.user_saved_segment (
+    segment_id   TEXT PRIMARY KEY,
+    segment_name TEXT NOT NULL,
+    filter_json  JSONB NOT NULL DEFAULT '{}'::JSONB,
+    created_by   TEXT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 -- <<< END migrations/app/010_app_business_tables.sql
 
 -- >>> BEGIN migrations/app/020_app_indexes.sql
@@ -571,6 +605,10 @@ CREATE INDEX IF NOT EXISTS idx_system_notification_broadcast_operator_created ON
 CREATE INDEX IF NOT EXISTS idx_billing_event_pricing_status ON app.billing_event_pricing(status, display_order ASC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_operator_created ON app.admin_audit_log(operator_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_target_created ON app.admin_audit_log(target_type, target_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_admin_note_user_created ON app.user_admin_note(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_tag_key ON app.user_tag(tag_key);
+CREATE INDEX IF NOT EXISTS idx_user_tag_assignment_tag ON app.user_tag_assignment(tag_id, assigned_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_saved_segment_created ON app.user_saved_segment(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_idempotency_request_created ON app.idempotency_request(created_at DESC);
 -- <<< END migrations/app/020_app_indexes.sql
 

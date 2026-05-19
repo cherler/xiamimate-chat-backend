@@ -74,6 +74,27 @@ class AdminGrantPointsRequest(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
+class AdminAdjustPointsRequest(BaseModel):
+    points_delta: int = Field(...)
+    reason: str = Field(..., min_length=1, max_length=500)
+    reference_id: str | None = None
+
+
+class AdminCreateUserNoteRequest(BaseModel):
+    note_text: str = Field(..., min_length=1, max_length=4000)
+
+
+class AdminCreateUserTagRequest(BaseModel):
+    tag_key: str | None = Field(default=None, max_length=64)
+    display_name: str = Field(..., min_length=1, max_length=64)
+    description: str | None = Field(default=None, max_length=255)
+
+
+class AdminAssignUserTagRequest(BaseModel):
+    tag_key: str = Field(..., min_length=1, max_length=64)
+    display_name: str | None = Field(default=None, max_length=64)
+
+
 class AdminKeepaJobPromoteRequest(BaseModel):
     priority: str = Field(default="interactive_high", min_length=1, max_length=32)
     reason: str | None = Field(default=None, max_length=255)

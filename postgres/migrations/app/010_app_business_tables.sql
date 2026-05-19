@@ -472,3 +472,37 @@ CREATE TABLE IF NOT EXISTS app.admin_audit_log (
     result_json   JSONB NOT NULL DEFAULT '{}'::JSONB,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS app.user_admin_note (
+    note_id     TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    operator_id TEXT NOT NULL,
+    note_text   TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.user_tag (
+    tag_id       TEXT PRIMARY KEY,
+    tag_key      TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    description  TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.user_tag_assignment (
+    user_id     TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    tag_id      TEXT NOT NULL REFERENCES app.user_tag(tag_id) ON DELETE CASCADE,
+    assigned_by TEXT NOT NULL,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, tag_id)
+);
+
+CREATE TABLE IF NOT EXISTS app.user_saved_segment (
+    segment_id   TEXT PRIMARY KEY,
+    segment_name TEXT NOT NULL,
+    filter_json  JSONB NOT NULL DEFAULT '{}'::JSONB,
+    created_by   TEXT NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

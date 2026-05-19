@@ -220,12 +220,14 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
     }
 
     input,
+    select,
     textarea,
     button {
       font: inherit;
     }
 
     input,
+    select,
     textarea {
       width: 100%;
       border: 1px solid rgba(17, 75, 95, 0.18);
@@ -373,6 +375,59 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
 
     .detail-grid.full {
       grid-template-columns: 1fr;
+    }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .filter-grid label {
+      font-size: 11.5px;
+    }
+
+    .filter-grid input,
+    .filter-grid select {
+      padding: 9px 10px;
+      border-radius: 12px;
+      font-size: 13px;
+    }
+
+    .tab-row,
+    .tag-row,
+    .pager-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .tab-button,
+    .tag-chip {
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 13px;
+      background: rgba(17, 75, 95, 0.1);
+      color: var(--accent);
+    }
+
+    .tab-button.active,
+    .tag-chip.active {
+      background: var(--accent);
+      color: white;
+    }
+
+    .timeline-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .timeline-item {
+      border-left: 3px solid rgba(17, 75, 95, 0.22);
+      padding: 8px 10px;
+      background: rgba(255, 255, 255, 0.72);
+      border-radius: 10px;
     }
 
     table {
@@ -780,10 +835,68 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
               </div>
               <input id="user-query" type="text" placeholder="guest、邮箱或用户 ID" />
             </div>
+            <div class="filter-grid">
+              <div>
+                <label for="filter-plan-tier">套餐</label>
+                <select id="filter-plan-tier">
+                  <option value="">全部</option>
+                  <option value="free">free</option>
+                  <option value="standard">standard</option>
+                  <option value="pro">pro</option>
+                  <option value="enterprise">enterprise</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-status">状态</label>
+                <select id="filter-status">
+                  <option value="">全部</option>
+                  <option value="active">active</option>
+                  <option value="disabled">disabled</option>
+                  <option value="suspended">suspended</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-email-verified">邮箱</label>
+                <select id="filter-email-verified">
+                  <option value="">全部</option>
+                  <option value="verified">已验证</option>
+                  <option value="unverified">未验证</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-source-state">源状态</label>
+                <select id="filter-source-state">
+                  <option value="">全部</option>
+                  <option value="active">active</option>
+                  <option value="orphaned">orphaned</option>
+                </select>
+              </div>
+              <div>
+                <label for="filter-min-balance">最低余额</label>
+                <input id="filter-min-balance" type="number" min="0" placeholder="0" />
+              </div>
+              <div>
+                <label for="filter-max-balance">最高余额</label>
+                <input id="filter-max-balance" type="number" min="0" placeholder="不限" />
+              </div>
+              <div>
+                <label for="filter-last-active-days">最近活跃</label>
+                <input id="filter-last-active-days" type="number" min="1" placeholder="天数" />
+              </div>
+              <div>
+                <label for="filter-page-size">每页</label>
+                <select id="filter-page-size">
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+            </div>
             <div class="button-row">
               <button id="search-users">搜索用户</button>
               <button id="search-all" class="secondary">最近用户</button>
             </div>
+            <div id="user-pager" class="pager-row"></div>
             <div id="search-status" class="status section-status"></div>
           </div>
         </div>
@@ -1044,6 +1157,8 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       currentAdminPage: 'section-overview',
       lastUserQuery: '',
       includeOrphanedUsers: false,
+      userListOffset: 0,
+      userListPage: { limit: 20, offset: 0, total: 0 },
       selectedRedeemBatchId: null,
       redeemBatchKeyword: '',
       redeemCodeOffset: 0,
@@ -1201,6 +1316,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       promotion_reward: '活动奖励',
       subscription_expire: '套餐到期清零',
       daily_quota_reset: '每日额度重置',
+      admin_adjustment: '后台积分冲正',
     };
 
     const ledgerEventTypeLabels = {
@@ -1223,6 +1339,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       subscription_expire: '套餐到期清零',
       daily_quota_reset: '每日额度重置',
       admin_grant: '后台加积分',
+      admin_adjustment: '后台积分冲正',
       promotion_reward: '活动奖励',
     };
 
@@ -1349,7 +1466,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
             <tbody>
               ${rows.map((row) => `
                 <tr>
-                  ${columns.map((column) => `<td>${escapeHtml(column.render(row))}</td>`).join('')}
+                  ${columns.map((column) => `<td>${column.raw ? column.render(row) : escapeHtml(column.render(row))}</td>`).join('')}
                 </tr>
               `).join('')}
             </tbody>
@@ -1390,6 +1507,8 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
           <div class="hint">${escapeHtml(user.email || '')}</div>
           <div class="hint">套餐=${escapeHtml(user.plan_tier)} · 积分=${escapeHtml(user.balance_points)}</div>
           <div class="hint">业务状态=${escapeHtml(user.status || '-')} · 源状态=${escapeHtml(user.source_state || 'active')}</div>
+          <div class="hint">邮箱=${user.email_verified_at ? '已验证' : '未验证'} · 活跃=${escapeHtml(user.last_activity_at || user.updated_at || '-')}</div>
+          ${user.tag_names ? `<div class="hint">标签=${escapeHtml(user.tag_names)}</div>` : ''}
           <button data-user-id="${escapeHtml(user.user_id)}">查看详情</button>
         </div>
       `).join('');
@@ -1399,6 +1518,44 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
           setActiveUserCard(button.dataset.userId);
           loadUserDetail(button.dataset.userId);
         });
+      });
+    };
+
+    const readUserFilters = () => ({
+      query: document.getElementById('user-query').value.trim(),
+      plan_tier: document.getElementById('filter-plan-tier').value,
+      status: document.getElementById('filter-status').value,
+      email_verified: document.getElementById('filter-email-verified').value,
+      source_state: document.getElementById('filter-source-state').value,
+      min_balance: document.getElementById('filter-min-balance').value.trim(),
+      max_balance: document.getElementById('filter-max-balance').value.trim(),
+      last_active_days: document.getElementById('filter-last-active-days').value.trim(),
+      limit: Number(document.getElementById('filter-page-size').value || 20),
+    });
+
+    const renderUserPager = (page) => {
+      const target = document.getElementById('user-pager');
+      const total = Number(page?.total || 0);
+      const limit = Number(page?.limit || 20);
+      const offset = Number(page?.offset || 0);
+      if (!total) {
+        target.innerHTML = '';
+        return;
+      }
+      const currentPage = Math.floor(offset / limit) + 1;
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      target.innerHTML = `
+        <button id="users-prev-page" class="secondary" ${offset <= 0 ? 'disabled' : ''}>上一页</button>
+        <span class="hint">第 ${currentPage} / ${totalPages} 页 · 共 ${total} 人</span>
+        <button id="users-next-page" class="secondary" ${offset + limit >= total ? 'disabled' : ''}>下一页</button>
+      `;
+      document.getElementById('users-prev-page')?.addEventListener('click', () => {
+        state.userListOffset = Math.max(0, offset - limit);
+        searchUsers(state.lastUserQuery, { preserveOffset: true });
+      });
+      document.getElementById('users-next-page')?.addEventListener('click', () => {
+        state.userListOffset = offset + limit;
+        searchUsers(state.lastUserQuery, { preserveOffset: true });
       });
     };
 
@@ -1429,13 +1586,25 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       document.getElementById('grant-user-id').value = state.selectedUserId || '';
 
       document.getElementById('user-detail').innerHTML = `
-        <div class="detail-grid">
+        <div class="mini-card">
+          <div class="tab-row">
+            <button class="tab-button active" data-user-tab="profile">档案</button>
+            <button class="tab-button" data-user-tab="ledger">积分账本</button>
+            <button class="tab-button" data-user-tab="orders">订单订阅</button>
+            <button class="tab-button" data-user-tab="sessions">设备/session</button>
+            <button class="tab-button" data-user-tab="runs">分析运行</button>
+            <button class="tab-button" data-user-tab="notes">标签备注</button>
+            <button class="tab-button" data-user-tab="timeline">时间线</button>
+          </div>
+        </div>
+        <div data-user-tab-panel="profile" class="detail-grid user-tab-panel">
           <div class="mini-card">
             <h3>用户主档</h3>
             ${renderKv([
               ['用户 ID', user.user_id],
               ['显示名', user.display_name],
               ['Email', user.email],
+              ['邮箱验证', user.email_verified_at ? '已验证' : '未验证'],
               ['状态', user.status],
               ['源状态', user.source_state],
               ['源最近见到', user.source_last_seen_at],
@@ -1455,6 +1624,15 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
             ])}
           </div>
           <div class="mini-card">
+            <h3>积分冲正</h3>
+            <div class="field-grid">
+              <input id="adjust-points-delta" type="number" placeholder="例如 -100 或 100" />
+              <textarea id="adjust-points-reason" placeholder="必须填写原因，例如：订单冲正 / 客诉补偿撤销"></textarea>
+              <button id="adjust-points-submit" class="warn">执行冲正</button>
+              <div id="adjust-points-status" class="status"></div>
+            </div>
+          </div>
+          <div class="mini-card">
             <h3>Guest 日配额</h3>
             ${Object.keys(dailyQuota).length ? renderKv([
               ['配额日期', dailyQuota.quota_date],
@@ -1464,6 +1642,42 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
               ['重置参考', dailyQuota.reset_reference_id],
             ]) : '<div class="empty">当前用户没有 daily quota 状态</div>'}
           </div>
+        </div>
+        <div data-user-tab-panel="ledger" class="detail-grid full user-tab-panel" style="display:none;">
+          <div class="mini-card">
+            <h3>最近账本</h3>
+            ${renderTable([
+              { label: '时间', render: (row) => row.created_at },
+              { label: '账本类型', render: (row) => localizeLedgerEntryType(row.entry_type, row.event_type) },
+              { label: '事件', render: (row) => localizeLedgerEventType(row.event_type) },
+              { label: '变动', render: (row) => row.points_delta },
+              { label: '余额', render: (row) => row.balance_after_points },
+              { label: '说明', render: (row) => row.description },
+            ], data.recent_ledger || [], { className: 'tall' })}
+          </div>
+        </div>
+        <div data-user-tab-panel="orders" class="detail-grid user-tab-panel" style="display:none;">
+          <div class="mini-card">
+            <h3>订单</h3>
+            ${renderTable([
+              { label: '订单 ID', render: (row) => row.order_id },
+              { label: '套餐', render: (row) => row.package_code },
+              { label: '状态', render: (row) => row.status },
+              { label: '积分', render: (row) => row.points_amount },
+              { label: '支付时间', render: (row) => row.paid_at || '-' },
+            ], data.recent_orders || [], { className: 'tall' })}
+          </div>
+          <div class="mini-card">
+            <h3>订阅</h3>
+            ${renderTable([
+              { label: '订阅 ID', render: (row) => row.subscription_id },
+              { label: '套餐', render: (row) => row.package_code },
+              { label: '状态', render: (row) => row.status },
+              { label: '月度积分', render: (row) => row.monthly_points },
+            ], data.subscriptions || [])}
+          </div>
+        </div>
+        <div data-user-tab-panel="sessions" class="detail-grid user-tab-panel" style="display:none;">
           <div class="mini-card">
             <h3>API Keys</h3>
             ${renderTable([
@@ -1474,19 +1688,17 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
               { label: '最后使用时间', render: (row) => row.last_used_at },
             ], data.api_keys || [])}
           </div>
-        </div>
-        <div class="detail-grid">
           <div class="mini-card">
-            <h3>最近账本</h3>
+            <h3>设备/session</h3>
             ${renderTable([
-              { label: '时间', render: (row) => row.created_at },
-                { label: '账本类型', render: (row) => localizeLedgerEntryType(row.entry_type, row.event_type) },
-                { label: '事件', render: (row) => localizeLedgerEventType(row.event_type) },
-              { label: '变动', render: (row) => row.points_delta },
-              { label: '变动后余额', render: (row) => row.balance_after_points },
-              { label: '说明', render: (row) => row.description },
-            ], data.recent_ledger || [])}
+              { label: '设备', render: (row) => row.device_label || row.session_id },
+              { label: 'IP', render: (row) => row.recent_ip_suffix || '-' },
+              { label: '最近活跃', render: (row) => row.last_seen_at || row.updated_at || '-' },
+              { label: '当前', render: (row) => row.is_current ? '是' : '否' },
+            ], data.recent_device_sessions || [])}
           </div>
+        </div>
+        <div data-user-tab-panel="runs" class="detail-grid user-tab-panel" style="display:none;">
           <div class="mini-card">
             <h3>使用摘要</h3>
             ${renderKv([
@@ -1495,51 +1707,78 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
               ['近 30 天调用量', data.usage_summary?.units_30d],
               ['近 30 天事件数', data.usage_summary?.event_count_30d],
             ])}
-            <div style="margin-top: 12px;">
-              ${renderTable([
-                { label: '事件类型', render: (row) => localizeLedgerEventType(row.event_type) },
-                { label: '近 30 天总调用量', render: (row) => row.total_units },
-              ], data.usage_by_type_30d || [])}
-            </div>
-          </div>
-        </div>
-        <div class="detail-grid">
-          <div class="mini-card">
-            <h3>订单 / 订阅</h3>
-            <div style="margin-bottom: 12px;">
-              ${renderTable([
-                { label: '订单 ID', render: (row) => row.order_id },
-                { label: '套餐', render: (row) => row.package_code },
-                { label: '状态', render: (row) => row.status },
-                { label: '积分', render: (row) => row.points_amount },
-              ], data.recent_orders || [])}
-            </div>
             ${renderTable([
-              { label: '订阅 ID', render: (row) => row.subscription_id },
-              { label: '套餐', render: (row) => row.package_code },
-              { label: '状态', render: (row) => row.status },
-              { label: '月度积分', render: (row) => row.monthly_points },
-            ], data.subscriptions || [])}
+              { label: '事件类型', render: (row) => localizeLedgerEventType(row.event_type) },
+              { label: '近 30 天调用量', render: (row) => row.total_units },
+            ], data.usage_by_type_30d || [])}
           </div>
           <div class="mini-card">
-            <h3>会话 / 运行</h3>
-            <div style="margin-bottom: 12px;">
-              ${renderTable([
-                { label: '会话 ID', render: (row) => row.session_id },
-                { label: '标题', render: (row) => row.title },
-                { label: '状态', render: (row) => row.status },
-                { label: '更新时间', render: (row) => row.updated_at },
-              ], data.recent_sessions || [])}
-            </div>
+            <h3>分析运行</h3>
             ${renderTable([
               { label: '运行 ID', render: (row) => row.run_id },
               { label: '查询词', render: (row) => row.product_query },
               { label: '状态', render: (row) => row.status },
               { label: '更新时间', render: (row) => row.updated_at },
-            ], data.recent_runs || [])}
+            ], data.recent_runs || [], { className: 'tall' })}
+          </div>
+        </div>
+        <div data-user-tab-panel="notes" class="detail-grid user-tab-panel" style="display:none;">
+          <div class="mini-card">
+            <h3>用户标签</h3>
+            <div class="tag-row">
+              ${(data.tags || []).map((tag) => `<button class="tag-chip active" data-remove-tag-id="${escapeHtml(tag.tag_id)}">${escapeHtml(tag.display_name)}</button>`).join('') || '<span class="empty">暂无标签</span>'}
+            </div>
+            <div class="field-grid" style="margin-top:12px;">
+              <input id="assign-tag-name" type="text" placeholder="输入标签，例如 高价值 / 风险观察 / 客服跟进" />
+              <button id="assign-tag-submit" class="secondary">添加标签</button>
+              <div id="tag-status" class="status"></div>
+            </div>
+          </div>
+          <div class="mini-card">
+            <h3>运营备注</h3>
+            <div class="field-grid">
+              <textarea id="admin-note-text" placeholder="记录客服/运营跟进，不要写入密码、密钥等敏感信息"></textarea>
+              <button id="admin-note-submit" class="secondary">保存备注</button>
+              <div id="note-status" class="status"></div>
+            </div>
+            ${renderTable([
+              { label: '时间', render: (row) => row.created_at },
+              { label: '操作人', render: (row) => row.operator_id },
+              { label: '备注', render: (row) => row.note_text },
+            ], data.admin_notes || [], { className: 'tall' })}
+          </div>
+        </div>
+        <div data-user-tab-panel="timeline" class="detail-grid full user-tab-panel" style="display:none;">
+          <div class="mini-card">
+            <h3>用户时间线</h3>
+            <div class="timeline-list">
+              ${(data.timeline || []).map((item) => `
+                <div class="timeline-item">
+                  <strong>${escapeHtml(item.title || item.event_type)}</strong>
+                  <div class="hint">${escapeHtml(item.occurred_at || '')}</div>
+                  <div>${escapeHtml(item.detail || '')}</div>
+                </div>
+              `).join('') || '<div class="empty">暂无时间线事件</div>'}
+            </div>
           </div>
         </div>
       `;
+
+      document.querySelectorAll('#user-detail [data-user-tab]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const tab = button.dataset.userTab;
+          document.querySelectorAll('#user-detail [data-user-tab]').forEach((item) => item.classList.toggle('active', item === button));
+          document.querySelectorAll('#user-detail [data-user-tab-panel]').forEach((panel) => {
+            panel.style.display = panel.dataset.userTabPanel === tab ? '' : 'none';
+          });
+        });
+      });
+      document.getElementById('adjust-points-submit')?.addEventListener('click', () => adjustUserPoints(user.user_id));
+      document.getElementById('assign-tag-submit')?.addEventListener('click', () => assignUserTag(user.user_id));
+      document.getElementById('admin-note-submit')?.addEventListener('click', () => createUserNote(user.user_id));
+      document.querySelectorAll('#user-detail [data-remove-tag-id]').forEach((button) => {
+        button.addEventListener('click', () => removeUserTag(user.user_id, button.dataset.removeTagId));
+      });
     };
 
     const renderAuditLogs = (data) => {
@@ -1612,6 +1851,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
             { label: '原因', render: (row) => row.status_reason || row.error_message || '-' },
             {
               label: '操作',
+              raw: true,
               render: (row) => terminalStatuses.has(row.status)
                 ? '-'
                 : `<div class="button-row compact"><button class="secondary" data-keepa-promote-job="${escapeHtml(row.job_id)}">置顶</button><button class="danger" data-keepa-cancel-job="${escapeHtml(row.job_id)}">取消</button></div>`,
@@ -1668,14 +1908,36 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       }
     };
 
-    const searchUsers = async (query = '') => {
-      state.lastUserQuery = query;
-      setDualStatus('global-status', 'search-status', query ? `正在搜索 ${query}...` : '正在加载最近用户...');
+    const searchUsers = async (query = '', options = {}) => {
+      const filters = readUserFilters();
+      if (query !== undefined) {
+        filters.query = query;
+      }
+      if (!options.preserveOffset) {
+        state.userListOffset = 0;
+      }
+      state.lastUserQuery = filters.query;
+      setDualStatus('global-status', 'search-status', filters.query ? `正在搜索 ${filters.query}...` : '正在加载用户列表...');
       document.getElementById('user-results').innerHTML = '<div class="empty">正在加载用户列表...</div>';
       try {
-        const data = await fetchJson(`/admin/api/users?limit=20&query=${encodeURIComponent(query)}&include_orphaned=${state.includeOrphanedUsers ? 'true' : 'false'}`);
+        const params = new URLSearchParams({
+          limit: String(filters.limit || 20),
+          offset: String(state.userListOffset || 0),
+          query: filters.query || '',
+          include_orphaned: state.includeOrphanedUsers ? 'true' : 'false',
+          sort_by: 'last_activity_at',
+          sort_dir: 'desc',
+        });
+        ['plan_tier', 'status', 'email_verified', 'source_state', 'min_balance', 'max_balance', 'last_active_days'].forEach((key) => {
+          if (filters[key]) {
+            params.set(key, filters[key]);
+          }
+        });
+        const data = await fetchJson(`/admin/api/users?${params.toString()}`);
         renderUserResults(data.users || []);
-        setDualStatus('global-status', 'search-status', `用户列表已刷新，共 ${Number((data.users || []).length)} 条`, 'ok');
+        state.userListPage = data.page || { limit: filters.limit || 20, offset: 0, total: (data.users || []).length };
+        renderUserPager(state.userListPage);
+        setDualStatus('global-status', 'search-status', `用户列表已刷新，本页 ${Number((data.users || []).length)} 条 / 共 ${Number(state.userListPage.total || 0)} 条`, 'ok');
       } catch (error) {
         setDualStatus('global-status', 'search-status', error.message, 'error');
       }
@@ -1780,6 +2042,13 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
         setStatus('grant-status', '积分必须大于 0', 'error');
         return;
       }
+      if (!description) {
+        setStatus('grant-status', '必须填写加积分原因', 'error');
+        return;
+      }
+      if (!window.confirm(`确认给 ${userId} 增加 ${points} 积分？`)) {
+        return;
+      }
 
       setStatus('grant-status', '正在执行加积分...');
       try {
@@ -1797,6 +2066,106 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
         await loadOverview();
       } catch (error) {
         setStatus('grant-status', error.message, 'error');
+      }
+    };
+
+    const adjustUserPoints = async (userId) => {
+      const delta = Number(document.getElementById('adjust-points-delta')?.value || 0);
+      const reason = document.getElementById('adjust-points-reason')?.value.trim() || '';
+      if (!userId) {
+        setStatus('adjust-points-status', '请先选择用户', 'error');
+        return;
+      }
+      if (!Number.isFinite(delta) || delta === 0) {
+        setStatus('adjust-points-status', '冲正积分不能为 0', 'error');
+        return;
+      }
+      if (!reason) {
+        setStatus('adjust-points-status', '必须填写冲正原因', 'error');
+        return;
+      }
+      if (!window.confirm(`确认对 ${userId} 执行积分冲正 ${delta}？`)) {
+        return;
+      }
+      setStatus('adjust-points-status', '正在执行冲正...');
+      try {
+        await fetchJson(`/admin/api/users/${encodeURIComponent(userId)}/adjust-points`, {
+          method: 'POST',
+          body: JSON.stringify({ points_delta: delta, reason }),
+        });
+        setStatus('adjust-points-status', '冲正成功', 'ok');
+        await loadUserDetail(userId);
+        await searchUsers(state.lastUserQuery, { preserveOffset: true });
+        await loadAuditLogs();
+        await loadOverview();
+      } catch (error) {
+        setStatus('adjust-points-status', error.message, 'error');
+      }
+    };
+
+    const assignUserTag = async (userId) => {
+      const displayName = document.getElementById('assign-tag-name')?.value.trim() || '';
+      if (!userId || !displayName) {
+        setStatus('tag-status', '请先填写标签', 'error');
+        return;
+      }
+      if (!window.confirm(`确认给 ${userId} 添加标签「${displayName}」？`)) {
+        return;
+      }
+      setStatus('tag-status', '正在添加标签...');
+      try {
+        await fetchJson(`/admin/api/users/${encodeURIComponent(userId)}/tags`, {
+          method: 'POST',
+          body: JSON.stringify({ tag_key: displayName, display_name: displayName }),
+        });
+        setStatus('tag-status', '标签已添加', 'ok');
+        await loadUserDetail(userId);
+        await searchUsers(state.lastUserQuery, { preserveOffset: true });
+      } catch (error) {
+        setStatus('tag-status', error.message, 'error');
+      }
+    };
+
+    const removeUserTag = async (userId, tagId) => {
+      if (!userId || !tagId) {
+        return;
+      }
+      if (!window.confirm(`确认从 ${userId} 移除这个标签？`)) {
+        return;
+      }
+      setStatus('tag-status', '正在移除标签...');
+      try {
+        await fetchJson(`/admin/api/users/${encodeURIComponent(userId)}/tags/${encodeURIComponent(tagId)}`, {
+          method: 'DELETE',
+        });
+        setStatus('tag-status', '标签已移除', 'ok');
+        await loadUserDetail(userId);
+        await searchUsers(state.lastUserQuery, { preserveOffset: true });
+      } catch (error) {
+        setStatus('tag-status', error.message, 'error');
+      }
+    };
+
+    const createUserNote = async (userId) => {
+      const noteText = document.getElementById('admin-note-text')?.value.trim() || '';
+      if (!userId || !noteText) {
+        setStatus('note-status', '请先填写备注', 'error');
+        return;
+      }
+      if (!window.confirm(`确认给 ${userId} 保存这条运营备注？`)) {
+        return;
+      }
+      setStatus('note-status', '正在保存备注...');
+      try {
+        await fetchJson(`/admin/api/users/${encodeURIComponent(userId)}/notes`, {
+          method: 'POST',
+          body: JSON.stringify({ note_text: noteText }),
+        });
+        setStatus('note-status', '备注已保存', 'ok');
+        await loadUserDetail(userId);
+        await loadAuditLogs();
+      } catch (error) {
+        setStatus('note-status', error.message, 'error');
       }
     };
 

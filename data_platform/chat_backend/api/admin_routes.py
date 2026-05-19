@@ -36,9 +36,17 @@ from data_platform.chat_backend.domains.billing.service import (
     _list_redeem_codes,
 )
 from data_platform.chat_backend.domains.admin.service import (
+    _adjust_user_points_with_ledger,
     _audit_admin_action,
     _build_admin_overview,
     _build_user_account_overview,
+    _assign_user_tag,
+    _create_user_admin_note,
+    _create_user_tag,
+    _list_admin_users,
+    _list_all_user_tags,
+    _parse_int_filter,
+    _unassign_user_tag,
 )
 from data_platform.chat_backend.domains.notifications.service import (
     _create_system_notification_broadcast,
@@ -51,6 +59,10 @@ from data_platform.chat_backend.domains.site_config import (
     _invalidate_site_config_cache,
 )
 from data_platform.chat_backend.api.models import (
+    AdminAdjustPointsRequest,
+    AdminAssignUserTagRequest,
+    AdminCreateUserNoteRequest,
+    AdminCreateUserTagRequest,
     AdminCreateRedeemCodeBatchRequest,
     AdminGrantPointsRequest,
     AdminKeepaJobCancelRequest,
@@ -100,56 +112,34 @@ def admin_backoffice_users(request: Request) -> dict[str, Any]:
     query = (request.query_params.get("query") or "").strip()
     include_orphaned = (request.query_params.get("include_orphaned") or "").strip().lower() in {"1", "true", "yes", "on"}
     raw_limit = (request.query_params.get("limit") or "20").strip()
+    raw_offset = (request.query_params.get("offset") or "0").strip()
     try:
         limit = max(1, min(int(raw_limit), 100))
+        offset = max(0, int(raw_offset))
     except ValueError:
-        raise HTTPException(status_code=400, detail="limit must be an integer")
+        raise HTTPException(status_code=400, detail="limit and offset must be integers")
 
     with _postgres_conn() as conn:
         _reconcile_openwebui_user_sources_for_admin(conn, query=query, scan_limit=max(limit * 5, 100))
-        if query:
-            like_query = f"%{query}%"
-            source_filter_sql = "" if include_orphaned else "AND u.source_state <> 'orphaned'"
-            rows = _run_pg_dict_query(
-                conn,
-                f"""
-                SELECT u.user_id, u.email, u.display_name, u.status, u.plan_tier,
-                       u.created_at, u.updated_at, u.source_state, u.source_last_seen_at,
-                       u.source_orphaned_at, u.source_recovered_at,
-                       COALESCE(a.balance_points, 0) AS balance_points,
-                       k.last_used_at AS api_key_last_used_at
-                FROM app.app_user u
-                LEFT JOIN app.user_credit_account a ON u.user_id = a.user_id
-                LEFT JOIN app.user_api_key k ON u.user_id = k.user_id
-                WHERE (u.user_id ILIKE %s OR u.email ILIKE %s OR u.display_name ILIKE %s)
-                {source_filter_sql}
-                ORDER BY u.updated_at DESC, u.user_id DESC
-                LIMIT %s
-                """,
-                [like_query, like_query, like_query, limit],
-            )
-        else:
-            source_filter_sql = "" if include_orphaned else "WHERE u.source_state <> 'orphaned'"
-            rows = _run_pg_dict_query(
-                conn,
-                f"""
-                SELECT u.user_id, u.email, u.display_name, u.status, u.plan_tier,
-                       u.created_at, u.updated_at, u.source_state, u.source_last_seen_at,
-                       u.source_orphaned_at, u.source_recovered_at,
-                       COALESCE(a.balance_points, 0) AS balance_points,
-                       k.last_used_at AS api_key_last_used_at
-                FROM app.app_user u
-                LEFT JOIN app.user_credit_account a ON u.user_id = a.user_id
-                LEFT JOIN app.user_api_key k ON u.user_id = k.user_id
-                {source_filter_sql}
-                ORDER BY u.updated_at DESC, u.user_id DESC
-                LIMIT %s
-                """,
-                [limit],
-            )
+        result = _list_admin_users(
+            conn,
+            query=query,
+            include_orphaned=include_orphaned,
+            plan_tier=(request.query_params.get("plan_tier") or "").strip() or None,
+            status=(request.query_params.get("status") or "").strip() or None,
+            email_verified=(request.query_params.get("email_verified") or "").strip() or None,
+            source_state=(request.query_params.get("source_state") or "").strip() or None,
+            min_balance=_parse_int_filter(request.query_params.get("min_balance"), "min_balance"),
+            max_balance=_parse_int_filter(request.query_params.get("max_balance"), "max_balance"),
+            last_active_days=_parse_int_filter(request.query_params.get("last_active_days"), "last_active_days"),
+            limit=limit,
+            offset=offset,
+            sort_by=(request.query_params.get("sort_by") or "last_activity_at").strip(),
+            sort_dir=(request.query_params.get("sort_dir") or "desc").strip(),
+        )
     return _success_response(
         "/admin/api/users",
-        {"query": query, "include_orphaned": include_orphaned, "users": rows},
+        result,
         "admin users loaded",
     )
 
@@ -177,6 +167,8 @@ def admin_backoffice_user_detail(user_id: str, request: Request) -> dict[str, An
 @router.post("/admin/api/users/{user_id}/grant-points")
 def admin_backoffice_grant_points(user_id: str, request: Request, payload: AdminGrantPointsRequest) -> dict[str, Any]:
     operator_id = _require_admin_operator(request)
+    if not (payload.description or "").strip():
+        raise HTTPException(status_code=400, detail="description/reason is required")
     with _postgres_conn() as conn:
         user = _ensure_user_record(conn, user_id=user_id)
         reference_id = payload.reference_id or f"admin:{operator_id}:{_generate_id('grant')}"
@@ -218,6 +210,129 @@ def admin_backoffice_grant_points(user_id: str, request: Request, payload: Admin
         },
         "admin points granted",
     )
+
+
+@router.post("/admin/api/users/{user_id}/adjust-points")
+def admin_backoffice_adjust_points(user_id: str, request: Request, payload: AdminAdjustPointsRequest) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    with _postgres_conn() as conn:
+        user = _ensure_user_record(conn, user_id=user_id)
+        updated_account, ledger_entry = _adjust_user_points_with_ledger(
+            conn,
+            user_id=user.user_id,
+            points_delta=payload.points_delta,
+            operator_id=operator_id,
+            reason=payload.reason,
+            reference_id=payload.reference_id,
+        )
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="adjust_points",
+            target_type="user",
+            target_id=user.user_id,
+            request_json=jsonable_encoder(payload),
+            result_json={"points_account": updated_account, "ledger_entry": ledger_entry},
+        )
+    return _success_response(
+        f"/admin/api/users/{user_id}/adjust-points",
+        {"points_account": updated_account, "ledger_entry": ledger_entry, "audit_log": audit_log},
+        "admin points adjusted",
+    )
+
+
+@router.get("/admin/api/tags")
+def admin_list_user_tags(request: Request) -> dict[str, Any]:
+    _require_admin_operator(request)
+    with _postgres_conn() as conn:
+        tags = _list_all_user_tags(conn)
+    return _success_response("/admin/api/tags", {"tags": tags}, "admin tags loaded")
+
+
+@router.post("/admin/api/tags")
+def admin_create_user_tag(request: Request, payload: AdminCreateUserTagRequest) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    with _postgres_conn() as conn:
+        tag = _create_user_tag(
+            conn,
+            tag_key=payload.tag_key or payload.display_name,
+            display_name=payload.display_name,
+            description=payload.description,
+        )
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="create_user_tag",
+            target_type="user_tag",
+            target_id=tag["tag_id"],
+            request_json=jsonable_encoder(payload),
+            result_json={"tag": tag},
+        )
+    return _success_response("/admin/api/tags", {"tag": tag, "audit_log": audit_log}, "admin tag saved")
+
+
+@router.post("/admin/api/users/{user_id}/notes")
+def admin_create_user_note(user_id: str, request: Request, payload: AdminCreateUserNoteRequest) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    with _postgres_conn() as conn:
+        _ensure_user_record(conn, user_id=user_id)
+        note = _create_user_admin_note(
+            conn,
+            user_id=user_id,
+            operator_id=operator_id,
+            note_text=payload.note_text,
+        )
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="create_user_note",
+            target_type="user",
+            target_id=user_id,
+            request_json=jsonable_encoder(payload),
+            result_json={"note": note},
+        )
+    return _success_response(f"/admin/api/users/{user_id}/notes", {"note": note, "audit_log": audit_log}, "admin note created")
+
+
+@router.post("/admin/api/users/{user_id}/tags")
+def admin_assign_user_tag(user_id: str, request: Request, payload: AdminAssignUserTagRequest) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    with _postgres_conn() as conn:
+        _ensure_user_record(conn, user_id=user_id)
+        assignment = _assign_user_tag(
+            conn,
+            user_id=user_id,
+            tag_key=payload.tag_key,
+            display_name=payload.display_name,
+            operator_id=operator_id,
+        )
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="assign_user_tag",
+            target_type="user",
+            target_id=user_id,
+            request_json=jsonable_encoder(payload),
+            result_json={"assignment": assignment},
+        )
+    return _success_response(f"/admin/api/users/{user_id}/tags", {"assignment": assignment, "audit_log": audit_log}, "admin tag assigned")
+
+
+@router.delete("/admin/api/users/{user_id}/tags/{tag_id}")
+def admin_unassign_user_tag(user_id: str, tag_id: str, request: Request) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    with _postgres_conn() as conn:
+        assignment = _unassign_user_tag(conn, user_id=user_id, tag_id=tag_id)
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="unassign_user_tag",
+            target_type="user",
+            target_id=user_id,
+            request_json={"tag_id": tag_id},
+            result_json={"assignment": assignment},
+        )
+    return _success_response(f"/admin/api/users/{user_id}/tags/{tag_id}", {"assignment": assignment, "audit_log": audit_log}, "admin tag unassigned")
 
 
 @router.get("/admin/api/redeem-codes")
