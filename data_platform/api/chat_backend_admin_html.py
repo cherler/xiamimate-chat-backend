@@ -513,7 +513,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       flex: 1;
       min-height: 0;
       display: grid;
-      grid-template-rows: minmax(280px, 1.35fr) minmax(220px, 1fr);
+      grid-template-rows: minmax(280px, 1fr);
       gap: var(--layout-gap);
       overflow: hidden;
     }
@@ -553,28 +553,40 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       font-size: 12px;
     }
 
-    .module-nav h3 {
-      margin: 0;
-      font-size: 18px;
+    .top-module-nav {
+      position: sticky;
+      top: 14px;
+      z-index: 20;
+      display: grid;
+      gap: 10px;
+      margin-top: var(--layout-gap);
     }
 
+    .top-module-nav h2,
+    .module-nav h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .top-module-nav-list,
     .module-nav-list {
-      display: grid;
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px;
       min-height: 0;
-      overflow: auto;
+      overflow: visible;
       overscroll-behavior: contain;
-      padding-right: 4px;
     }
 
     .module-nav-button {
-      width: 100%;
-      justify-content: flex-start;
-      text-align: left;
-      padding: 12px 14px;
+      width: auto;
+      justify-content: center;
+      text-align: center;
+      padding: 10px 12px;
       border-radius: 14px;
       background: rgba(17, 75, 95, 0.08);
       color: var(--accent);
+      white-space: nowrap;
     }
 
     .module-nav-button.active {
@@ -823,6 +835,23 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       </div>
     </section>
 
+    <section class="card panel top-module-nav" aria-label="后台功能切换">
+      <h2>功能切换</h2>
+      <div class="top-module-nav-list">
+        <button class="module-nav-button secondary active" data-nav-target="section-overview">总览</button>
+        <button class="module-nav-button secondary" data-nav-target="section-user-detail">用户详情</button>
+        <button class="module-nav-button secondary" data-nav-target="module-grant">人工加积分</button>
+        <button class="module-nav-button secondary" data-nav-target="module-broadcast">系统通知广播</button>
+        <button class="module-nav-button secondary" data-nav-target="module-redeem">兑换码运营</button>
+        <button class="module-nav-button secondary" data-nav-target="module-pricing">计价管理</button>
+        <button class="module-nav-button secondary" data-nav-target="module-site-config">站点联络配置</button>
+        <button class="module-nav-button secondary" data-nav-target="module-email-verification">邮箱验证码风控</button>
+        <button class="module-nav-button secondary" data-nav-target="module-keepa-ops">补池与采集</button>
+        <button class="module-nav-button secondary" data-nav-target="section-audit">后台审计</button>
+        <button class="module-nav-button secondary" data-nav-target="section-broadcast-history">系统广播记录</button>
+      </div>
+    </section>
+
     <section class="layout">
       <aside class="card panel sticky-panel">
         <div class="sidebar-search">
@@ -905,22 +934,6 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
             <h3>用户结果</h3>
             <div class="scroll-stack">
               <div id="user-results" class="user-list"></div>
-            </div>
-          </div>
-          <div class="module-nav">
-            <h3>模块导航</h3>
-            <div class="module-nav-list">
-              <button class="module-nav-button secondary active" data-nav-target="section-overview">总览</button>
-              <button class="module-nav-button secondary" data-nav-target="section-user-detail">用户详情</button>
-              <button class="module-nav-button secondary" data-nav-target="module-grant">人工加积分</button>
-              <button class="module-nav-button secondary" data-nav-target="module-broadcast">系统通知广播</button>
-              <button class="module-nav-button secondary" data-nav-target="module-redeem">兑换码运营</button>
-              <button class="module-nav-button secondary" data-nav-target="module-pricing">计价管理</button>
-              <button class="module-nav-button secondary" data-nav-target="module-site-config">站点联络配置</button>
-              <button class="module-nav-button secondary" data-nav-target="module-email-verification">邮箱验证码风控</button>
-              <button class="module-nav-button secondary" data-nav-target="module-keepa-ops">补池与采集</button>
-              <button class="module-nav-button secondary" data-nav-target="section-audit">后台审计</button>
-              <button class="module-nav-button secondary" data-nav-target="section-broadcast-history">系统广播记录</button>
             </div>
           </div>
         </div>
