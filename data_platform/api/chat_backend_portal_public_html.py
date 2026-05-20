@@ -1785,17 +1785,6 @@ def render_portal_guide_html() -> str:
         </div>
         <div style="height:18px"></div>
         <div class="tip-banner">推荐第一条实操口令：/help 新手卖家第一次使用虾米选品，给我 5 条可以直接复制的提示词，并说明分别适合什么场景。</div>
-        <div style="height:18px"></div>
-        <div class="demo-card">
-          <h3 class="demo-title">60 秒上手演示视频</h3>
-          <p class="demo-desc">这里预留给第一次使用虾米选品的实操演示视频。后续可直接替换成视频播放器，帮助新用户按“先 /help、再 /tool 或 /report quick、最后回看消费”的顺序快速上手。</p>
-          <div class="demo-media" id="guide-getting-started-video-slot" data-demo-slot="guide-getting-started-video">
-            <div>
-              <div class="demo-placeholder-title">实操视频占位</div>
-              <p class="demo-placeholder-note">视频上线后，这里会展示 60 秒左右的新手上手演示；当前可先参考下方命令示例开始使用。</p>
-            </div>
-          </div>
-        </div>
       </section>
       <section id="commands" class="section-block card">
         <h2>新手常用命令</h2>
