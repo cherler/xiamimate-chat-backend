@@ -117,12 +117,16 @@ from data_platform.chat_backend.api.models import (
 )
 from data_platform.api.chat_backend_portal_html import render_portal_html
 from data_platform.api.chat_backend_portal_public_html import (
+    render_llms_txt,
     render_portal_checkout_html,
+    render_portal_product_html,
     render_portal_guide_html,
     render_portal_email_verification_result_html,
     render_portal_invite_html,
     render_portal_password_reset_html,
     render_portal_products_html,
+    render_robots_txt,
+    render_sitemap_xml,
 )
 
 router = APIRouter()
@@ -151,6 +155,16 @@ _PORTAL_LEDGER_FILTER_CLAUSES = {
 
 _EMAIL_VERIFICATION_IP_GUARD_LOCK = threading.Lock()
 _EMAIL_VERIFICATION_IP_GUARD_BUCKETS: dict[str, deque[float]] = defaultdict(deque)
+
+
+def _public_page_is_indexable(request: Request) -> bool:
+    return len(request.query_params) == 0
+
+
+def _public_page_cache_headers(request: Request) -> dict[str, str]:
+    if _public_page_is_indexable(request):
+        return {"Cache-Control": "public, max-age=300"}
+    return {"Cache-Control": "no-store"}
 
 
 def _mask_email_for_display(email: str) -> str:
@@ -832,19 +846,63 @@ def portal_account_page() -> HTMLResponse:
     return HTMLResponse(render_portal_html(), headers={"Cache-Control": "no-store"})
 
 
+@router.get("/portal/product")
+def portal_product_page(request: Request) -> HTMLResponse:
+    return HTMLResponse(
+        render_portal_product_html(indexable=_public_page_is_indexable(request)),
+        headers=_public_page_cache_headers(request),
+    )
+
+
 @router.get("/portal/products")
-def portal_products_page() -> HTMLResponse:
-    return HTMLResponse(render_portal_products_html(), headers={"Cache-Control": "no-store"})
+def portal_products_page(request: Request) -> HTMLResponse:
+    return HTMLResponse(
+        render_portal_products_html(indexable=_public_page_is_indexable(request)),
+        headers=_public_page_cache_headers(request),
+    )
 
 
 @router.get("/portal/guide")
-def portal_guide_page() -> HTMLResponse:
-    return HTMLResponse(render_portal_guide_html(), headers={"Cache-Control": "no-store"})
+def portal_guide_page(request: Request) -> HTMLResponse:
+    return HTMLResponse(
+        render_portal_guide_html(indexable=_public_page_is_indexable(request)),
+        headers=_public_page_cache_headers(request),
+    )
 
 
 @router.get("/portal/invite")
-def portal_invite_page() -> HTMLResponse:
-    return HTMLResponse(render_portal_invite_html(), headers={"Cache-Control": "no-store"})
+def portal_invite_page(request: Request) -> HTMLResponse:
+    return HTMLResponse(
+        render_portal_invite_html(indexable=_public_page_is_indexable(request)),
+        headers=_public_page_cache_headers(request),
+    )
+
+
+@router.get("/robots.txt", include_in_schema=False)
+def robots_txt() -> Response:
+    return Response(
+        render_robots_txt(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@router.get("/sitemap.xml", include_in_schema=False)
+def sitemap_xml() -> Response:
+    return Response(
+        render_sitemap_xml(),
+        media_type="application/xml; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@router.get("/llms.txt", include_in_schema=False)
+def llms_txt() -> Response:
+    return Response(
+        render_llms_txt(),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 @router.get("/portal/recover-password", response_model=None)

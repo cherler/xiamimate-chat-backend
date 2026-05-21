@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import base64
+from datetime import date
 import json
 import os
 from html import escape
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from data_platform.chat_backend.domains.portal.service import _portal_public_base_url
 from data_platform.chat_backend.domains.site_config import _get_contact_config
@@ -14,8 +15,85 @@ from data_platform.chat_backend.infra.settings import (
     DEFAULT_BILLING_PACKAGES,
     DEFAULT_EVENT_PRICING,
     DEFAULT_PROMOTION_RULES,
-  _resolve_promotion_rule_seed_status,
+    _resolve_promotion_rule_seed_status,
 )
+
+
+_SITE_NAME = "虾米选品"
+_SITE_TAGLINE = "面向跨境电商卖家的 AI 选品与市场调研工作台。"
+_CORE_KEYWORDS = [
+  "虾米选品",
+  "XiaMimate",
+  "跨境电商选品",
+  "选品智能体",
+  "AI选品工具",
+  "跨境电商AI工具",
+  "Amazon选品",
+  "TikTok Shop选品",
+  "Temu选品",
+  "商品机会发现",
+  "竞品分析",
+  "价格带分析",
+  "选品报告",
+  "市场调研工具",
+]
+
+SEO_PUBLIC_PAGES: dict[str, dict[str, Any]] = {
+    "product": {
+      "path": "/portal/product",
+      "title": "虾米选品 - 跨境电商选品智能体与 AI 选品工具",
+      "description": "虾米选品是面向跨境电商卖家的选品智能体和 AI 选品工具，结合商品数据、趋势信号、平台知识库和联网搜索，帮助判断品类机会、竞争风险和下一步动作。",
+      "keywords": _CORE_KEYWORDS,
+      "priority": "1.0",
+      "changefreq": "weekly",
+    },
+    "guide": {
+      "path": "/portal/guide",
+      "title": "虾米选品使用指南 - 新手命令与选品分析流程",
+      "description": "查看虾米选品的新手使用路径、常用命令、选品报告模式和排查建议，快速完成第一次跨境电商选品分析。",
+      "keywords": ["虾米选品使用指南", "跨境电商选品流程", "选品智能体提示词", "AI选品命令", "选品报告教程"],
+      "priority": "0.8",
+      "changefreq": "weekly",
+    },
+    "products": {
+      "path": "/portal/products",
+      "title": "虾米选品订阅与充值 - 套餐、积分和报告计费说明",
+      "description": "了解虾米选品的订阅套餐、充值包、积分消费方式和报告计费规则，适合持续进行跨境电商选品分析的卖家。",
+      "keywords": ["虾米选品价格", "AI选品工具套餐", "跨境电商选品工具价格", "选品报告计费", "虾米选品积分"],
+      "priority": "0.7",
+      "changefreq": "weekly",
+    },
+    "invite": {
+      "path": "/portal/invite",
+      "title": "虾米选品邀请注册 - 开始使用跨境电商选品工具",
+      "description": "通过邀请链接注册虾米选品，体验跨境电商选品分析、商品机会发现、竞品研究和智能报告能力。",
+      "keywords": ["虾米选品注册", "虾米选品邀请", "跨境电商选品工具注册", "选品智能体注册"],
+      "priority": "0.4",
+      "changefreq": "monthly",
+      "sitemap": False,
+    },
+}
+
+
+def _public_url(path: str) -> str:
+    base_url = _portal_public_base_url().rstrip("/") or "https://xiamimate.com"
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return f"{base_url}{normalized_path}"
+
+
+def _json_ld_script(payload: dict[str, Any]) -> str:
+    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    return f'<script type="application/ld+json">{serialized}</script>'
+
+
+def _breadcrumb_json_ld(*, title: str, canonical_path: str) -> dict[str, Any]:
+    return {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": _SITE_NAME, "item": _public_url("/portal/product")},
+        {"@type": "ListItem", "position": 2, "name": title, "item": _public_url(canonical_path)},
+      ],
+    }
 
 
 _BASE_CSS = """
@@ -1114,7 +1192,7 @@ def _render_portal_chatbot_snippet() -> str:
      }}
      const html = await response.text();
      const assetMatches = Array.from(
-      html.matchAll(/(?:src|href)=\"([^\"]*\/_dify\/_next\/static\/[^\"]+)\"/g),
+      html.matchAll(/(?:src|href)=\"([^\"]*\\/_dify\\/_next\\/static\\/[^\"]+)\"/g),
       (match) => match[1],
      );
      const uniqueAssets = [...new Set(assetMatches)].slice(0, 24);
@@ -1383,6 +1461,7 @@ def _split_catalog() -> tuple[list[dict], list[dict], dict, dict, list[dict]]:
 def _top_nav(active: str) -> str:
     items = [
         ("account", "账户管理", "/portal/account", "data-account-link"),
+    ("product", "产品介绍", "/portal/product", ""),
         ("products", "订阅与充值", "/portal/products", ""),
         ("guide", "使用指南", "/portal/guide", ""),
     ]
@@ -1407,16 +1486,71 @@ def _sidebar(groups: list[tuple[str, list[tuple[str, str]]]]) -> str:
     )
 
 
-def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html: str, body_html: str) -> str:
+def _layout(
+  *,
+  active: str,
+  kicker: str,
+  title: str,
+  subtitle: str,
+  sidebar_html: str,
+  body_html: str,
+  description: str = "",
+  canonical_path: str = "",
+  indexable: bool = False,
+  structured_data: Optional[list[dict[str, Any]]] = None,
+) -> str:
     openwebui_home_url = escape(_portal_public_base_url())
     chatbot_snippet = _render_portal_chatbot_snippet()
     subtitle_html = f'<div class="subtitle">{escape(subtitle)}</div>' if subtitle else ""
+    page_title = f"虾米选品 - {title}"
+    meta_description = description or subtitle or _SITE_TAGLINE
+    canonical_path = canonical_path or "/portal/product"
+    active_page_meta = next((page for page in SEO_PUBLIC_PAGES.values() if page.get("path") == canonical_path), {})
+    page_keywords = list(active_page_meta.get("keywords") or _CORE_KEYWORDS)
+    page_keywords_text = ", ".join(str(keyword) for keyword in page_keywords)
+    canonical_url = _public_url(canonical_path)
+    robots_content = "index, follow, max-image-preview:large" if indexable else "noindex, follow"
+    json_ld_payload = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "WebPage",
+                "name": page_title,
+                "url": canonical_url,
+                "inLanguage": "zh-CN",
+                "description": meta_description,
+                "keywords": page_keywords_text,
+                "about": [{"@type": "Thing", "name": str(keyword)} for keyword in page_keywords[:8]],
+                "isPartOf": {
+                    "@type": "WebSite",
+                    "name": _SITE_NAME,
+                    "url": _public_url("/"),
+                },
+            },
+            _breadcrumb_json_ld(title=title, canonical_path=canonical_path),
+            *(structured_data or []),
+        ],
+    }
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>虾米选品 - {escape(title)}</title>
+  <title>{escape(page_title)}</title>
+  <meta name="description" content="{escape(meta_description, quote=True)}" />
+  <meta name="keywords" content="{escape(page_keywords_text, quote=True)}" />
+  <meta name="robots" content="{robots_content}" />
+  <link rel="canonical" href="{escape(canonical_url, quote=True)}" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="虾米选品" />
+  <meta property="og:title" content="{escape(page_title, quote=True)}" />
+  <meta property="og:description" content="{escape(meta_description, quote=True)}" />
+  <meta property="og:url" content="{escape(canonical_url, quote=True)}" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="{escape(page_title, quote=True)}" />
+  <meta name="twitter:description" content="{escape(meta_description, quote=True)}" />
+  {_json_ld_script(json_ld_payload)}
   <style>{_BASE_CSS}</style>
 </head>
 <body>
@@ -1479,7 +1613,219 @@ def _layout(*, active: str, kicker: str, title: str, subtitle: str, sidebar_html
 </html>"""
 
 
-def render_portal_products_html() -> str:
+def render_portal_product_html(*, indexable: bool = True) -> str:
+    page_meta = SEO_PUBLIC_PAGES["product"]
+    body_html = '''
+      <section id="overview" class="section-block card">
+        <h2>跨境电商选品智能体，从模糊想法到可验证决策</h2>
+        <div class="card-note">虾米选品是面向跨境电商卖家的选品智能体、AI 选品工具与市场调研工作台。它把商品数据、趋势信号、平台知识库、联网搜索和选品报告编排放在同一个入口里，帮助你判断一个商品方向是否值得继续投入。</div>
+        <div class="tip-banner">适合 Amazon、TikTok Shop、Temu 等跨境电商场景中的新品调研、机会发现、竞品分析、价格带判断和风险排查。</div>
+        <div style="height:18px"></div>
+        <div class="mini-kpi-row">
+          <div class="mini-kpi"><div class="mini-kpi-value">机会发现</div><div class="mini-kpi-label">从宽泛商品词拆出候选方向</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">竞品分析</div><div class="mini-kpi-label">结合价格、评论、销量和竞争密度</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">报告决策</div><div class="mini-kpi-label">输出结论、证据、风险和动作建议</div></div>
+        </div>
+      </section>
+      <section id="who" class="section-block card">
+        <h2>适合谁使用</h2>
+        <div class="notice-grid">
+          <div class="notice-card accent"><h3 class="notice-title">新手卖家</h3><p class="notice-desc">不知道怎么提问、怎么筛品、怎么判断一个方向是否值得做时，可以先用 /help 和 /report quick 建立第一轮判断。</p></div>
+          <div class="notice-card"><h3 class="notice-title">有候选方向的卖家</h3><p class="notice-desc">已经有商品词或类目方向时，可以通过候选池、趋势、竞品和价格带分析判断是否继续投入。</p></div>
+          <div class="notice-card"><h3 class="notice-title">需要复盘决策的团队</h3><p class="notice-desc">把市场机会、风险、证据和后续动作整理成可回看的报告，减少只靠经验拍脑袋的选品过程。</p></div>
+        </div>
+      </section>
+      <section id="capabilities" class="section-block card">
+        <h2>核心能力</h2>
+        <div class="notice-grid">
+          <div class="notice-card accent"><h3 class="notice-title">商品机会发现</h3><p class="notice-desc">从模糊商品词、类目或平台方向出发，找到更适合继续分析的候选产品和细分机会。</p></div>
+          <div class="notice-card"><h3 class="notice-title">趋势与市场验证</h3><p class="notice-desc">结合趋势、商品池、外部搜索和平台知识判断需求是否真实、是否季节性明显、是否已经过热。</p></div>
+          <div class="notice-card"><h3 class="notice-title">竞品与价格带分析</h3><p class="notice-desc">围绕头部商品、评论规模、价格区间、销量表现和差异化空间，判断进入难度和目标价位。</p></div>
+          <div class="notice-card"><h3 class="notice-title">风险识别</h3><p class="notice-desc">关注合规、侵权、履约、平台规则、过度竞争和供应链不确定性，避免只看机会不看风险。</p></div>
+          <div class="notice-card"><h3 class="notice-title">分层报告</h3><p class="notice-desc">支持 quick、standard、deep、research 等不同深度，先快速筛选，再对高价值方向做深入研究。</p></div>
+          <div class="notice-card"><h3 class="notice-title">智能客服与知识库</h3><p class="notice-desc">围绕产品使用、命令写法、套餐计费和跨境电商方法论提供可检索的帮助入口。</p></div>
+        </div>
+      </section>
+      <section id="workflow" class="section-block card">
+        <h2>一次典型选品分析流程</h2>
+        <div class="timeline-list">
+          <div class="timeline-item"><div class="timeline-title">1. 用 /help 获取可复制提示词</div><div class="timeline-desc">第一次使用时先拿系统整理好的问法，避免因为问题太宽导致结果发散。</div></div>
+          <div class="timeline-item"><div class="timeline-title">2. 用 /tool 或 /report quick 做第一轮判断</div><div class="timeline-desc">先验证商品池、趋势、竞争和风险信号，快速筛掉明显不适合继续投入的方向。</div></div>
+          <div class="timeline-item"><div class="timeline-title">3. 对值得看的方向升级为 /report standard</div><div class="timeline-desc">围绕市场吸引力、竞争结构、价格带、差异化机会和下一步动作形成完整报告。</div></div>
+          <div class="timeline-item"><div class="timeline-title">4. 用 /web 补充最新外部信息</div><div class="timeline-desc">当问题依赖平台政策、近期趋势或行业新闻时，用联网搜索补证。</div></div>
+          <div class="timeline-item"><div class="timeline-title">5. 回到账户页查看积分和使用记录</div><div class="timeline-desc">分析完成后复盘消耗、余额和扣减来源，决定是否继续深挖或补充积分。</div></div>
+        </div>
+      </section>
+      <section id="faq" class="section-block card">
+        <h2>常见问题</h2>
+        <div class="guide-list">
+          <div class="guide-item"><div class="guide-title">虾米选品和普通聊天工具有什么区别？</div><div class="guide-desc">它围绕跨境电商选品场景设计，重点在商品机会发现、竞品分析、趋势验证、风险识别和报告编排，而不是泛泛聊天。</div></div>
+          <div class="guide-item"><div class="guide-title">第一次使用应该从哪里开始？</div><div class="guide-desc">建议先打开使用指南，复制 /help 示例，拿到适合新手卖家的提示词后再跑 /tool 或 /report quick。</div></div>
+          <div class="guide-item"><div class="guide-title">它能直接保证某个产品一定成功吗？</div><div class="guide-desc">不能。虾米选品提供的是数据、证据、风险和下一步动作建议，帮助你更快判断方向，但最终仍需要结合供应链、资金、运营能力和实际测试。</div></div>
+        </div>
+      </section>
+    '''
+    sidebar_html = _sidebar([
+        ("产品介绍", [("overview", "产品定位"), ("who", "适合人群"), ("capabilities", "核心能力"), ("workflow", "分析流程"), ("faq", "常见问题")]),
+    ])
+    structured_data = [
+        {
+            "@type": "SoftwareApplication",
+            "name": _SITE_NAME,
+            "alternateName": "XiaMimate",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "url": _public_url(page_meta["path"]),
+            "description": page_meta["description"],
+            "keywords": ", ".join(page_meta.get("keywords") or _CORE_KEYWORDS),
+            "featureList": [
+              "跨境电商选品",
+              "选品智能体",
+              "AI选品工具",
+              "商品机会发现",
+              "竞品分析",
+              "价格带分析",
+              "选品报告",
+            ],
+            "offers": {
+                "@type": "Offer",
+                "url": _public_url("/portal/products"),
+                "priceCurrency": "CNY",
+                "availability": "https://schema.org/InStock",
+            },
+        },
+        {
+            "@type": "FAQPage",
+            "mainEntity": [
+                {
+                    "@type": "Question",
+                    "name": "虾米选品和普通聊天工具有什么区别？",
+                    "acceptedAnswer": {"@type": "Answer", "text": "虾米选品围绕跨境电商选品场景设计，重点支持商品机会发现、竞品分析、趋势验证、风险识别和报告编排。"},
+                },
+                {
+                    "@type": "Question",
+                    "name": "第一次使用虾米选品应该从哪里开始？",
+                    "acceptedAnswer": {"@type": "Answer", "text": "建议先打开使用指南，复制 /help 示例，拿到适合新手卖家的提示词后再跑 /tool 或 /report quick。"},
+                },
+                {
+                    "@type": "Question",
+                    "name": "虾米选品能保证某个产品一定成功吗？",
+                    "acceptedAnswer": {"@type": "Answer", "text": "不能。虾米选品提供数据、证据、风险和下一步动作建议，最终仍需要结合供应链、资金、运营能力和实际测试。"},
+                },
+            ],
+        },
+    ]
+    return _layout(
+        active="product",
+        kicker="产品介绍",
+        title="跨境电商选品智能体与 AI 选品工具",
+        subtitle="把商品机会发现、跨境电商选品、竞品分析、趋势验证、风险识别和选品报告放在一个工作台里。",
+        sidebar_html=sidebar_html,
+        body_html=body_html,
+        description=page_meta["description"],
+        canonical_path=page_meta["path"],
+        indexable=indexable,
+        structured_data=structured_data,
+    )
+
+
+def render_robots_txt() -> str:
+    sitemap_url = _public_url("/sitemap.xml")
+    return "\n".join([
+        "User-agent: *",
+        "Allow: /portal/product",
+        "Allow: /portal/guide",
+        "Allow: /portal/products",
+        "Allow: /portal/invite",
+        "Disallow: /portal/account",
+        "Disallow: /portal/checkout",
+        "Disallow: /portal/recover-password",
+        "Disallow: /portal/email-verification/",
+        "Disallow: /admin/",
+        "Disallow: /admin",
+        "Disallow: /api/",
+        "Disallow: /internal/",
+        "Disallow: /_app/",
+        "Disallow: /_dify/",
+        "Disallow: /_xm/",
+        "Disallow: /ws/",
+        "",
+        f"Sitemap: {sitemap_url}",
+        "",
+    ])
+
+
+def render_sitemap_xml() -> str:
+    lastmod = date.today().isoformat()
+    urls = []
+    for page in SEO_PUBLIC_PAGES.values():
+        if page.get("sitemap") is False:
+            continue
+        loc = escape(_public_url(str(page["path"])), quote=True)
+        changefreq = escape(str(page.get("changefreq") or "weekly"), quote=True)
+        priority = escape(str(page.get("priority") or "0.5"), quote=True)
+        urls.append(
+            "\n".join([
+                "  <url>",
+                f"    <loc>{loc}</loc>",
+                f"    <lastmod>{lastmod}</lastmod>",
+                f"    <changefreq>{changefreq}</changefreq>",
+                f"    <priority>{priority}</priority>",
+                "  </url>",
+            ])
+        )
+    return "\n".join([
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        *urls,
+        '</urlset>',
+        '',
+    ])
+
+
+def render_llms_txt() -> str:
+    product_url = _public_url("/portal/product")
+    guide_url = _public_url("/portal/guide")
+    products_url = _public_url("/portal/products")
+    sitemap_url = _public_url("/sitemap.xml")
+    return "\n".join([
+        "# 虾米选品",
+        "",
+        "> 面向跨境电商卖家的选品智能体、AI 选品工具与市场调研工作台，帮助用户进行跨境电商选品、商品机会发现、趋势验证、竞品分析、风险识别和选品报告编排。",
+        "",
+        "## Official Pages",
+        "",
+        f"- Product overview: {product_url}",
+        f"- User guide: {guide_url}",
+        f"- Pricing and credits: {products_url}",
+        f"- Sitemap: {sitemap_url}",
+        "",
+        "## Keywords",
+        "",
+        *[f"- {keyword}" for keyword in _CORE_KEYWORDS],
+        "",
+        "## What It Helps With",
+        "",
+        "- Cross-border ecommerce product research for Amazon, TikTok Shop, Temu, and related marketplaces.",
+        "- Product opportunity discovery from broad product ideas, categories, or market questions.",
+        "- Competitor, price band, review scale, demand signal, and risk analysis.",
+        "- Layered reports with quick, standard, deep, and research-style workflows.",
+        "- Beginner-friendly prompts and help for sellers who do not yet know how to ask product research questions.",
+        "",
+        "## Canonical Name",
+        "",
+        "- Chinese product name: 虾米选品",
+        "- English/technical name: XiaMimate",
+        "",
+        "## Recommended Citation",
+        "",
+        "虾米选品是一个面向跨境电商卖家的选品智能体和 AI 选品工具，结合商品数据、趋势信号、平台知识库和联网搜索，辅助卖家判断品类机会、竞争风险和下一步动作。",
+        "",
+    ])
+
+
+def render_portal_products_html(*, indexable: bool = True) -> str:
+    page_meta = SEO_PUBLIC_PAGES["products"]
     monthly_packages, recharge_packages, signup_rule, first_discount_rule, cumulative_rules, single_bonus_by_package = _split_catalog()
     first_discount_text = escape(str((first_discount_rule.get("meta_json") or {}).get("display_text") or first_discount_rule.get("rule_name") or ""))
     event_cost_by_type = {str(row.get("event_type") or ""): int(row.get("points_per_unit") or 0) for row in DEFAULT_EVENT_PRICING}
@@ -1656,6 +2002,9 @@ def render_portal_products_html() -> str:
         subtitle="",
         sidebar_html=sidebar_html,
         body_html=body_html,
+        description=page_meta["description"],
+        canonical_path=page_meta["path"],
+        indexable=indexable,
     ).replace("</body>", '''
 <script>
 (function() {
@@ -1773,7 +2122,8 @@ def render_portal_products_html() -> str:
 </body>''')
 
 
-def render_portal_guide_html() -> str:
+def render_portal_guide_html(*, indexable: bool = True) -> str:
+    page_meta = SEO_PUBLIC_PAGES["guide"]
     body_html = '''
       <section id="start" class="section-block card">
         <h2>上手三步</h2>
@@ -1887,10 +2237,14 @@ def render_portal_guide_html() -> str:
         subtitle="把新手最常见的上手路径、命令顺序和操作提醒整理成一页，方便你快速开始并少走弯路。",
         sidebar_html=sidebar_html,
         body_html=body_html,
+        description=page_meta["description"],
+        canonical_path=page_meta["path"],
+        indexable=indexable,
     )
 
 
-def render_portal_invite_html() -> str:
+def render_portal_invite_html(*, indexable: bool = True) -> str:
+    page_meta = SEO_PUBLIC_PAGES["invite"]
     openwebui_home_url = escape(_portal_public_base_url())
     body_html = '''
       <section id="invite" class="section-block card">
@@ -1914,7 +2268,7 @@ def render_portal_invite_html() -> str:
       </section>
       <section id="product" class="section-block card">
         <h2>你将注册的是什么产品</h2>
-        <div class="card-note">虾米选品（XiaMimate）是面向跨境电商卖家的选品智能体，融合 Amazon\TikTok Shop\Temu 知识库、Keepa 商品数据、Google Trends 趋势信号、实时联网查询、商品预测与主题分析能力，帮助用户快速完成选品分析与决策。</div>
+        <div class="card-note">虾米选品（XiaMimate）是面向跨境电商卖家的选品智能体，融合 Amazon / TikTok Shop / Temu 知识库、Keepa 商品数据、Google Trends 趋势信号、实时联网查询、商品预测与主题分析能力，帮助用户快速完成选品分析与决策。</div>
         <div class="tip-banner">它不是泛聊天工具，而是一套围绕跨境电商选品、测品和市场调研的分析工作台，重点帮助你判断“这个方向值不值得做、风险在哪里、下一步该怎么继续”。</div>
         <div style="height:18px"></div>
         <div class="mini-kpi-row">
@@ -1998,6 +2352,9 @@ def render_portal_invite_html() -> str:
         subtitle="先确认邀请码有效，再进入产品；如果你还没注册，完成注册或登录后系统会自动绑定邀请关系。",
         sidebar_html=sidebar_html,
         body_html=body_html,
+        description=page_meta["description"],
+        canonical_path=page_meta["path"],
+        indexable=indexable,
     )
     script = '''
 <script>
@@ -2254,6 +2611,9 @@ def render_portal_password_reset_html() -> str:
         subtitle="用于在忘记 Open WebUI 登录密码时，通过注册邮箱完成验证并设置新密码。",
         sidebar_html=sidebar_html,
         body_html=body_html,
+      description="虾米选品账户密码找回页面，用于已注册用户通过邮箱验证码重置登录密码。",
+      canonical_path="/portal/recover-password",
+      indexable=False,
     )
     script = '''
 <script>
