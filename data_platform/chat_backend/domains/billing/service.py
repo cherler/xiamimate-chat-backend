@@ -75,6 +75,8 @@ _EVENT_PRICING_CACHE: dict[str, dict[str, Any]] = {}
 _EVENT_PRICING_CACHE_LOCK = threading.Lock()
 _EVENT_PRICING_CACHE_TS: float = 0.0
 _EVENT_PRICING_CACHE_TTL: float = 60.0
+_DEPRECATED_EVENT_PRICING_TYPES = {"workflow_run"}
+
 # ---------------------------------------------------------------------------
 # Credit account
 # ---------------------------------------------------------------------------
@@ -2145,6 +2147,19 @@ def _seed_billing_event_pricing(conn) -> None:
         ["历史Workflow请求", "workflow_run", "workflow请求"],
     )
 
+    _run_pg_dict_query(
+        conn,
+        """
+        UPDATE app.billing_event_pricing
+        SET status = 'inactive',
+            updated_at = NOW()
+        WHERE event_type = %s
+          AND status <> 'inactive'
+        RETURNING event_type
+        """,
+        ["workflow_run"],
+    )
+
     # One-time compatible uplift for legacy 1-point single-retrieve pricing.
     for event_type, legacy_points, target_points in (
         ("kb_retrieve", 1, 2),
@@ -2173,6 +2188,7 @@ def _load_event_pricing_from_db(conn) -> dict[str, dict[str, Any]]:
         SELECT event_type, display_name, points_per_unit, status, display_order
         FROM app.billing_event_pricing
         WHERE status = 'active'
+          AND event_type <> 'workflow_run'
         ORDER BY display_order ASC, event_type ASC
         """,
     )
@@ -2208,6 +2224,7 @@ def _get_event_pricing(conn=None) -> dict[str, dict[str, Any]]:
                 "display_order": row["display_order"],
             }
             for row in DEFAULT_EVENT_PRICING
+            if row["event_type"] not in _DEPRECATED_EVENT_PRICING_TYPES
         }
         _EVENT_PRICING_CACHE_TS = time.monotonic()
     return _EVENT_PRICING_CACHE

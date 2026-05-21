@@ -142,7 +142,6 @@ REPORT_PROFILE_TO_API_KEY_ENV_VAR: dict[str, str] = {
 
 DEFAULT_EVENT_PRICING: list[dict[str, Any]] = [
     {"event_type": "llm_request",      "display_name": "LLM请求",      "points_per_unit": 1, "display_order": 10},
-    {"event_type": "workflow_run",     "display_name": "历史Workflow请求", "points_per_unit": 8, "display_order": 20},
     {"event_type": "report_quick_run",    "display_name": "快速报告", "points_per_unit": 8,  "display_order": 21},
     {"event_type": "report_standard_run", "display_name": "标准报告", "points_per_unit": 16, "display_order": 22},
     {"event_type": "report_deep_run",     "display_name": "深度报告", "points_per_unit": 24, "display_order": 23},
