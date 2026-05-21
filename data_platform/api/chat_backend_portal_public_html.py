@@ -1460,10 +1460,11 @@ def _split_catalog() -> tuple[list[dict], list[dict], dict, dict, list[dict]]:
 
 def _top_nav(active: str) -> str:
     items = [
+    ("chat", "对话", "/", ""),
         ("account", "账户管理", "/portal/account", "data-account-link"),
     ("product", "产品介绍", "/portal/product", ""),
-        ("products", "订阅与充值", "/portal/products", ""),
         ("guide", "使用指南", "/portal/guide", ""),
+    ("products", "订阅与充值", "/portal/products", ""),
     ]
     html = []
     for key, label, href, extra in items:

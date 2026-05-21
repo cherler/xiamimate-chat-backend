@@ -1020,9 +1020,11 @@ def render_portal_html() -> str:
       </div>
       <div class="topbar-actions">
         <div class="top-route-nav">
+          <a class="top-route-link" id="route-chat-link" href="__OPENWEBUI_HOME_URL__">对话</a>
           <a class="top-route-link active" id="route-account-link" href="/portal/account">账户管理</a>
-          <a class="top-route-link" id="route-products-link" href="/portal/products">订阅与充值</a>
+          <a class="top-route-link" id="route-product-link" href="/portal/product">产品介绍</a>
           <a class="top-route-link" id="route-guide-link" href="/portal/guide">使用指南</a>
+          <a class="top-route-link" id="route-products-link" href="/portal/products">订阅与充值</a>
         </div>
         <div class="top-utility-actions">
           <a class="top-home-link" id="open-webui-home-link" href="__OPENWEBUI_HOME_URL__">首页</a>
@@ -1805,9 +1807,11 @@ def render_portal_html() -> str:
     return basePath + (basePath.indexOf("?") === -1 ? "?" : "&") + "t=" + encodeURIComponent(portalToken) + hashPart;
   }
 
+  document.getElementById("route-chat-link").href = "__OPENWEBUI_HOME_URL__";
   document.getElementById("route-account-link").href = withPortalToken("/portal/account");
-  document.getElementById("route-products-link").href = withPortalToken("/portal/products");
+  document.getElementById("route-product-link").href = "/portal/product";
   document.getElementById("route-guide-link").href = withPortalToken("/portal/guide");
+  document.getElementById("route-products-link").href = withPortalToken("/portal/products");
   document.getElementById("open-webui-home-link").href = "__OPENWEBUI_HOME_URL__";
 
   function syncNotificationItems(items) {
