@@ -105,12 +105,9 @@ WORKFLOW_BUNDLED_NON_BILLABLE_EVENT_TYPES = {
 THEME_API_OPERATION_PATHS: dict[str, str] = {
     "resolve_candidates": "/api/product-theme/resolve-candidates",
     "candidate_pool_stats": "/api/product-theme/candidate-pool-stats",
-    "candidate_pool_slice": "/api/product-theme/candidate-pool-slice",
     "candidate_pool_trends": "/api/product-theme/candidate-pool-trends",
     "candidate_pool_weak_forecast": "/api/product-theme/candidate-pool-weak-forecast",
     "top_asin_drilldown": "/api/product-theme/top-asin-drilldown",
-    "asin_review_insights": "/api/product-theme/asin-review-insights",
-    "amazon_keyword_demand": "/api/product-theme/amazon-keyword-demand",
     "category_benchmark": "/api/product-theme/category-benchmark",
     "keepa_asin_lookup": "/api/product-theme/keepa-asin-lookup",
 }
