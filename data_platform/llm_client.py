@@ -65,6 +65,25 @@ def _profile_env_value(prefix: str, key: str, default: str | None = None) -> str
     return stripped if stripped != "" else default
 
 
+def _profile_env_value_with_aliases(
+    prefix: str,
+    key: str,
+    default: str | None = None,
+    aliases: tuple[str, ...] = (),
+) -> str | None:
+    profile = _active_profile(prefix)
+    if profile:
+        for alias in aliases:
+            profiled_value = os.environ.get(f"{prefix}_{profile.upper()}_{alias}")
+            if profiled_value is not None and profiled_value.strip() != "":
+                return profiled_value.strip()
+    for alias in aliases:
+        value = os.environ.get(f"{prefix}_{alias}")
+        if value is not None and value.strip() != "":
+            return value.strip()
+    return _profile_env_value(prefix, key, default)
+
+
 def _profile_env_flag(prefix: str, key: str, default: bool = False) -> bool:
     profile = _active_profile(prefix)
     if profile:
@@ -442,7 +461,12 @@ def build_anthropic_compatible_config(prefix: str, *, enabled_default: bool = Fa
     model = _profile_env_value(prefix, "MODEL", "") or ""
     api_key = _profile_env_value(prefix, "API_KEY", "") or ""
     timeout_seconds = float(_profile_env_value(prefix, "TIMEOUT_SECONDS", "20") or "20")
-    anthropic_version = _profile_env_value(prefix, "ANTHROPIC_VERSION", "2023-06-01") or "2023-06-01"
+    anthropic_version = _profile_env_value_with_aliases(
+        prefix,
+        "ANTHROPIC_VERSION",
+        "2023-06-01",
+        aliases=("VERSION",),
+    ) or "2023-06-01"
     max_tokens = int(_profile_env_value(prefix, "MAX_TOKENS", "2048") or "2048")
     return AnthropicCompatibleConfig(
         prefix=prefix,

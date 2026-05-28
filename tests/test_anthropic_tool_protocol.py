@@ -1,7 +1,9 @@
 import json
+import os
 import unittest
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,12 +11,29 @@ sys.path.insert(0, str(ROOT))
 
 from data_platform.llm_client import (  # noqa: E402
     anthropic_response_to_openai_chat_completion,
+    build_anthropic_compatible_config,
     build_anthropic_messages_payload,
 )
 from data_platform.chat_backend.domains.provider_proxy.service import _format_theme_api_tool_result  # noqa: E402
 
 
 class AnthropicToolProtocolTests(unittest.TestCase):
+    def test_anthropic_version_accepts_short_alias(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "AGENT_ANTHROPIC_ENABLED": "true",
+                "AGENT_ANTHROPIC_BASE_URL": "https://api.minimaxi.com/anthropic",
+                "AGENT_ANTHROPIC_API_KEY": "test-key",
+                "AGENT_ANTHROPIC_MODEL": "MiniMax-M2.7-highspeed",
+                "AGENT_ANTHROPIC_VERSION": "2024-01-01",
+            },
+            clear=True,
+        ):
+            config = build_anthropic_compatible_config("AGENT_ANTHROPIC", enabled_default=True)
+
+        self.assertEqual(config.anthropic_version, "2024-01-01")
+
     def test_openai_tool_messages_convert_to_anthropic_tool_use_and_result(self) -> None:
         payload = build_anthropic_messages_payload(
             model="MiniMax-M2.7-highspeed",
