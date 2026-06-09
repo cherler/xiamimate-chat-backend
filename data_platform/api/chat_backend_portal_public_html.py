@@ -1054,16 +1054,62 @@ _BASE_CSS = """
   }
   @media (max-width: 760px) {
     .portal-shell { flex-direction: column; }
-    body { overflow: auto; }
+    .portal-shell, .workspace, .sidebar { height: auto; }
+    .workspace { overflow: visible; }
+    /* Mobile: pin the tool nav as a fixed horizontal pill strip so users can
+       switch tools from any scroll position without returning to the top.
+       position:fixed is used instead of sticky because the injected global-nav
+       stylesheet (xm-nav.css) puts an overflow context on body/html that would
+       otherwise defeat sticky on these long portal pages. */
     .sidebar {
       width: 100%;
       min-height: auto;
-      position: static;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 30;
       border-right: none;
       border-bottom: 1px solid var(--line);
+      padding: 6px 0;
+      box-shadow: 0 6px 16px rgba(8, 10, 18, 0.06);
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      background: rgba(255, 255, 255, 0.94);
     }
-    .portal-shell, .workspace, .sidebar { height: auto; }
-    .workspace { overflow: visible; }
+    body.xm-nav-active .sidebar { top: 44px; }
+    /* Reserve space so content is not hidden behind the fixed strip. */
+    .workspace { margin-top: 58px; }
+    body.xm-nav-active .workspace { margin-top: 64px; }
+    .sidebar .brand { display: none; }
+    .nav-group {
+      display: flex;
+      flex-direction: row;
+      gap: 6px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding: 4px 10px;
+    }
+    .nav-group::-webkit-scrollbar { display: none; }
+    .nav-group-title { display: none; }
+    .nav-item {
+      flex: 0 0 auto;
+      white-space: nowrap;
+      border-left: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 13px;
+      font-size: 0.82rem;
+    }
+    .nav-item:hover,
+    .nav-item.active {
+      border-left: none;
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .workspace-topbar { position: static; }
     .workspace-topbar-inner,
     .main {
       width: calc(100% - 24px);
@@ -1074,6 +1120,7 @@ _BASE_CSS = """
     }
     .page-title-row h1 { font-size: 1.5rem; }
     .main { margin: 16px auto 28px; }
+    .section-block { scroll-margin-top: 96px; }
   }
 """
 
@@ -1631,18 +1678,47 @@ def _layout(
   function markActiveSection() {{
     var current = location.hash || (sectionLinks[0] ? sectionLinks[0].getAttribute("href") : "");
     sectionLinks.forEach(function(link) {{
-      link.classList.toggle("active", link.getAttribute("href") === current);
+      var on = link.getAttribute("href") === current;
+      link.classList.toggle("active", on);
+      if (on) {{
+        var strip = link.parentElement;
+        if (strip && strip.scrollWidth > strip.clientWidth + 4) {{
+          var left = link.offsetLeft - (strip.clientWidth - link.offsetWidth) / 2;
+          strip.scrollTo({{ left: left < 0 ? 0 : left, behavior: "smooth" }});
+        }}
+      }}
     }});
   }}
-  function scrollWorkspaceTo(target) {{
+  function workspaceScrolls(workspace) {{
+    if (!workspace) return false;
+    var oy = window.getComputedStyle(workspace).overflowY;
+    return (oy === "auto" || oy === "scroll") && workspace.scrollHeight > workspace.clientHeight + 4;
+  }}
+  function scrollToSection(target) {{
+    if (!target) return false;
     var workspace = document.querySelector(".workspace");
-    if (!workspace || !target) return false;
-    var topbar = workspace.querySelector(".workspace-topbar");
-    var topbarH = topbar ? topbar.offsetHeight : 100;
-    var delta = target.getBoundingClientRect().top - workspace.getBoundingClientRect().top;
-    var dest = workspace.scrollTop + delta - topbarH - 12;
-    if (dest < 0) dest = 0;
-    workspace.scrollTo({{ top: dest, behavior: "smooth" }});
+    if (workspaceScrolls(workspace)) {{
+      // Desktop: the .workspace column is the scroll container.
+      var topbar = workspace.querySelector(".workspace-topbar");
+      var topbarH = topbar ? topbar.offsetHeight : 100;
+      var delta = target.getBoundingClientRect().top - workspace.getBoundingClientRect().top;
+      var dest = workspace.scrollTop + delta - topbarH - 12;
+      workspace.scrollTo({{ top: dest < 0 ? 0 : dest, behavior: "smooth" }});
+      return true;
+    }}
+    // Mobile: the document scrolls; offset by the fixed global nav + pinned strip.
+    var gnav = document.getElementById("xm-nav");
+    var gnavH = gnav ? gnav.getBoundingClientRect().height : 0;
+    var sidebar = document.querySelector(".sidebar");
+    var stickyH = 0;
+    if (sidebar) {{
+      var sbPos = window.getComputedStyle(sidebar).position;
+      if (sbPos === "fixed" || sbPos === "sticky") {{
+        stickyH = sidebar.getBoundingClientRect().height;
+      }}
+    }}
+    var y = window.pageYOffset + target.getBoundingClientRect().top - gnavH - stickyH - 12;
+    window.scrollTo({{ top: y < 0 ? 0 : y, behavior: "smooth" }});
     return true;
   }}
   sectionLinks.forEach(function(link) {{
@@ -1650,10 +1726,10 @@ def _layout(
       var href = link.getAttribute("href") || "";
       if (href.charAt(0) !== "#") return;
       var target = document.getElementById(href.slice(1));
-      // Manually scroll the inner workspace so the native anchor jump never
-      // scrolls the root document (which would slide the page under the fixed
-      // global nav and misalign the topbar).
-      if (target && scrollWorkspaceTo(target)) {{
+      // Manually scroll so the native anchor jump never scrolls the root
+      // document (desktop) and so the inner-container assumption never breaks
+      // on mobile, where the document itself is the scroll container.
+      if (target && scrollToSection(target)) {{
         ev.preventDefault();
         if (history && history.replaceState) {{
           history.replaceState(null, "", location.pathname + location.search + href);
@@ -1794,6 +1870,7 @@ def render_robots_txt() -> str:
         "User-agent: *",
         "Allow: /portal/product",
         "Allow: /portal/guide",
+        "Allow: /portal/tools",
         "Allow: /portal/products",
         "Allow: /portal/invite",
         "Disallow: /portal/account",
@@ -1845,6 +1922,7 @@ def render_sitemap_xml() -> str:
 def render_llms_txt() -> str:
     product_url = _public_url("/portal/product")
     guide_url = _public_url("/portal/guide")
+    tools_url = _public_url("/portal/tools")
     products_url = _public_url("/portal/products")
     sitemap_url = _public_url("/sitemap.xml")
     return "\n".join([
@@ -1856,6 +1934,7 @@ def render_llms_txt() -> str:
         "",
         f"- Product overview: {product_url}",
         f"- User guide: {guide_url}",
+        f"- Free seller tools: {tools_url}",
         f"- Pricing and credits: {products_url}",
         f"- Sitemap: {sitemap_url}",
         "",
@@ -1869,6 +1948,7 @@ def render_llms_txt() -> str:
         "- Product opportunity discovery from broad product ideas, categories, or market questions.",
         "- Competitor, price band, review scale, demand signal, and risk analysis.",
         "- Layered reports with quick, standard, deep, and research-style workflows.",
+        "- Free instant seller tools: profit calculator, reverse pricing, listing title diagnosis, keyword dedup and expansion, bullet-point generation, restricted-word and compliance check, ACoS break-even, dimensional weight, multi-site tax-inclusive landed price, listing health score, competitor selling-point gaps, A+ copy outline, review and complaint mining, and customer-service reply templates.",
         "- Beginner-friendly prompts and help for sellers who do not yet know how to ask product research questions.",
         "",
         "## Canonical Name",
