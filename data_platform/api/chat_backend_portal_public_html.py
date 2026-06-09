@@ -1634,8 +1634,33 @@ def _layout(
       link.classList.toggle("active", link.getAttribute("href") === current);
     }});
   }}
+  function scrollWorkspaceTo(target) {{
+    var workspace = document.querySelector(".workspace");
+    if (!workspace || !target) return false;
+    var topbar = workspace.querySelector(".workspace-topbar");
+    var topbarH = topbar ? topbar.offsetHeight : 100;
+    var delta = target.getBoundingClientRect().top - workspace.getBoundingClientRect().top;
+    var dest = workspace.scrollTop + delta - topbarH - 12;
+    if (dest < 0) dest = 0;
+    workspace.scrollTo({{ top: dest, behavior: "smooth" }});
+    return true;
+  }}
   sectionLinks.forEach(function(link) {{
-    link.addEventListener("click", function() {{
+    link.addEventListener("click", function(ev) {{
+      var href = link.getAttribute("href") || "";
+      if (href.charAt(0) !== "#") return;
+      var target = document.getElementById(href.slice(1));
+      // Manually scroll the inner workspace so the native anchor jump never
+      // scrolls the root document (which would slide the page under the fixed
+      // global nav and misalign the topbar).
+      if (target && scrollWorkspaceTo(target)) {{
+        ev.preventDefault();
+        if (history && history.replaceState) {{
+          history.replaceState(null, "", location.pathname + location.search + href);
+        }} else {{
+          location.hash = href;
+        }}
+      }}
       setTimeout(markActiveSection, 0);
     }});
   }});
