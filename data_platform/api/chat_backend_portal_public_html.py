@@ -55,6 +55,14 @@ SEO_PUBLIC_PAGES: dict[str, dict[str, Any]] = {
       "priority": "0.8",
       "changefreq": "weekly",
     },
+    "tools": {
+      "path": "/portal/tools",
+      "title": "虾米选品免费卖家工具 - 利润计算、定价倒推、标题诊断、关键词与卖点生成",
+      "description": "面向跨境电商卖家的 14 个免费小工具：利润/定价/标题/关键词/五点描述/敏感词合规/ACoS 盈亏平衡/体积重/多站点含税到手价/Listing 健康度评分/竞品卖点差异提取/A+ 文案大纲/Review 差评归因/客服回复模板，10 秒出结果，可一键继续交给虾米选品智能体深挖。",
+      "keywords": ["跨境电商利润计算器", "含税到手价换算", "Listing 健康度评分", "竞品卖点差异", "A+ 文案大纲", "差评归因分析", "客服回复模板", "ACoS 盈亏平衡", "敏感词合规检查", "选品免费工具", "卖家工具集"],
+      "priority": "0.8",
+      "changefreq": "weekly",
+    },
     "products": {
       "path": "/portal/products",
       "title": "虾米选品订阅与充值 - 套餐、积分和报告计费说明",
@@ -1464,6 +1472,7 @@ def _top_nav(active: str) -> str:
         ("account", "账户管理", "/portal/account", "data-account-link"),
     ("product", "产品介绍", "/portal/product", ""),
         ("guide", "使用指南", "/portal/guide", ""),
+    ("tools", "免费工具", "/portal/tools", ""),
     ("products", "订阅与充值", "/portal/products", ""),
     ]
     html = []
@@ -1474,14 +1483,38 @@ def _top_nav(active: str) -> str:
     return "".join(html)
 
 
+_NAV_ICONS = {
+    "tool-profit": "\U0001F4B0",      # 💰
+    "tool-pricing": "\U0001F3F7\uFE0F",  # 🏷️
+    "tool-title": "\U0001F4DD",       # 📝
+    "tool-keyword": "\U0001F511",     # 🔑
+    "tool-description": "\U0001F4CB",  # 📋
+    "tool-compliance": "\U0001F6E1\uFE0F",  # 🛡️
+    "tool-acos": "\U0001F4CA",        # 📊
+    "tool-dimweight": "\U0001F4E6",   # 📦
+    "tool-landed": "\U0001F30D",      # 🌍
+    "tool-health": "\U0001FA7A",      # 🩺
+    "tool-competitor": "\U0001F19A",  # 🆚
+    "tool-aplus": "\U0001F9F1",       # 🧱
+    "tool-review": "\u2B50",          # ⭐
+    "tool-service": "\U0001F4AC",     # 💬
+    "more": "\U0001F680",             # 🚀
+}
+
+
 def _sidebar(groups: list[tuple[str, list[tuple[str, str]]]]) -> str:
+    def _item(anchor: str, label: str) -> str:
+        icon = _NAV_ICONS.get(anchor)
+        ico_html = (
+            f'<span class="nav-item-ico" aria-hidden="true" style="margin-right:7px">{icon}</span>'
+            if icon else ""
+        )
+        return f'<a class="nav-item" href="#{escape(anchor)}">{ico_html}{escape(label)}</a>'
+
     return "".join(
         '<div class="nav-group"><div class="nav-group-title">{}</div>{}</div>'.format(
             escape(group_title),
-            "".join(
-                f'<a class="nav-item" href="#{escape(anchor)}">{escape(label)}</a>'
-                for anchor, label in items
-            ),
+            "".join(_item(anchor, label) for anchor, label in items),
         )
         for group_title, items in groups
     )
@@ -2236,6 +2269,862 @@ def render_portal_guide_html(*, indexable: bool = True) -> str:
         kicker="使用指南",
         title="产品使用指南",
         subtitle="把新手最常见的上手路径、命令顺序和操作提醒整理成一页，方便你快速开始并少走弯路。",
+        sidebar_html=sidebar_html,
+        body_html=body_html,
+        description=page_meta["description"],
+        canonical_path=page_meta["path"],
+        indexable=indexable,
+    )
+
+
+_TOOLS_PAGE_CSS = """
+  .tools-hero {
+    display: grid;
+    gap: 14px;
+  }
+  .tools-hero-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .tools-trust-row {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    color: var(--muted);
+    font-size: 0.84rem;
+  }
+  .tool-card-grid {
+    display: grid;
+    gap: 18px;
+  }
+  .tool-result {
+    display: none;
+    margin-top: 16px;
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+  }
+  .tool-result.show { display: block; }
+  .tool-result-head {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .tool-metric-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .tool-metric {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 12px 14px;
+  }
+  .tool-metric-label { color: var(--muted); font-size: 0.76rem; margin-bottom: 6px; }
+  .tool-metric-value { font-size: 1.16rem; font-weight: 700; }
+  .tool-breakdown {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .tool-breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.84rem;
+    color: var(--ink);
+    border-bottom: 1px dashed var(--line);
+    padding: 6px 2px;
+  }
+  .tool-issue-list { display: grid; gap: 8px; margin: 0 0 12px; padding: 0; list-style: none; }
+  .tool-issue-list li {
+    font-size: 0.84rem;
+    line-height: 1.6;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
+  .tool-tag-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tool-tag {
+    display: inline-flex;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(220, 38, 38, 0.08);
+    color: #b91c1c;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .tool-variant {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .tool-variant-title { font-weight: 700; font-size: 0.92rem; margin-bottom: 6px; }
+  .tool-variant-meta { color: var(--muted); font-size: 0.78rem; line-height: 1.6; }
+  .tool-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+  .tool-ai-note {
+    font-size: 0.82rem;
+    color: var(--muted);
+    background: rgba(15, 118, 110, 0.08);
+    border: 1px solid rgba(15, 118, 110, 0.16);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+  }
+"""
+
+
+def render_portal_tools_html(*, indexable: bool = True) -> str:
+    page_meta = SEO_PUBLIC_PAGES["tools"]
+    body_html = '''
+      <style>''' + _TOOLS_PAGE_CSS + '''</style>
+      <section id="intro" class="section-block card">
+        <div class="tools-hero">
+          <div class="card-note" style="margin:0">给跨境电商卖家准备的免费小工具：先快速处理利润、定价和标题，再继续交给虾米选品智能体深挖。</div>
+          <div class="tools-trust-row">
+            <span>✓ 不用注册也能先用</span>
+            <span>✓ 10 秒内给出结果</span>
+            <span>✓ 利润/定价纯本地计算，可复现</span>
+          </div>
+          <div class="tools-hero-actions">
+            <a class="offer-cta" href="#tool-profit">开始试用</a>
+            <a class="ghost-button" href="/">去对话页</a>
+            <a class="ghost-button" href="/portal/guide">查看使用指南</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="tool-profit" class="section-block card" data-tool="profit">
+        <h2>利润计算器</h2>
+        <div class="card-note">快速算出毛利额、毛利率和保本价。所有计算在本地完成，可复现、零成本。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">售价</label><input class="text-field" type="number" data-field="price" placeholder="如 29.9" /></div>
+          <div class="field-group"><label class="field-label">采购成本</label><input class="text-field" type="number" data-field="cost" placeholder="如 8" /></div>
+          <div class="field-group"><label class="field-label">国内运费</label><input class="text-field" type="number" data-field="domestic_shipping" placeholder="可空" /></div>
+          <div class="field-group"><label class="field-label">头程运费</label><input class="text-field" type="number" data-field="head_shipping" placeholder="可空" /></div>
+          <div class="field-group"><label class="field-label">尾程/仓配</label><input class="text-field" type="number" data-field="last_mile" placeholder="可空" /></div>
+          <div class="field-group"><label class="field-label">平台佣金比例(%)</label><input class="text-field" type="number" data-field="commission_rate" placeholder="如 15" /></div>
+          <div class="field-group"><label class="field-label">退款损耗比例(%)</label><input class="text-field" type="number" data-field="refund_rate" placeholder="如 2" /></div>
+          <div class="field-group"><label class="field-label">广告成本占比(%)</label><input class="text-field" type="number" data-field="ad_rate" placeholder="可空" /></div>
+        </div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始计算</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-pricing" class="section-block card" data-tool="pricing">
+        <h2>定价倒推器</h2>
+        <div class="card-note">已知总成本和目标毛利率，反推建议售价。纯公式推导，给出保本、安全、目标三档价格。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">总成本</label><input class="text-field" type="number" data-field="total_cost" placeholder="如 12" /></div>
+          <div class="field-group"><label class="field-label">目标毛利率(%)</label><input class="text-field" type="number" data-field="target_margin" placeholder="如 25" /></div>
+          <div class="field-group"><label class="field-label">平台佣金比例(%)</label><input class="text-field" type="number" data-field="commission_rate" placeholder="如 15" /></div>
+          <div class="field-group"><label class="field-label">广告占比(%)</label><input class="text-field" type="number" data-field="ad_rate" placeholder="可空" /></div>
+        </div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始倒推</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-title" class="section-block card" data-tool="title">
+        <h2>标题诊断优化器</h2>
+        <div class="card-note">规则先给标题打分并指出问题，再由 AI 生成 3 个优化版本。AI 出稿用的是平台已有模型额度，对你免费。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">站点</label>
+            <select class="text-field" data-field="site">
+              <option value="amazon">Amazon</option>
+              <option value="tiktok">TikTok Shop</option>
+              <option value="temu">Temu</option>
+            </select>
+          </div>
+          <div class="field-group"><label class="field-label">品牌词（可选）</label><input class="text-field" type="text" data-field="brand" placeholder="如 Aoni" /></div>
+        </div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">商品标题</label><textarea class="text-field" data-field="title" rows="3" style="min-height:80px;padding:10px 14px" placeholder="粘贴你的商品标题"></textarea></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">核心关键词（可选，逗号分隔）</label><input class="text-field" type="text" data-field="keywords" placeholder="如 humidifier, cool mist, bedroom" /></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始诊断</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-keyword" class="section-block card" data-tool="keyword">
+        <h2>关键词去重 + 扩词</h2>
+        <div class="card-note">本地先做去重清洗（合并大小写/单复数/词序重复），再由 AI 按主题扩展长尾词。去重纯本地、可复现；扩词用平台已有额度，对你免费。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">站点</label>
+            <select class="text-field" data-field="site">
+              <option value="amazon">Amazon</option>
+              <option value="tiktok">TikTok Shop</option>
+              <option value="temu">Temu</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">关键词（逗号或换行分隔）</label><textarea class="text-field" data-field="keywords" rows="4" style="min-height:96px;padding:10px 14px" placeholder="粘贴一批关键词，如&#10;wireless earbuds&#10;Wireless Earbud&#10;bluetooth earbuds&#10;earbuds wireless"></textarea></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">去重并扩词</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-description" class="section-block card" data-tool="description">
+        <h2>五点描述生成器</h2>
+        <div class="card-note">填入商品名和已有卖点，AI 生成 5 条 Listing 卖点描述（bullet points）和一段简短商品描述。用平台已有额度，对你免费。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">站点</label>
+            <select class="text-field" data-field="site">
+              <option value="amazon">Amazon</option>
+              <option value="tiktok">TikTok Shop</option>
+              <option value="temu">Temu</option>
+            </select>
+          </div>
+          <div class="field-group"><label class="field-label">目标人群（可选）</label><input class="text-field" type="text" data-field="audience" placeholder="如 home office users" /></div>
+        </div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">商品名称</label><input class="text-field" type="text" data-field="product_name" placeholder="如 Cool Mist Humidifier 4L" /></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">已有卖点（可选，逗号或换行分隔）</label><textarea class="text-field" data-field="selling_points" rows="3" style="min-height:80px;padding:10px 14px" placeholder="如&#10;4L large capacity&#10;ultra quiet&#10;auto shut-off"></textarea></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">核心关键词（可选，逗号分隔）</label><input class="text-field" type="text" data-field="keywords" placeholder="如 humidifier, bedroom, baby" /></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">生成五点描述</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-compliance" class="section-block card" data-tool="compliance">
+        <h2>敏感词与合规检查</h2>
+        <div class="card-note">规则先扫描极限词、绝对化/医疗声明、站外导流、侵权等高风险信号，再由 AI 基于平台政策做合规审查并给改写建议。AI 用平台已有额度，对你免费。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">站点</label>
+            <select class="text-field" data-field="site">
+              <option value="amazon">Amazon</option>
+              <option value="tiktok">TikTok Shop</option>
+              <option value="temu">Temu</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">待检查文案（标题/五点/描述）</label><textarea class="text-field" data-field="text" rows="5" style="min-height:110px;padding:10px 14px" placeholder="粘贴需要检查的商品文案"></textarea></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始检查</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-acos" class="section-block card" data-tool="acos">
+        <h2>ACoS 盈亏平衡计算器</h2>
+        <div class="card-note">算出盈亏平衡 ACoS / ROAS 和保住目标净利的可承受 ACoS。纯公式计算，可复现、零成本。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">售价</label><input class="text-field" type="number" data-field="price" placeholder="如 29.9" /></div>
+          <div class="field-group"><label class="field-label">产品成本</label><input class="text-field" type="number" data-field="product_cost" placeholder="如 8" /></div>
+          <div class="field-group"><label class="field-label">FBA/履约费</label><input class="text-field" type="number" data-field="fba_fee" placeholder="如 4" /></div>
+          <div class="field-group"><label class="field-label">平台佣金比例(%)</label><input class="text-field" type="number" data-field="referral_rate" placeholder="默认 15" /></div>
+          <div class="field-group"><label class="field-label">其他成本</label><input class="text-field" type="number" data-field="other_cost" placeholder="可空" /></div>
+          <div class="field-group"><label class="field-label">目标净利率(%)</label><input class="text-field" type="number" data-field="target_margin" placeholder="如 15" /></div>
+        </div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始计算</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-dimweight" class="section-block card" data-tool="dimweight">
+        <h2>体积重 / 计费重计算器</h2>
+        <div class="card-note">按长宽高和承运商除数算体积重，取与实重的较大值作为计费重，可选填运费单价估算运费。纯公式计算、可复现。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">长(cm)</label><input class="text-field" type="number" data-field="length" placeholder="如 30" /></div>
+          <div class="field-group"><label class="field-label">宽(cm)</label><input class="text-field" type="number" data-field="width" placeholder="如 20" /></div>
+          <div class="field-group"><label class="field-label">高(cm)</label><input class="text-field" type="number" data-field="height" placeholder="如 15" /></div>
+          <div class="field-group"><label class="field-label">实际重量(kg)</label><input class="text-field" type="number" data-field="actual_weight" placeholder="如 1.2" /></div>
+          <div class="field-group"><label class="field-label">承运商</label>
+            <select class="text-field" data-field="carrier">
+              <option value="international_express">国际快递(除5000)</option>
+              <option value="air">空运(除6000)</option>
+              <option value="amazon">亚马逊(除5000)</option>
+            </select>
+          </div>
+          <div class="field-group"><label class="field-label">运费单价(每kg，可选)</label><input class="text-field" type="number" data-field="rate_per_kg" placeholder="如 45" /></div>
+        </div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始计算</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-landed" class="section-block card" data-tool="landed">
+        <h2>多站点含税到手价换算</h2>
+        <div class="card-note">按汇率折算货值，叠加关税和进口 VAT 算出含税到手成本，再按目标毛利反推建议零售价。纯公式计算、可复现。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">商品成本(源币种)</label><input class="text-field" type="number" data-field="product_cost" placeholder="如 50" /></div>
+          <div class="field-group"><label class="field-label">物流/头程</label><input class="text-field" type="number" data-field="shipping_cost" placeholder="如 8" /></div>
+          <div class="field-group"><label class="field-label">汇率(源→目标)</label><input class="text-field" type="number" data-field="exchange_rate" placeholder="如 0.14" /></div>
+          <div class="field-group"><label class="field-label">关税率(%)</label><input class="text-field" type="number" data-field="duty_rate" placeholder="如 5" /></div>
+          <div class="field-group"><label class="field-label">进口VAT(%)</label><input class="text-field" type="number" data-field="vat_rate" placeholder="如 20" /></div>
+          <div class="field-group"><label class="field-label">其他费用</label><input class="text-field" type="number" data-field="other_fee" placeholder="可空" /></div>
+          <div class="field-group"><label class="field-label">平台佣金比例(%)</label><input class="text-field" type="number" data-field="platform_fee_rate" placeholder="如 15" /></div>
+          <div class="field-group"><label class="field-label">目标毛利率(%)</label><input class="text-field" type="number" data-field="target_margin" placeholder="如 25" /></div>
+        </div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始换算</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-health" class="section-block card" data-tool="health">
+        <h2>Listing 健康度评分</h2>
+        <div class="card-note">聚合标题、五点和关键词覆盖给出综合健康分，并指出短板。复用标题诊断规则，纯本地计算、可复现。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">站点</label>
+            <select class="text-field" data-field="site">
+              <option value="amazon">Amazon</option>
+              <option value="tiktok">TikTok Shop</option>
+              <option value="temu">Temu</option>
+            </select>
+          </div>
+          <div class="field-group"><label class="field-label">品牌词（可选）</label><input class="text-field" type="text" data-field="brand" placeholder="如 Aoni" /></div>
+        </div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">商品标题</label><textarea class="text-field" data-field="title" rows="3" style="min-height:80px;padding:10px 14px" placeholder="粘贴你的商品标题"></textarea></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">五点描述（每行一条）</label><textarea class="text-field" data-field="bullets" rows="5" style="min-height:110px;padding:10px 14px" placeholder="每行一条卖点，如&#10;4L large capacity for all-day use&#10;ultra quiet under 28dB"></textarea></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">核心关键词（可选，逗号分隔）</label><input class="text-field" type="text" data-field="keywords" placeholder="如 humidifier, cool mist, bedroom" /></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始评分</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-competitor" class="section-block card" data-tool="competitor">
+        <h2>竞品标题/卖点差异提取</h2>
+        <div class="card-note">贴 2-3 个竞品 listing，规则先提共性高频词，再由 AI 找出你缺失的差异化卖点和切入机会。AI 用平台已有额度，对你免费。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">站点</label>
+            <select class="text-field" data-field="site">
+              <option value="amazon">Amazon</option>
+              <option value="tiktok">TikTok Shop</option>
+              <option value="temu">Temu</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">我方 listing（可选）</label><textarea class="text-field" data-field="my_listing" rows="3" style="min-height:80px;padding:10px 14px" placeholder="粘贴你的标题/五点（可选）"></textarea></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">竞品 listing（用空行或 --- 分隔不同竞品）</label><textarea class="text-field" data-field="competitors" rows="6" style="min-height:130px;padding:10px 14px" placeholder="竞品1 标题/五点&#10;&#10;---&#10;&#10;竞品2 标题/五点"></textarea></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">提取差异</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-aplus" class="section-block card" data-tool="aplus">
+        <h2>A+ / 详情页文案大纲生成</h2>
+        <div class="card-note">按商品和卖点生成模块化 A+ 详情页大纲（模块名/目标/文案要点/配图建议）。AI 用平台已有额度，对你免费。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">站点</label>
+            <select class="text-field" data-field="site">
+              <option value="amazon">Amazon</option>
+              <option value="tiktok">TikTok Shop</option>
+              <option value="temu">Temu</option>
+            </select>
+          </div>
+          <div class="field-group"><label class="field-label">目标人群（可选）</label><input class="text-field" type="text" data-field="audience" placeholder="如 home office users" /></div>
+        </div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">商品名称</label><input class="text-field" type="text" data-field="product_name" placeholder="如 Cool Mist Humidifier 4L" /></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">核心卖点（逗号或换行分隔）</label><textarea class="text-field" data-field="selling_points" rows="4" style="min-height:96px;padding:10px 14px" placeholder="如&#10;4L large capacity&#10;ultra quiet&#10;auto shut-off"></textarea></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">生成大纲</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-review" class="section-block card" data-tool="review">
+        <h2>Review 关键词 / 差评归因提炼</h2>
+        <div class="card-note">贴一批用户评论，规则先提高频词，再由 AI 归纳高频好评卖点和差评归因（质量/物流/描述不符）及改进建议。AI 用平台已有额度，对你免费。</div>
+        <div class="field-group"><label class="field-label">商品名称（可选）</label><input class="text-field" type="text" data-field="product_name" placeholder="如 Cool Mist Humidifier 4L" /></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">用户评论（每行一条）</label><textarea class="text-field" data-field="reviews" rows="7" style="min-height:150px;padding:10px 14px" placeholder="粘贴一批评论，每行一条"></textarea></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">提炼分析</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-service" class="section-block card" data-tool="service">
+        <h2>退货原因话术 / 客服回复模板</h2>
+        <div class="card-note">按场景生成 2 个可直接发送的英文客服回复模板，语气专业、有同理心、给明确解决方案。AI 用平台已有额度，对你免费。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">场景</label>
+            <select class="text-field" data-field="scenario">
+              <option value="damaged">商品损坏/破损</option>
+              <option value="wrong_item">发错货</option>
+              <option value="size_mismatch">尺寸/规格不符</option>
+              <option value="quality_issue">质量问题/功能故障</option>
+              <option value="shipping_delay">物流延迟/未收到</option>
+              <option value="return_refund">退货退款申请</option>
+              <option value="negative_review">差评安抚/挽回</option>
+              <option value="general">其他/通用咨询</option>
+            </select>
+          </div>
+          <div class="field-group"><label class="field-label">商品名称（可选）</label><input class="text-field" type="text" data-field="product_name" placeholder="如 Humidifier 4L" /></div>
+          <div class="field-group"><label class="field-label">语气要求（可选）</label><input class="text-field" type="text" data-field="tone" placeholder="如 friendly, apologetic" /></div>
+        </div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">补充情况（可选）</label><textarea class="text-field" data-field="detail" rows="3" style="min-height:80px;padding:10px 14px" placeholder="补充具体情况，如 customer received a cracked unit"></textarea></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">生成回复</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="more" class="section-block card">
+        <h2>想继续深挖，不止一个小工具结果？</h2>
+        <div class="card-note">虾米选品智能体可以继续帮你做关键词扩展、卖点重写、价格带判断、竞品分析和选品报告。</div>
+        <div class="tools-hero-actions">
+          <a class="offer-cta" href="/">去智能体继续分析</a>
+          <a class="ghost-button" href="/portal/guide">查看新手使用指南</a>
+        </div>
+      </section>
+
+      <script>
+      (function() {
+        var ENDPOINTS = {
+          profit: "/portal/api/public/tools/profit-calculator",
+          pricing: "/portal/api/public/tools/pricing-reverse",
+          title: "/portal/api/public/tools/title-diagnose",
+          keyword: "/portal/api/public/tools/keyword-clean",
+          description: "/portal/api/public/tools/description-generator",
+          compliance: "/portal/api/public/tools/compliance-check",
+          acos: "/portal/api/public/tools/acos-breakeven",
+          dimweight: "/portal/api/public/tools/dimensional-weight",
+          landed: "/portal/api/public/tools/landed-price",
+          health: "/portal/api/public/tools/listing-health",
+          competitor: "/portal/api/public/tools/competitor-gaps",
+          aplus: "/portal/api/public/tools/aplus-outline",
+          review: "/portal/api/public/tools/review-mining",
+          service: "/portal/api/public/tools/service-reply"
+        };
+        function homeUrl() {
+          var t = new URLSearchParams(location.search).get("t") || "";
+          return t ? ("/?t=" + encodeURIComponent(t)) : "/";
+        }
+        function esc(s) {
+          return String(s == null ? "" : s).replace(/[&<>\"]/g, function(c) {
+            return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\\"": "&quot;" })[c];
+          });
+        }
+        function fmt(n) {
+          if (n == null || isNaN(n)) return "-";
+          return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+        }
+        function collect(section) {
+          var data = {};
+          section.querySelectorAll("[data-field]").forEach(function(el) {
+            var v = el.value;
+            if (v !== "" && v != null) data[el.getAttribute("data-field")] = v;
+          });
+          return data;
+        }
+        function setStatus(section, state, msg) {
+          var el = section.querySelector("[data-role=status]");
+          if (!msg) { el.removeAttribute("data-state"); el.textContent = ""; return; }
+          el.setAttribute("data-state", state);
+          el.textContent = msg;
+        }
+        function copyText(text, btn) {
+          var done = function() {
+            var old = btn.textContent; btn.textContent = "已复制";
+            setTimeout(function() { btn.textContent = old; }, 1500);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(function() { done(); });
+          } else {
+            var ta = document.createElement("textarea"); ta.value = text;
+            document.body.appendChild(ta); ta.select();
+            try { document.execCommand("copy"); } catch (e) {}
+            document.body.removeChild(ta); done();
+          }
+        }
+        function actionsHtml() {
+          return '<div class="tool-actions">' +
+            '<button class="offer-cta" data-act="jump">继续让虾米选品智能体分析</button>' +
+            '<button class="ghost-button" data-act="copy-prompt">复制提问模板</button>' +
+            '<button class="ghost-button" data-act="copy-result">复制结果</button>' +
+            '</div>';
+        }
+        function renderProfit(d) {
+          var s = d.summary, det = d.details;
+          var html = '<div class="tool-result-head">' + esc(s.headline) + '</div>';
+          html += '<div class="tool-metric-row">' +
+            '<div class="tool-metric"><div class="tool-metric-label">毛利额</div><div class="tool-metric-value">' + fmt(s.gross_profit) + '</div></div>' +
+            '<div class="tool-metric"><div class="tool-metric-label">毛利率</div><div class="tool-metric-value">' + fmt(s.gross_margin_pct) + '%</div></div>' +
+            '<div class="tool-metric"><div class="tool-metric-label">保本价</div><div class="tool-metric-value">' + fmt(s.breakeven_price) + '</div></div>' +
+            '</div>';
+          html += '<div class="tool-breakdown">';
+          (det.cost_breakdown || []).forEach(function(it) {
+            html += '<div class="tool-breakdown-item"><span>' + esc(it.label) + '</span><span>' + fmt(it.value) + '</span></div>';
+          });
+          html += '<div class="tool-breakdown-item"><strong>总成本</strong><strong>' + fmt(det.total_cost) + '</strong></div>';
+          html += '</div>';
+          if (det.suggested_price_range) {
+            html += '<div class="card-note">建议售价区间：' + fmt(det.suggested_price_range[0]) + ' ~ ' + fmt(det.suggested_price_range[1]) + '</div>';
+          }
+          html += '<div class="card-note">' + esc(det.risk_note) + '</div>';
+          return html;
+        }
+        function renderPricing(d) {
+          var s = d.summary, det = d.details;
+          var html = '<div class="tool-result-head">' + esc(s.headline) + '</div>';
+          html += '<div class="tool-metric-row">';
+          (det.price_ladder || []).forEach(function(it) {
+            html += '<div class="tool-metric"><div class="tool-metric-label">' + esc(it.label) + '</div><div class="tool-metric-value">' + fmt(it.value) + '</div></div>';
+          });
+          html += '</div>';
+          (det.price_ladder || []).forEach(function(it) {
+            if (it.scene) html += '<div class="card-note" style="margin:2px 0">· ' + esc(it.label) + '：' + esc(it.scene) + '</div>';
+          });
+          html += '<div class="card-note">' + esc(det.risk_note) + '</div>';
+          return html;
+        }
+        function renderTitle(d) {
+          var s = d.summary, det = d.details;
+          var html = '<div class="tool-result-head">' + esc(s.headline) + '</div>';
+          html += '<div class="tool-metric-row">' +
+            '<div class="tool-metric"><div class="tool-metric-label">评分</div><div class="tool-metric-value">' + esc(s.score) + '</div></div>' +
+            '<div class="tool-metric"><div class="tool-metric-label">长度</div><div class="tool-metric-value">' + esc(s.length) + ' / ' + esc(s.length_status) + '</div></div>' +
+            '</div>';
+          if (det.issues && det.issues.length) {
+            html += '<ul class="tool-issue-list">';
+            det.issues.forEach(function(it) { html += '<li>' + esc(it) + '</li>'; });
+            html += '</ul>';
+          }
+          if (det.repeated_words && det.repeated_words.length) {
+            html += '<div class="tool-tag-row">';
+            det.repeated_words.forEach(function(w) { html += '<span class="tool-tag">重复:' + esc(w) + '</span>'; });
+            html += '</div>';
+          }
+          var ai = det.ai_variants || {};
+          if (ai.status === "ok" && ai.variants && ai.variants.length) {
+            html += '<div class="tool-result-head" style="font-size:0.96rem">AI 优化版本</div>';
+            ai.variants.forEach(function(v, i) {
+              html += '<div class="tool-variant"><div class="tool-variant-title">' + (i + 1) + '. ' + esc(v.title) + '</div>' +
+                '<div class="tool-variant-meta">适用：' + esc(v.scene || '-') + '｜保留：' + esc(v.keep || '-') + '｜强化：' + esc(v.strengthen || '-') + '</div></div>';
+            });
+          } else if (ai.note) {
+            html += '<div class="tool-ai-note">' + esc(ai.note) + '</div>';
+          }
+          return html;
+        }
+        function renderKeyword(d) {
+          var s = d.summary, det = d.details;
+          var html = '<div class="tool-result-head">' + esc(s.headline) + '</div>';
+          html += '<div class="tool-metric-row">' +
+            '<div class="tool-metric"><div class="tool-metric-label">原始输入</div><div class="tool-metric-value">' + esc(s.input_count) + '</div></div>' +
+            '<div class="tool-metric"><div class="tool-metric-label">去重后</div><div class="tool-metric-value">' + esc(s.cleaned_count) + '</div></div>' +
+            '<div class="tool-metric"><div class="tool-metric-label">去除重复</div><div class="tool-metric-value">' + esc(s.removed_count) + '</div></div>' +
+            '</div>';
+          if (det.cleaned && det.cleaned.length) {
+            html += '<div class="tool-result-head" style="font-size:0.96rem">去重后关键词</div>';
+            html += '<div class="tool-tag-row">';
+            det.cleaned.forEach(function(w) { html += '<span class="tool-tag">' + esc(w) + '</span>'; });
+            html += '</div>';
+          }
+          if (det.duplicates && det.duplicates.length) {
+            html += '<div class="tool-result-head" style="font-size:0.96rem">合并的重复项</div>';
+            html += '<ul class="tool-issue-list">';
+            det.duplicates.forEach(function(g) {
+              html += '<li>' + esc(g.kept) + ' ← ' + esc((g.dropped || []).join('、')) + '</li>';
+            });
+            html += '</ul>';
+          }
+          var ex = det.expansion || {};
+          if (ex.status === "ok" && ex.groups && ex.groups.length) {
+            html += '<div class="tool-result-head" style="font-size:0.96rem">AI 扩展关键词</div>';
+            ex.groups.forEach(function(g) {
+              html += '<div class="tool-variant"><div class="tool-variant-title">' + esc(g.theme) + '</div><div class="tool-tag-row">';
+              (g.keywords || []).forEach(function(w) { html += '<span class="tool-tag">' + esc(w) + '</span>'; });
+              html += '</div></div>';
+            });
+          } else if (ex.note) {
+            html += '<div class="tool-ai-note">' + esc(ex.note) + '</div>';
+          }
+          return html;
+        }
+        function renderDescription(d) {
+          var s = d.summary, det = d.details;
+          var html = '<div class="tool-result-head">' + esc(s.headline) + '</div>';
+          var ai = det.ai_description || {};
+          if (ai.status === "ok" && ai.bullets && ai.bullets.length) {
+            ai.bullets.forEach(function(b, i) {
+              html += '<div class="tool-variant"><div class="tool-variant-title">' + (i + 1) + '. ' + esc(b.headline || '') + '</div>' +
+                '<div class="tool-variant-meta">' + esc(b.detail || '') + '</div></div>';
+            });
+            if (ai.description) {
+              html += '<div class="tool-result-head" style="font-size:0.96rem">商品描述</div>';
+              html += '<div class="card-note">' + esc(ai.description) + '</div>';
+            }
+          } else if (ai.note) {
+            html += '<div class="tool-ai-note">' + esc(ai.note) + '</div>';
+          }
+          return html;
+        }
+        function renderLadder(d) {
+          var s = d.summary, det = d.details;
+          var html = '<div class="tool-result-head">' + esc(s.headline) + '</div>';
+          html += '<div class="tool-metric-row">';
+          (det.metric_ladder || []).forEach(function(it) {
+            html += '<div class="tool-metric"><div class="tool-metric-label">' + esc(it.label) + '</div><div class="tool-metric-value">' + (typeof it.value === 'number' ? fmt(it.value) : esc(it.value)) + '</div></div>';
+          });
+          html += '</div>';
+          (det.metric_ladder || []).forEach(function(it) {
+            if (it.scene) html += '<div class="card-note" style="margin:2px 0">\u00b7 ' + esc(it.label) + '\uff1a' + esc(it.scene) + '</div>';
+          });
+          if (det.cost_breakdown && det.cost_breakdown.length) {
+            html += '<div class="tool-breakdown">';
+            det.cost_breakdown.forEach(function(it) {
+              html += '<div class="tool-breakdown-item"><span>' + esc(it.label) + '</span><span>' + fmt(it.value) + '</span></div>';
+            });
+            if (det.unit_cost != null) html += '<div class="tool-breakdown-item"><strong>\u5355\u4ef6\u6210\u672c</strong><strong>' + fmt(det.unit_cost) + '</strong></div>';
+            html += '</div>';
+          }
+          if (det.issues && det.issues.length) {
+            html += '<ul class="tool-issue-list">';
+            det.issues.forEach(function(it) { html += '<li>' + esc(it) + '</li>'; });
+            html += '</ul>';
+          }
+          if (det.risk_note) html += '<div class="card-note">' + esc(det.risk_note) + '</div>';
+          return html;
+        }
+        function renderCompliance(d) {
+          var s = d.summary, det = d.details;
+          var html = '<div class="tool-result-head">' + esc(s.headline) + '</div>';
+          html += '<div class="tool-metric-row">' +
+            '<div class="tool-metric"><div class="tool-metric-label">\u89c4\u5219\u8bc4\u5206</div><div class="tool-metric-value">' + esc(s.rule_score) + '</div></div>' +
+            '<div class="tool-metric"><div class="tool-metric-label">\u547d\u4e2d\u7c7b\u522b</div><div class="tool-metric-value">' + esc(s.rule_hit_categories) + '</div></div>' +
+            '<div class="tool-metric"><div class="tool-metric-label">\u9ad8\u98ce\u9669</div><div class="tool-metric-value">' + esc(s.high_risk_count) + '</div></div>' +
+            '</div>';
+          html += '<div class="card-note">' + esc(s.verdict) + '</div>';
+          if (det.rule_findings && det.rule_findings.length) {
+            html += '<div class="tool-result-head" style="font-size:0.96rem">\u89c4\u5219\u547d\u4e2d</div>';
+            det.rule_findings.forEach(function(f) {
+              html += '<div class="tool-variant"><div class="tool-variant-title">[' + esc(f.severity) + '] ' + esc(f.category) + '</div>' +
+                '<div class="tool-tag-row">';
+              (f.matches || []).forEach(function(m) { html += '<span class="tool-tag">' + esc(m) + '</span>'; });
+              html += '</div><div class="tool-variant-meta">' + esc(f.hint || '') + '</div></div>';
+            });
+          }
+          var ai = det.ai_review || {};
+          if (ai.status === 'ok') {
+            if (ai.findings && ai.findings.length) {
+              html += '<div class="tool-result-head" style="font-size:0.96rem">AI \u653f\u7b56\u5ba1\u67e5</div>';
+              ai.findings.forEach(function(f) {
+                html += '<div class="tool-variant"><div class="tool-variant-title">[' + esc(f.severity) + '] ' + esc(f.category) + '</div>' +
+                  (f.snippet ? '<div class="tool-variant-meta">\u547d\u4e2d\uff1a' + esc(f.snippet) + '</div>' : '') +
+                  '<div class="tool-variant-meta">\u5efa\u8bae\uff1a' + esc(f.suggestion || '-') + '</div></div>';
+              });
+            } else {
+              html += '<div class="tool-ai-note">AI \u672a\u53d1\u73b0\u660e\u663e\u5408\u89c4\u95ee\u9898\u3002</div>';
+            }
+            if (ai.overall) html += '<div class="card-note">' + esc(ai.overall) + '</div>';
+          } else if (ai.note) {
+            html += '<div class="tool-ai-note">' + esc(ai.note) + '</div>';
+          }
+          return html;
+        }
+        function renderCompetitor(d) {
+          var s = d.summary, det = d.details, ai = det.ai || {};
+          var html = '<div class="tool-result-head">' + esc(s.headline) + '</div>';
+          if (det.rule_common && det.rule_common.length) {
+            html += '<div class="card-note" style="margin:2px 0">\u7ade\u54c1\u9ad8\u9891\u8bcd</div><div class="tool-tag-row">';
+            det.rule_common.forEach(function(t) { html += '<span class="tool-tag">' + esc(t.word) + '\u00b7' + esc(t.count) + '</span>'; });
+            html += '</div>';
+          }
+          if (ai.status === 'ok') {
+            if (ai.gaps && ai.gaps.length) {
+              html += '<div class="tool-result-head" style="font-size:0.96rem">\u5dee\u5f02\u5316\u5356\u70b9\u7f3a\u53e3</div>';
+              ai.gaps.forEach(function(g, i) {
+                html += '<div class="tool-variant"><div class="tool-variant-title">' + (i + 1) + '. ' + esc(g.point) + '</div>' +
+                  (g.suggestion ? '<div class="tool-variant-meta">\u5efa\u8bae\uff1a' + esc(g.suggestion) + '</div>' : '') + '</div>';
+              });
+            }
+            if (ai.common_claims && ai.common_claims.length) {
+              html += '<div class="tool-result-head" style="font-size:0.96rem">\u7ade\u54c1\u5171\u6027\u5356\u70b9</div><div class="tool-tag-row">';
+              ai.common_claims.forEach(function(c) { html += '<span class="tool-tag">' + esc(c) + '</span>'; });
+              html += '</div>';
+            }
+            if (ai.opportunities && ai.opportunities.length) {
+              html += '<div class="tool-result-head" style="font-size:0.96rem">\u5207\u5165\u673a\u4f1a</div><ul class="tool-issue-list">';
+              ai.opportunities.forEach(function(o) { html += '<li>' + esc(o) + '</li>'; });
+              html += '</ul>';
+            }
+            if (ai.overall) html += '<div class="card-note">' + esc(ai.overall) + '</div>';
+          } else if (ai.note) {
+            html += '<div class="tool-ai-note">' + esc(ai.note) + '</div>';
+          }
+          return html;
+        }
+        function renderAplus(d) {
+          var s = d.summary, det = d.details, ai = det.ai || {};
+          var html = '<div class="tool-result-head">' + esc(s.headline) + '</div>';
+          if (ai.status === 'ok' && ai.modules && ai.modules.length) {
+            ai.modules.forEach(function(m, i) {
+              html += '<div class="tool-variant"><div class="tool-variant-title">' + (i + 1) + '. ' + esc(m.name) + '</div>' +
+                (m.goal ? '<div class="tool-variant-meta">\u76ee\u6807\uff1a' + esc(m.goal) + '</div>' : '') +
+                (m.copy ? '<div class="tool-variant-meta">\u6587\u6848\uff1a' + esc(m.copy) + '</div>' : '') +
+                (m.image ? '<div class="tool-variant-meta">\u914d\u56fe\uff1a' + esc(m.image) + '</div>' : '') + '</div>';
+            });
+            if (ai.overall) html += '<div class="card-note">' + esc(ai.overall) + '</div>';
+          } else if (ai.note) {
+            html += '<div class="tool-ai-note">' + esc(ai.note) + '</div>';
+          }
+          return html;
+        }
+        function renderReview(d) {
+          var s = d.summary, det = d.details, ai = det.ai || {};
+          var html = '<div class="tool-result-head">' + esc(s.headline) + '</div>';
+          if (det.rule_keywords && det.rule_keywords.length) {
+            html += '<div class="card-note" style="margin:2px 0">\u9ad8\u9891\u8bcd</div><div class="tool-tag-row">';
+            det.rule_keywords.forEach(function(t) { html += '<span class="tool-tag">' + esc(t.word) + '\u00b7' + esc(t.count) + '</span>'; });
+            html += '</div>';
+          }
+          if (ai.status === 'ok') {
+            if (ai.praises && ai.praises.length) {
+              html += '<div class="tool-result-head" style="font-size:0.96rem">\u9ad8\u9891\u597d\u8bc4\u5356\u70b9</div>';
+              ai.praises.forEach(function(p) {
+                html += '<div class="tool-variant"><div class="tool-variant-title">' + esc(p.keyword) + '</div>' +
+                  (p.note ? '<div class="tool-variant-meta">' + esc(p.note) + '</div>' : '') + '</div>';
+              });
+            }
+            if (ai.complaints && ai.complaints.length) {
+              html += '<div class="tool-result-head" style="font-size:0.96rem">\u5dee\u8bc4\u5f52\u56e0</div>';
+              ai.complaints.forEach(function(c) {
+                html += '<div class="tool-variant"><div class="tool-variant-title">[' + esc(c.severity) + '] ' + esc(c.issue) + '</div>' +
+                  (c.suggestion ? '<div class="tool-variant-meta">\u5efa\u8bae\uff1a' + esc(c.suggestion) + '</div>' : '') + '</div>';
+              });
+            }
+            if (ai.overall) html += '<div class="card-note">' + esc(ai.overall) + '</div>';
+          } else if (ai.note) {
+            html += '<div class="tool-ai-note">' + esc(ai.note) + '</div>';
+          }
+          return html;
+        }
+        function renderService(d) {
+          var s = d.summary, det = d.details, ai = det.ai || {};
+          var html = '<div class="tool-result-head">' + esc(s.headline) + '</div>';
+          if (ai.status === 'ok' && ai.replies && ai.replies.length) {
+            ai.replies.forEach(function(r, i) {
+              html += '<div class="tool-variant"><div class="tool-variant-title">' + (i + 1) + '. ' + esc(r.scene || ('\u56de\u590d' + (i + 1))) + '</div>' +
+                (r.subject ? '<div class="tool-variant-meta">Subject\uff1a' + esc(r.subject) + '</div>' : '') +
+                '<div class="tool-variant-meta" style="white-space:pre-wrap">' + esc(r.text) + '</div></div>';
+            });
+            if (ai.tips) html += '<div class="card-note">' + esc(ai.tips) + '</div>';
+          } else if (ai.note) {
+            html += '<div class="tool-ai-note">' + esc(ai.note) + '</div>';
+          }
+          return html;
+        }
+        var RENDERERS = { profit: renderProfit, pricing: renderPricing, title: renderTitle, keyword: renderKeyword, description: renderDescription, compliance: renderCompliance, acos: renderLadder, dimweight: renderLadder, landed: renderLadder, health: renderLadder, competitor: renderCompetitor, aplus: renderAplus, review: renderReview, service: renderService };
+        function bindResultActions(section, data, resultText) {
+          var box = section.querySelector("[data-role=result]");
+          box.querySelectorAll("[data-act]").forEach(function(btn) {
+            btn.addEventListener("click", function() {
+              var act = btn.getAttribute("data-act");
+              if (act === "jump") {
+                copyText(data.prompt_template || "", btn);
+                setTimeout(function() { location.href = homeUrl(); }, 250);
+              } else if (act === "copy-prompt") {
+                copyText(data.prompt_template || "", btn);
+              } else if (act === "copy-result") {
+                copyText(resultText, btn);
+              }
+            });
+          });
+        }
+        function plainResult(tool, data) {
+          var lines = [];
+          if (data.summary && data.summary.headline) lines.push(data.summary.headline);
+          if (tool === "title" && data.details && data.details.ai_variants && data.details.ai_variants.variants) {
+            data.details.ai_variants.variants.forEach(function(v, i) { lines.push((i + 1) + ". " + v.title); });
+          }
+          if (tool === "keyword" && data.details) {
+            if (data.details.cleaned) lines.push("\u53bb\u91cd\u540e: " + data.details.cleaned.join(", "));
+            var ex = data.details.expansion || {};
+            if (ex.groups) ex.groups.forEach(function(g) { lines.push(g.theme + ": " + (g.keywords || []).join(", ")); });
+          }
+          if (tool === "description" && data.details && data.details.ai_description && data.details.ai_description.bullets) {
+            data.details.ai_description.bullets.forEach(function(b, i) { lines.push((i + 1) + ". " + (b.headline ? b.headline + " - " : "") + (b.detail || "")); });
+            if (data.details.ai_description.description) lines.push(data.details.ai_description.description);
+          }
+          if (tool === "compliance" && data.details) {
+            (data.details.rule_findings || []).forEach(function(f) { lines.push("[" + f.severity + "] " + f.category + ": " + (f.matches || []).join(", ")); });
+            var air = data.details.ai_review || {};
+            (air.findings || []).forEach(function(f) { lines.push("[" + f.severity + "] " + f.category + " - " + (f.suggestion || "")); });
+          }
+          if ((tool === "acos" || tool === "dimweight" || tool === "landed" || tool === "health") && data.details && data.details.metric_ladder) {
+            data.details.metric_ladder.forEach(function(it) { lines.push(it.label + ": " + it.value); });
+            (data.details.issues || []).forEach(function(it) { lines.push("- " + it); });
+          }
+          if (tool === "competitor" && data.details) {
+            var cai = data.details.ai || {};
+            (cai.gaps || []).forEach(function(g) { lines.push("\u7f3a\u53e3: " + g.point + (g.suggestion ? " -> " + g.suggestion : "")); });
+            if (cai.opportunities) cai.opportunities.forEach(function(o) { lines.push("\u673a\u4f1a: " + o); });
+          }
+          if (tool === "aplus" && data.details && data.details.ai && data.details.ai.modules) {
+            data.details.ai.modules.forEach(function(m, i) { lines.push((i + 1) + ". " + m.name + (m.copy ? " - " + m.copy : "")); });
+          }
+          if (tool === "review" && data.details && data.details.ai) {
+            (data.details.ai.praises || []).forEach(function(p) { lines.push("\u597d\u8bc4: " + p.keyword); });
+            (data.details.ai.complaints || []).forEach(function(c) { lines.push("[" + c.severity + "] " + c.issue + (c.suggestion ? " -> " + c.suggestion : "")); });
+          }
+          if (tool === "service" && data.details && data.details.ai && data.details.ai.replies) {
+            data.details.ai.replies.forEach(function(r, i) { lines.push((i + 1) + ". " + (r.subject ? r.subject + "\\n" : "") + r.text); });
+          }
+          return lines.join("\\n");
+        }
+        document.querySelectorAll("section[data-tool]").forEach(function(section) {
+          var tool = section.getAttribute("data-tool");
+          var btn = section.querySelector("[data-action=submit]");
+          btn.addEventListener("click", function() {
+            setStatus(section, "info", "计算中…");
+            var box = section.querySelector("[data-role=result]");
+            box.classList.remove("show");
+            fetch(ENDPOINTS[tool], {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(collect(section))
+            }).then(function(r) {
+              return r.json().then(function(j) { return { ok: r.ok, body: j }; });
+            }).then(function(res) {
+              if (!res.ok || !res.body || !res.body.success) {
+                var msg = (res.body && res.body.message) || "请求失败，请检查输入";
+                setStatus(section, "error", msg);
+                return;
+              }
+              setStatus(section, "", "");
+              var data = res.body.data;
+              var html = RENDERERS[tool](data) + actionsHtml();
+              box.innerHTML = html;
+              box.classList.add("show");
+              bindResultActions(section, data, plainResult(tool, data));
+            }).catch(function() {
+              setStatus(section, "error", "网络异常，请稍后重试");
+            });
+          });
+        });
+      })();
+      </script>
+    '''
+
+    sidebar_html = _sidebar([
+        ("免费工具", [
+            ("tool-profit", "利润计算器"),
+            ("tool-pricing", "定价倒推器"),
+            ("tool-title", "标题诊断优化器"),
+            ("tool-keyword", "关键词去重+扩词"),
+            ("tool-description", "五点描述生成器"),
+            ("tool-compliance", "敏感词与合规检查"),
+            ("tool-acos", "ACoS 盈亏平衡"),
+            ("tool-dimweight", "体积重计算器"),
+            ("tool-landed", "含税到手价换算"),
+            ("tool-health", "Listing 健康度评分"),
+            ("tool-competitor", "竞品卖点差异提取"),
+            ("tool-aplus", "A+ 文案大纲生成"),
+            ("tool-review", "Review 关键词归因"),
+            ("tool-service", "客服回复模板"),
+            ("more", "继续深挖"),
+        ]),
+    ])
+    return _layout(
+        active="tools",
+        kicker="免费工具",
+        title="免费卖家工具",
+        subtitle="利润/定价/标题/关键词/合规/ACoS/含税到手价/Listing 健康度/竞品差异/A+ 大纲/评论归因/客服回复等 14 个高频小工具，10 秒出结果，再一键继续交给虾米选品智能体深挖。",
         sidebar_html=sidebar_html,
         body_html=body_html,
         description=page_meta["description"],

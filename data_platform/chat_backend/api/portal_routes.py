@@ -44,6 +44,23 @@ from data_platform.chat_backend.domains.portal.service import (
     _require_portal_user,
 )
 from data_platform.chat_backend.domains.admin.service import _build_user_account_overview
+from data_platform.chat_backend.domains.tools.service import (
+    ToolInputError,
+    check_compliance,
+    clean_and_expand_keywords,
+    compute_acos_breakeven,
+    compute_dimensional_weight,
+    compute_landed_price,
+    compute_pricing_reverse,
+    compute_profit_calculator,
+    diagnose_title,
+    extract_competitor_gaps,
+    generate_aplus_outline,
+    generate_description,
+    generate_service_reply,
+    mine_reviews,
+    score_listing_health,
+)
 from data_platform.chat_backend.domains.billing.service import (
     _build_billing_catalog,
     _build_payment_order_snapshot,
@@ -121,6 +138,7 @@ from data_platform.api.chat_backend_portal_public_html import (
     render_portal_checkout_html,
     render_portal_product_html,
     render_portal_guide_html,
+    render_portal_tools_html,
     render_portal_email_verification_result_html,
     render_portal_invite_html,
     render_portal_password_reset_html,
@@ -378,6 +396,16 @@ def _request_client_ip(request: Request) -> str:
     if request.client and request.client.host:
         return str(request.client.host).strip()
     return "unknown"
+
+
+async def _read_tool_payload(request: Request) -> dict[str, Any]:
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="请求体需要是合法 JSON")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="请求体需要是 JSON 对象")
+    return payload
 
 
 def _build_portal_guard_response(user_id: str, email: str, name: str) -> Response:
@@ -868,6 +896,154 @@ def portal_guide_page(request: Request) -> HTMLResponse:
         render_portal_guide_html(indexable=_public_page_is_indexable(request)),
         headers=_public_page_cache_headers(request),
     )
+
+
+@router.get("/portal/tools")
+def portal_tools_page(request: Request) -> HTMLResponse:
+    return HTMLResponse(
+        render_portal_tools_html(indexable=_public_page_is_indexable(request)),
+        headers=_public_page_cache_headers(request),
+    )
+
+
+@router.post("/portal/api/public/tools/profit-calculator")
+async def portal_tools_profit_calculator(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = compute_profit_calculator(payload)
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/profit-calculator", result, "profit calculated")
+
+
+@router.post("/portal/api/public/tools/pricing-reverse")
+async def portal_tools_pricing_reverse(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = compute_pricing_reverse(payload)
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/pricing-reverse", result, "pricing computed")
+
+
+@router.post("/portal/api/public/tools/title-diagnose")
+async def portal_tools_title_diagnose(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = diagnose_title(payload, client_ip=_request_client_ip(request))
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/title-diagnose", result, "title diagnosed")
+
+
+@router.post("/portal/api/public/tools/keyword-clean")
+async def portal_tools_keyword_clean(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = clean_and_expand_keywords(payload, client_ip=_request_client_ip(request))
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/keyword-clean", result, "keywords cleaned")
+
+
+@router.post("/portal/api/public/tools/description-generator")
+async def portal_tools_description_generator(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = generate_description(payload, client_ip=_request_client_ip(request))
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/description-generator", result, "description generated")
+
+
+@router.post("/portal/api/public/tools/compliance-check")
+async def portal_tools_compliance_check(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = check_compliance(payload, client_ip=_request_client_ip(request))
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/compliance-check", result, "compliance checked")
+
+
+@router.post("/portal/api/public/tools/acos-breakeven")
+async def portal_tools_acos_breakeven(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = compute_acos_breakeven(payload)
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/acos-breakeven", result, "acos computed")
+
+
+@router.post("/portal/api/public/tools/dimensional-weight")
+async def portal_tools_dimensional_weight(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = compute_dimensional_weight(payload)
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/dimensional-weight", result, "weight computed")
+
+
+@router.post("/portal/api/public/tools/landed-price")
+async def portal_tools_landed_price(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = compute_landed_price(payload)
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/landed-price", result, "landed price computed")
+
+
+@router.post("/portal/api/public/tools/listing-health")
+async def portal_tools_listing_health(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = score_listing_health(payload)
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/listing-health", result, "listing scored")
+
+
+@router.post("/portal/api/public/tools/competitor-gaps")
+async def portal_tools_competitor_gaps(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = extract_competitor_gaps(payload, client_ip=_request_client_ip(request))
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/competitor-gaps", result, "competitor analyzed")
+
+
+@router.post("/portal/api/public/tools/aplus-outline")
+async def portal_tools_aplus_outline(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = generate_aplus_outline(payload, client_ip=_request_client_ip(request))
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/aplus-outline", result, "outline generated")
+
+
+@router.post("/portal/api/public/tools/review-mining")
+async def portal_tools_review_mining(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = mine_reviews(payload, client_ip=_request_client_ip(request))
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/review-mining", result, "reviews mined")
+
+
+@router.post("/portal/api/public/tools/service-reply")
+async def portal_tools_service_reply(request: Request) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    try:
+        result = generate_service_reply(payload, client_ip=_request_client_ip(request))
+    except ToolInputError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _success_response("/portal/api/public/tools/service-reply", result, "reply generated")
 
 
 @router.get("/portal/invite")
