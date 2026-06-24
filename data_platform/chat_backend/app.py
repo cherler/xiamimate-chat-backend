@@ -29,6 +29,7 @@ from data_platform.chat_backend.api.public_routes import router as public_router
 from data_platform.chat_backend.api.internal.router import router as internal_router
 from data_platform.chat_backend.api.admin_routes import router as admin_router
 from data_platform.chat_backend.api.portal.router import router as portal_router
+from data_platform.chat_backend.infra.settings import WORKSPACE_FEATURE_ENABLED
 
 _ACCESS_LOGGER = logging.getLogger("xiamimate.chat_backend.request_timing")
 
@@ -96,3 +97,9 @@ app.include_router(public_router)
 app.include_router(internal_router)
 app.include_router(admin_router)
 app.include_router(portal_router)
+
+# 商品工作台路由仅在特性开关开启时挂载；关闭时等同不存在，不影响现有功能。
+if WORKSPACE_FEATURE_ENABLED:
+    from data_platform.chat_backend.api.workspace_routes import router as workspace_router
+
+    app.include_router(workspace_router)

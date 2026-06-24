@@ -107,6 +107,11 @@ DEVICE_SESSION_COOKIE_NAME = os.environ.get("CHAT_BACKEND_DEVICE_SESSION_COOKIE_
 DEVICE_SESSION_TTL_SECONDS = max(3600, int(os.environ.get("CHAT_BACKEND_DEVICE_SESSION_TTL_SECONDS", "2592000")))
 DEVICE_SESSION_ELEVATION_TTL_SECONDS = max(300, int(os.environ.get("CHAT_BACKEND_DEVICE_SESSION_ELEVATION_TTL_SECONDS", "900")))
 
+# 商品工作台（workspace）特性开关：默认关闭，关闭时路由不挂载、行为逐字节回退到现状。
+WORKSPACE_FEATURE_ENABLED = os.environ.get("CHAT_BACKEND_WORKSPACE_FEATURE_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+# 证据图（SVG）渲染开关：独立于工作台主开关，便于灰度气泡内证据图。
+WORKSPACE_EVIDENCE_ENABLED = os.environ.get("CHAT_BACKEND_WORKSPACE_EVIDENCE_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+
 _default_openwebui_db_path = PROJECT_ROOT.parent / "xiamimate-openwebui-bridge" / "data" / "open-webui" / "webui.db"
 OPENWEBUI_DB_PATH = os.environ.get("CHAT_BACKEND_OPENWEBUI_DB_PATH", "").strip() or (
     str(_default_openwebui_db_path) if _default_openwebui_db_path.exists() else ""

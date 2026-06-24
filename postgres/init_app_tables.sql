@@ -612,3 +612,73 @@ CREATE INDEX IF NOT EXISTS idx_user_saved_segment_created ON app.user_saved_segm
 CREATE INDEX IF NOT EXISTS idx_idempotency_request_created ON app.idempotency_request(created_at DESC);
 -- <<< END migrations/app/020_app_indexes.sql
 
+-- >>> BEGIN migrations/app/030_workspace_tables.sql
+-- 商品工作台（workspace）：以「一个用户在追的一个品」为主对象。
+-- 纯增量、幂等；与现有逻辑解耦，受 WORKSPACE_FEATURE_ENABLED 开关控制是否挂载路由。
+-- source_run_id 为对 app.analysis_run 的弱引用（不建外键），避免会话生命周期把工作台级联删掉。
+
+CREATE TABLE IF NOT EXISTS app.workspace (
+    workspace_id      TEXT PRIMARY KEY,
+    user_id           TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    theme_key         TEXT NOT NULL,
+    title             TEXT NOT NULL,
+    source_run_id     TEXT,
+    brief_json        JSONB NOT NULL DEFAULT '{}'::JSONB,
+    evidence_json     JSONB NOT NULL DEFAULT '{}'::JSONB,
+    status            TEXT NOT NULL DEFAULT 'active',
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_user
+    ON app.workspace(user_id, status, updated_at DESC);
+-- 同一用户同一主题去重：一个品一个工作台
+CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_user_theme
+    ON app.workspace(user_id, theme_key) WHERE status = 'active';
+
+CREATE TABLE IF NOT EXISTS app.workspace_asset (
+    asset_id          TEXT PRIMARY KEY,
+    workspace_id      TEXT NOT NULL REFERENCES app.workspace(workspace_id) ON DELETE CASCADE,
+    asset_type        TEXT NOT NULL,
+    title             TEXT,
+    content_json      JSONB NOT NULL DEFAULT '{}'::JSONB,
+    status            TEXT NOT NULL DEFAULT 'ready',
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_asset_workspace
+    ON app.workspace_asset(workspace_id, asset_type, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS app.workspace_watch (
+    workspace_id        TEXT PRIMARY KEY REFERENCES app.workspace(workspace_id) ON DELETE CASCADE,
+    user_id             TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    watch_enabled       BOOLEAN NOT NULL DEFAULT TRUE,
+    watch_config_json   JSONB NOT NULL DEFAULT '{}'::JSONB,
+    last_scanned_at     TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_watch_user
+    ON app.workspace_watch(user_id, watch_enabled, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS app.workspace_alert (
+    alert_id          TEXT PRIMARY KEY,
+    workspace_id      TEXT NOT NULL REFERENCES app.workspace(workspace_id) ON DELETE CASCADE,
+    user_id           TEXT NOT NULL REFERENCES app.app_user(user_id) ON DELETE CASCADE,
+    alert_kind        TEXT NOT NULL,
+    severity          TEXT NOT NULL DEFAULT 'info',
+    title             TEXT NOT NULL,
+    body              TEXT NOT NULL DEFAULT '',
+    payload_json      JSONB NOT NULL DEFAULT '{}'::JSONB,
+    read_at           TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_workspace_alert_user_created
+    ON app.workspace_alert(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workspace_alert_workspace_created
+    ON app.workspace_alert(workspace_id, created_at DESC);
+-- <<< END migrations/app/030_workspace_tables.sql
+
