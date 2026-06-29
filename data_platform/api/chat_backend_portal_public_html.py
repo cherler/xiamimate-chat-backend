@@ -20,20 +20,22 @@ from data_platform.chat_backend.infra.settings import (
 
 
 _SITE_NAME = "虾米选品"
-_SITE_TAGLINE = "面向跨境电商卖家的 AI 选品与市场调研工作台。"
+_SITE_TAGLINE = "先排雷，再选品。"
 _CORE_KEYWORDS = [
   "虾米选品",
   "XiaMimate",
   "跨境电商选品",
-  "选品智能体",
-  "AI选品工具",
-  "跨境电商AI工具",
+  "商品方向排雷",
+  "Keepa 数据中文解读",
+  "新手选品体检",
+  "选品风险排查",
   "Amazon选品",
   "TikTok Shop选品",
   "Temu选品",
-  "商品机会发现",
+  "ASIN分析",
   "竞品分析",
   "价格带分析",
+  "评论壁垒分析",
   "选品报告",
   "市场调研工具",
 ]
@@ -41,24 +43,24 @@ _CORE_KEYWORDS = [
 SEO_PUBLIC_PAGES: dict[str, dict[str, Any]] = {
     "product": {
       "path": "/portal/product",
-      "title": "虾米选品 - 跨境电商选品智能体与 AI 选品工具",
-      "description": "虾米选品是面向跨境电商卖家的选品智能体和 AI 选品工具，结合商品数据、趋势信号、平台知识库和联网搜索，帮助判断品类机会、竞争风险和下一步动作。",
+      "title": "虾米选品 - 先排雷，再选品",
+      "description": "虾米选品输入商品词或 ASIN，先看竞争、趋势、价格带、评论壁垒和风险，帮新手卖家低成本判断一个商品方向能不能继续看。",
       "keywords": _CORE_KEYWORDS,
       "priority": "1.0",
       "changefreq": "weekly",
     },
     "guide": {
       "path": "/portal/guide",
-      "title": "虾米选品使用指南 - 新手命令与选品分析流程",
-      "description": "查看虾米选品的新手使用路径、常用命令、选品报告模式和排查建议，快速完成第一次跨境电商选品分析。",
-      "keywords": ["虾米选品使用指南", "跨境电商选品流程", "选品智能体提示词", "AI选品命令", "选品报告教程"],
+      "title": "虾米选品使用指南 - 新手选品体检与排雷流程",
+      "description": "查看虾米选品的新手使用路径、常用命令、排雷报告模式和风险排查建议，快速完成第一次商品方向体检。",
+      "keywords": ["虾米选品使用指南", "跨境电商选品流程", "新手选品体检", "商品方向排雷", "选品报告教程"],
       "priority": "0.8",
       "changefreq": "weekly",
     },
     "tools": {
       "path": "/portal/tools",
       "title": "虾米选品免费卖家工具 - 利润计算、定价倒推、标题诊断、关键词与卖点生成",
-      "description": "面向跨境电商卖家的 14 个免费小工具：利润/定价/标题/关键词/五点描述/敏感词合规/ACoS 盈亏平衡/体积重/多站点含税到手价/Listing 健康度评分/竞品卖点差异提取/A+ 文案大纲/Review 差评归因/客服回复模板，10 秒出结果，可一键继续交给虾米选品智能体深挖。",
+      "description": "面向跨境电商卖家的 14 个免费小工具：利润/定价/标题/关键词/五点描述/敏感词合规/ACoS 盈亏平衡/体积重/多站点含税到手价/Listing 健康度评分/竞品卖点差异提取/A+ 文案大纲/Review 差评归因/客服回复模板，10 秒出结果，可一键继续做商品方向排雷。",
       "keywords": ["跨境电商利润计算器", "含税到手价换算", "Listing 健康度评分", "竞品卖点差异", "A+ 文案大纲", "差评归因分析", "客服回复模板", "ACoS 盈亏平衡", "敏感词合规检查", "选品免费工具", "卖家工具集"],
       "priority": "0.8",
       "changefreq": "weekly",
@@ -67,15 +69,15 @@ SEO_PUBLIC_PAGES: dict[str, dict[str, Any]] = {
       "path": "/portal/products",
       "title": "虾米选品订阅与充值 - 套餐、积分和报告计费说明",
       "description": "了解虾米选品的订阅套餐、充值包、积分消费方式和报告计费规则，适合持续进行跨境电商选品分析的卖家。",
-      "keywords": ["虾米选品价格", "AI选品工具套餐", "跨境电商选品工具价格", "选品报告计费", "虾米选品积分"],
+      "keywords": ["虾米选品价格", "商品方向排雷套餐", "跨境电商选品工具价格", "选品报告计费", "虾米选品积分"],
       "priority": "0.7",
       "changefreq": "weekly",
     },
     "invite": {
       "path": "/portal/invite",
       "title": "虾米选品邀请注册 - 开始使用跨境电商选品工具",
-      "description": "通过邀请链接注册虾米选品，体验跨境电商选品分析、商品机会发现、竞品研究和智能报告能力。",
-      "keywords": ["虾米选品注册", "虾米选品邀请", "跨境电商选品工具注册", "选品智能体注册"],
+      "description": "通过邀请链接注册虾米选品，体验商品方向排雷、Keepa 数据中文解读、新手选品体检和竞品风险分析。",
+      "keywords": ["虾米选品注册", "虾米选品邀请", "跨境电商选品工具注册", "商品方向排雷注册"],
       "priority": "0.4",
       "changefreq": "monthly",
       "sitemap": False,
@@ -1752,51 +1754,51 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
     page_meta = SEO_PUBLIC_PAGES["product"]
     body_html = '''
       <section id="overview" class="section-block card">
-        <h2>跨境电商选品智能体，从模糊想法到可验证决策</h2>
-        <div class="card-note">虾米选品是面向跨境电商卖家的选品智能体、AI 选品工具与市场调研工作台。它把商品数据、趋势信号、平台知识库、联网搜索和选品报告编排放在同一个入口里，帮助你判断一个商品方向是否值得继续投入。</div>
-        <div class="tip-banner">适合 Amazon、TikTok Shop、Temu 等跨境电商场景中的新品调研、机会发现、竞品分析、价格带判断和风险排查。</div>
+        <h2>虾米选品：先排雷，再选品。</h2>
+        <div class="card-note">虾米选品｜先排雷，再选品。输入商品词/ASIN，先看竞争、趋势、价格带、评论壁垒和风险，帮你低成本判断这个方向能不能继续看。</div>
+        <div class="tip-banner">主打商品方向排雷、Keepa 数据中文解读和新手选品体检，先帮你少做明显错误的品。</div>
         <div style="height:18px"></div>
         <div class="mini-kpi-row">
-          <div class="mini-kpi"><div class="mini-kpi-value">机会发现</div><div class="mini-kpi-label">从宽泛商品词拆出候选方向</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-value">竞品分析</div><div class="mini-kpi-label">结合价格、评论、销量和竞争密度</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-value">报告决策</div><div class="mini-kpi-label">输出结论、证据、风险和动作建议</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">商品方向排雷</div><div class="mini-kpi-label">先判断是否值得继续看</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">Keepa 中文解读</div><div class="mini-kpi-label">把数据翻成能行动的话</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">新手选品体检</div><div class="mini-kpi-label">少踩竞争、价格和评论坑</div></div>
         </div>
       </section>
       <section id="who" class="section-block card">
         <h2>适合谁使用</h2>
         <div class="notice-grid">
-          <div class="notice-card accent"><h3 class="notice-title">新手卖家</h3><p class="notice-desc">不知道怎么提问、怎么筛品、怎么判断一个方向是否值得做时，可以先用 /help 和 /report quick 建立第一轮判断。</p></div>
-          <div class="notice-card"><h3 class="notice-title">有候选方向的卖家</h3><p class="notice-desc">已经有商品词或类目方向时，可以通过候选池、趋势、竞品和价格带分析判断是否继续投入。</p></div>
-          <div class="notice-card"><h3 class="notice-title">需要复盘决策的团队</h3><p class="notice-desc">把市场机会、风险、证据和后续动作整理成可回看的报告，减少只靠经验拍脑袋的选品过程。</p></div>
+          <div class="notice-card accent"><h3 class="notice-title">新手卖家</h3><p class="notice-desc">手里有商品词但不知道能不能做，先用 quick 体检看竞争、趋势、价格带和评论壁垒。</p></div>
+          <div class="notice-card"><h3 class="notice-title">看到某个 ASIN 的卖家</h3><p class="notice-desc">想看 Keepa 数据但不想啃英文图表时，先让虾米选品翻译成风险、证据和下一步判断。</p></div>
+          <div class="notice-card"><h3 class="notice-title">预算有限的小团队</h3><p class="notice-desc">先用低成本报告排掉明显不适合的品，再把时间和预算留给更值得验证的方向。</p></div>
         </div>
       </section>
       <section id="capabilities" class="section-block card">
         <h2>核心能力</h2>
         <div class="notice-grid">
-          <div class="notice-card accent"><h3 class="notice-title">商品机会发现</h3><p class="notice-desc">从模糊商品词、类目或平台方向出发，找到更适合继续分析的候选产品和细分机会。</p></div>
-          <div class="notice-card"><h3 class="notice-title">趋势与市场验证</h3><p class="notice-desc">结合趋势、商品池、外部搜索和平台知识判断需求是否真实、是否季节性明显、是否已经过热。</p></div>
-          <div class="notice-card"><h3 class="notice-title">竞品与价格带分析</h3><p class="notice-desc">围绕头部商品、评论规模、价格区间、销量表现和差异化空间，判断进入难度和目标价位。</p></div>
-          <div class="notice-card"><h3 class="notice-title">风险识别</h3><p class="notice-desc">关注合规、侵权、履约、平台规则、过度竞争和供应链不确定性，避免只看机会不看风险。</p></div>
-          <div class="notice-card"><h3 class="notice-title">分层报告</h3><p class="notice-desc">支持 quick、standard、deep、research 等不同深度，先快速筛选，再对高价值方向做深入研究。</p></div>
-          <div class="notice-card"><h3 class="notice-title">智能客服与知识库</h3><p class="notice-desc">围绕产品使用、命令写法、套餐计费和跨境电商方法论提供可检索的帮助入口。</p></div>
+          <div class="notice-card accent"><h3 class="notice-title">商品方向排雷</h3><p class="notice-desc">输入商品词或 ASIN，先判断样本够不够、竞争是否过热、有没有明显风险。</p></div>
+          <div class="notice-card"><h3 class="notice-title">Keepa 数据中文解读</h3><p class="notice-desc">把价格、BSR、评论、评分、类目和历史波动翻译成新手能看懂的判断。</p></div>
+          <div class="notice-card"><h3 class="notice-title">竞争与评论壁垒</h3><p class="notice-desc">看头部 ASIN 是否评论太厚、品牌太强、价格太卷，避免一上来就撞进硬仗。</p></div>
+          <div class="notice-card"><h3 class="notice-title">趋势与价格带体检</h3><p class="notice-desc">检查趋势是否下滑、季节性是否明显、目标价格带是否还有利润和差异化空间。</p></div>
+          <div class="notice-card"><h3 class="notice-title">低成本先判断</h3><p class="notice-desc">quick 先给方向性结论，不急着做长报告；值得继续看时再升级 standard 或 deep。</p></div>
+          <div class="notice-card"><h3 class="notice-title">风险边界提醒</h3><p class="notice-desc">把数据不足、平台差异、合规、侵权和履约风险说清楚，不把不确定包装成确定机会。</p></div>
         </div>
       </section>
       <section id="workflow" class="section-block card">
         <h2>一次典型选品分析流程</h2>
         <div class="timeline-list">
-          <div class="timeline-item"><div class="timeline-title">1. 用 /help 获取可复制提示词</div><div class="timeline-desc">第一次使用时先拿系统整理好的问法，避免因为问题太宽导致结果发散。</div></div>
-          <div class="timeline-item"><div class="timeline-title">2. 用 /tool 或 /report quick 做第一轮判断</div><div class="timeline-desc">先验证商品池、趋势、竞争和风险信号，快速筛掉明显不适合继续投入的方向。</div></div>
-          <div class="timeline-item"><div class="timeline-title">3. 对值得看的方向升级为 /report standard</div><div class="timeline-desc">围绕市场吸引力、竞争结构、价格带、差异化机会和下一步动作形成完整报告。</div></div>
-          <div class="timeline-item"><div class="timeline-title">4. 用 /web 补充最新外部信息</div><div class="timeline-desc">当问题依赖平台政策、近期趋势或行业新闻时，用联网搜索补证。</div></div>
-          <div class="timeline-item"><div class="timeline-title">5. 回到账户页查看积分和使用记录</div><div class="timeline-desc">分析完成后复盘消耗、余额和扣减来源，决定是否继续深挖或补充积分。</div></div>
+          <div class="timeline-item"><div class="timeline-title">1. 输入商品词或 ASIN</div><div class="timeline-desc">比如 humidifier、dog seat cover，或直接粘贴一个 Amazon ASIN。</div></div>
+          <div class="timeline-item"><div class="timeline-title">2. 先做 quick 排雷</div><div class="timeline-desc">先看竞争、趋势、价格带、评论壁垒和数据覆盖，判断有没有明显不能继续看的理由。</div></div>
+          <div class="timeline-item"><div class="timeline-title">3. 读懂 Keepa 和竞品信号</div><div class="timeline-desc">把价格历史、BSR、评论增长、评分和头部 ASIN 情况转成中文结论。</div></div>
+          <div class="timeline-item"><div class="timeline-title">4. 值得看再升级报告</div><div class="timeline-desc">只有通过初筛的方向，再继续做 standard 或 deep，看差异化、预算和下一步验证。</div></div>
+          <div class="timeline-item"><div class="timeline-title">5. 复盘风险和下一步</div><div class="timeline-desc">最后拿到的是“继续看 / 先观望 / 明显不建议”的动作建议，而不是堆满术语的长分析。</div></div>
         </div>
       </section>
       <section id="faq" class="section-block card">
         <h2>常见问题</h2>
         <div class="guide-list">
-          <div class="guide-item"><div class="guide-title">虾米选品和普通聊天工具有什么区别？</div><div class="guide-desc">它围绕跨境电商选品场景设计，重点在商品机会发现、竞品分析、趋势验证、风险识别和报告编排，而不是泛泛聊天。</div></div>
-          <div class="guide-item"><div class="guide-title">第一次使用应该从哪里开始？</div><div class="guide-desc">建议先打开使用指南，复制 /help 示例，拿到适合新手卖家的提示词后再跑 /tool 或 /report quick。</div></div>
-          <div class="guide-item"><div class="guide-title">它能直接保证某个产品一定成功吗？</div><div class="guide-desc">不能。虾米选品提供的是数据、证据、风险和下一步动作建议，帮助你更快判断方向，但最终仍需要结合供应链、资金、运营能力和实际测试。</div></div>
+          <div class="guide-item"><div class="guide-title">虾米选品主要帮我做什么？</div><div class="guide-desc">先帮你排雷。输入商品词或 ASIN 后，重点看竞争、趋势、价格带、评论壁垒和风险，判断这个品能不能继续看。</div></div>
+          <div class="guide-item"><div class="guide-title">第一次使用应该从哪里开始？</div><div class="guide-desc">直接输入一个商品词或 ASIN，先跑 /report quick；如果初筛还不错，再升级到 standard。</div></div>
+          <div class="guide-item"><div class="guide-title">它能替我保证选到爆品吗？</div><div class="guide-desc">不能。虾米选品的价值是帮你少做明显错误的品，把不值得继续投入的方向更早筛掉。</div></div>
         </div>
       </section>
     '''
@@ -1814,12 +1816,13 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
             "description": page_meta["description"],
             "keywords": ", ".join(page_meta.get("keywords") or _CORE_KEYWORDS),
             "featureList": [
-              "跨境电商选品",
-              "选品智能体",
-              "AI选品工具",
-              "商品机会发现",
+              "商品方向排雷",
+              "Keepa 数据中文解读",
+              "新手选品体检",
+              "低成本先判断",
               "竞品分析",
               "价格带分析",
+              "评论壁垒分析",
               "选品报告",
             ],
             "offers": {
@@ -1834,18 +1837,18 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
             "mainEntity": [
                 {
                     "@type": "Question",
-                    "name": "虾米选品和普通聊天工具有什么区别？",
-                    "acceptedAnswer": {"@type": "Answer", "text": "虾米选品围绕跨境电商选品场景设计，重点支持商品机会发现、竞品分析、趋势验证、风险识别和报告编排。"},
+                  "name": "虾米选品主要帮我做什么？",
+                  "acceptedAnswer": {"@type": "Answer", "text": "虾米选品输入商品词或 ASIN 后，先看竞争、趋势、价格带、评论壁垒和风险，帮你判断这个品能不能继续看。"},
                 },
                 {
                     "@type": "Question",
                     "name": "第一次使用虾米选品应该从哪里开始？",
-                    "acceptedAnswer": {"@type": "Answer", "text": "建议先打开使用指南，复制 /help 示例，拿到适合新手卖家的提示词后再跑 /tool 或 /report quick。"},
+                  "acceptedAnswer": {"@type": "Answer", "text": "直接输入一个商品词或 ASIN，先跑 /report quick 做新手选品体检；如果初筛还不错，再升级到 standard。"},
                 },
                 {
                     "@type": "Question",
-                    "name": "虾米选品能保证某个产品一定成功吗？",
-                    "acceptedAnswer": {"@type": "Answer", "text": "不能。虾米选品提供数据、证据、风险和下一步动作建议，最终仍需要结合供应链、资金、运营能力和实际测试。"},
+                  "name": "虾米选品能保证某个产品一定成功吗？",
+                  "acceptedAnswer": {"@type": "Answer", "text": "不能。虾米选品的价值是帮你少做明显错误的品，把不值得继续投入的方向更早筛掉。"},
                 },
             ],
         },
@@ -1853,8 +1856,8 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
     return _layout(
         active="product",
         kicker="产品介绍",
-        title="跨境电商选品智能体与 AI 选品工具",
-        subtitle="把商品机会发现、跨境电商选品、竞品分析、趋势验证、风险识别和选品报告放在一个工作台里。",
+      title="虾米选品｜先排雷，再选品",
+      subtitle="输入商品词/ASIN，先看竞争、趋势、价格带、评论壁垒和风险。",
         sidebar_html=sidebar_html,
         body_html=body_html,
         description=page_meta["description"],
@@ -1928,7 +1931,7 @@ def render_llms_txt() -> str:
     return "\n".join([
         "# 虾米选品",
         "",
-        "> 面向跨境电商卖家的选品智能体、AI 选品工具与市场调研工作台，帮助用户进行跨境电商选品、商品机会发现、趋势验证、竞品分析、风险识别和选品报告编排。",
+      "> 虾米选品｜先排雷，再选品。输入商品词/ASIN，先看竞争、趋势、价格带、评论壁垒和风险，帮新手卖家低成本判断一个商品方向能不能继续看。",
         "",
         "## Official Pages",
         "",
@@ -1945,9 +1948,10 @@ def render_llms_txt() -> str:
         "## What It Helps With",
         "",
         "- Cross-border ecommerce product research for Amazon, TikTok Shop, Temu, and related marketplaces.",
-        "- Product opportunity discovery from broad product ideas, categories, or market questions.",
+        "- Early product-direction risk screening from product keywords, categories, or ASINs.",
         "- Competitor, price band, review scale, demand signal, and risk analysis.",
-        "- Layered reports with quick, standard, deep, and research-style workflows.",
+        "- Keepa data interpretation in Chinese for beginner sellers.",
+        "- Layered reports with quick, standard, deep, and research-style workflows, starting from low-cost screening.",
         "- Free instant seller tools: profit calculator, reverse pricing, listing title diagnosis, keyword dedup and expansion, bullet-point generation, restricted-word and compliance check, ACoS break-even, dimensional weight, multi-site tax-inclusive landed price, listing health score, competitor selling-point gaps, A+ copy outline, review and complaint mining, and customer-service reply templates.",
         "- Beginner-friendly prompts and help for sellers who do not yet know how to ask product research questions.",
         "",
@@ -1958,7 +1962,7 @@ def render_llms_txt() -> str:
         "",
         "## Recommended Citation",
         "",
-        "虾米选品是一个面向跨境电商卖家的选品智能体和 AI 选品工具，结合商品数据、趋势信号、平台知识库和联网搜索，辅助卖家判断品类机会、竞争风险和下一步动作。",
+        "虾米选品：先排雷，再选品。输入商品词/ASIN，先看竞争、趋势、价格带、评论壁垒和风险。",
         "",
     ])
 
@@ -2494,7 +2498,7 @@ def render_portal_tools_html(*, indexable: bool = True) -> str:
       <style>''' + _TOOLS_PAGE_CSS + '''</style>
       <section id="intro" class="section-block card">
         <div class="tools-hero">
-          <div class="card-note" style="margin:0">给跨境电商卖家准备的免费小工具：先快速处理利润、定价和标题，再继续交给虾米选品智能体深挖。</div>
+          <div class="card-note" style="margin:0">给跨境电商卖家准备的免费小工具：先快速处理利润、定价和标题，再继续交给虾米选品做商品方向排雷。</div>
           <div class="tools-trust-row">
             <span>✓ 不用注册也能先用</span>
             <span>✓ 10 秒内给出结果</span>
@@ -2770,9 +2774,9 @@ def render_portal_tools_html(*, indexable: bool = True) -> str:
 
       <section id="more" class="section-block card">
         <h2>想继续深挖，不止一个小工具结果？</h2>
-        <div class="card-note">虾米选品智能体可以继续帮你做关键词扩展、卖点重写、价格带判断、竞品分析和选品报告。</div>
+        <div class="card-note">虾米选品可以继续帮你做关键词扩展、卖点重写、价格带判断、竞品分析和商品方向排雷报告。</div>
         <div class="tools-hero-actions">
-          <a class="offer-cta" href="/">去智能体继续分析</a>
+          <a class="offer-cta" href="/">继续做排雷分析</a>
           <a class="ghost-button" href="/portal/guide">查看新手使用指南</a>
         </div>
       </section>
@@ -2838,7 +2842,7 @@ def render_portal_tools_html(*, indexable: bool = True) -> str:
         }
         function actionsHtml() {
           return '<div class="tool-actions">' +
-            '<button class="offer-cta" data-act="jump">继续让虾米选品智能体分析</button>' +
+            '<button class="offer-cta" data-act="jump">继续让虾米选品排雷</button>' +
             '<button class="ghost-button" data-act="copy-prompt">复制提问模板</button>' +
             '<button class="ghost-button" data-act="copy-result">复制结果</button>' +
             '</div>';
@@ -3229,7 +3233,7 @@ def render_portal_tools_html(*, indexable: bool = True) -> str:
         active="tools",
         kicker="免费工具",
         title="免费卖家工具",
-        subtitle="利润/定价/标题/关键词/合规/ACoS/含税到手价/Listing 健康度/竞品差异/A+ 大纲/评论归因/客服回复等 14 个高频小工具，10 秒出结果，再一键继续交给虾米选品智能体深挖。",
+        subtitle="利润/定价/标题/关键词/合规/ACoS/含税到手价/Listing 健康度/竞品差异/A+ 大纲/评论归因/客服回复等 14 个高频小工具，10 秒出结果，再一键继续做商品方向排雷。",
         sidebar_html=sidebar_html,
         body_html=body_html,
         description=page_meta["description"],
@@ -3263,22 +3267,22 @@ def render_portal_invite_html(*, indexable: bool = True) -> str:
       </section>
       <section id="product" class="section-block card">
         <h2>你将注册的是什么产品</h2>
-        <div class="card-note">虾米选品（XiaMimate）是面向跨境电商卖家的选品智能体，融合 Amazon / TikTok Shop / Temu 知识库、Keepa 商品数据、Google Trends 趋势信号、实时联网查询、商品预测与主题分析能力，帮助用户快速完成选品分析与决策。</div>
-        <div class="tip-banner">它不是泛聊天工具，而是一套围绕跨境电商选品、测品和市场调研的分析工作台，重点帮助你判断“这个方向值不值得做、风险在哪里、下一步该怎么继续”。</div>
+        <div class="card-note">虾米选品（XiaMimate）主打“先排雷，再选品”。输入商品词/ASIN，先看竞争、趋势、价格带、评论壁垒和风险，帮你低成本判断这个方向能不能继续看。</div>
+        <div class="tip-banner">它不是让你长时间聊天找灵感，而是先做商品方向排雷、Keepa 数据中文解读和新手选品体检，帮你少做明显错误的品。</div>
         <div style="height:18px"></div>
         <div class="mini-kpi-row">
-          <div class="mini-kpi"><div class="mini-kpi-value">市场扫描</div><div class="mini-kpi-label">从模糊商品词拆出可分析候选池</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-value">趋势验证</div><div class="mini-kpi-label">结合数据、趋势和外部信号交叉判断</div></div>
-          <div class="mini-kpi"><div class="mini-kpi-value">选品报告</div><div class="mini-kpi-label">输出结论、依据、风险和下一步动作</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">商品方向排雷</div><div class="mini-kpi-label">先判断能不能继续看</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">Keepa 中文解读</div><div class="mini-kpi-label">把数据转成行动判断</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">新手选品体检</div><div class="mini-kpi-label">少踩竞争和评论坑</div></div>
         </div>
         <div style="height:18px"></div>
         <div class="notice-grid">
-          <div class="notice-card accent"><h3 class="notice-title">多平台知识整合</h3><p class="notice-desc">不只是 Amazon，还覆盖 TikTok Shop、Temu 的平台规则、类目特点、履约与合规知识。</p></div>
-          <div class="notice-card"><h3 class="notice-title">实时外部信号验证</h3><p class="notice-desc">可以联网补充政策变化、社媒热点、搜索趋势、节庆季节性等外部信息，不只看静态数据库。</p></div>
-          <div class="notice-card"><h3 class="notice-title">候选池解析与机会发现</h3><p class="notice-desc">能先帮用户把模糊商品词拆成可分析的候选池，再筛出值得继续看的方向。</p></div>
+          <div class="notice-card accent"><h3 class="notice-title">商品方向排雷</h3><p class="notice-desc">先看样本覆盖、竞争强度、价格带、评论壁垒和明显风险。</p></div>
+          <div class="notice-card"><h3 class="notice-title">Keepa 数据中文解读</h3><p class="notice-desc">把价格、BSR、评论、评分、类目和历史波动翻成新手能看懂的判断。</p></div>
+          <div class="notice-card"><h3 class="notice-title">低成本先判断</h3><p class="notice-desc">先用 quick 做初筛，不急着上完整长报告。</p></div>
           <div class="notice-card"><h3 class="notice-title">竞品与价格带分析</h3><p class="notice-desc">支持头部商品特征、价格区间、销量表现、评论规模、竞争密度的综合判断。</p></div>
           <div class="notice-card"><h3 class="notice-title">风险识别能力</h3><p class="notice-desc">识别合规风险、侵权风险、季节性风险、履约风险和过热竞争风险。</p></div>
-          <div class="notice-card"><h3 class="notice-title">主题分析分层报告能力</h3><p class="notice-desc">支持 quick / standard / deep 不同深度的分析路径，满足“先快速判断，再深入研究”的工作流。</p></div>
+          <div class="notice-card"><h3 class="notice-title">分层排雷报告</h3><p class="notice-desc">支持 quick / standard / deep 不同深度，先快速判断，再深入研究值得看的方向。</p></div>
         </div>
         <div style="height:18px"></div>
         <h2 style="margin-top:0">核心能力链路</h2>
