@@ -2118,7 +2118,7 @@ def render_portal_products_html(*, indexable: bool = True) -> str:
         <h2>充值区</h2>
         <div class="card-note">适合临时补量。充值包积分永久有效，只有在月包余额不足时才会继续扣减充值包积分。</div>
         <div class="mini-kpi-row">
-          <div class="mini-kpi"><div class="mini-kpi-value">100 : 1</div><div class="mini-kpi-label">积分 : 元</div></div>
+          <div class="mini-kpi"><div class="mini-kpi-value">10 : 1</div><div class="mini-kpi-label">积分 : 元</div></div>
           <div class="mini-kpi"><div class="mini-kpi-value">{len(recharge_packages)}</div><div class="mini-kpi-label">充值包数量</div></div>
           <div class="mini-kpi"><div class="mini-kpi-value">{len(cumulative_rules)}</div><div class="mini-kpi-label">累计奖励档位</div></div>
         </div>
