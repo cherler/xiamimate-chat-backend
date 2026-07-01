@@ -282,6 +282,26 @@ def _sync_portal_notifications(
 ) -> None:
     for ledger_row in recent_ledger:
         event_type = str(ledger_row.get("event_type") or "").strip()
+        if event_type in {"recharge_bonus_single", "recharge_bonus_cumulative"}:
+            entry_id = str(ledger_row.get("entry_id") or "").strip()
+            reward_points = int(ledger_row.get("points_delta") or 0)
+            if reward_points > 0:
+                _upsert_user_notification(
+                    conn,
+                    user_id=user_id,
+                    notification_key=f"recharge_bonus:{entry_id or ledger_row.get('reference_id') or event_type}",
+                    category="system",
+                    tag="赠送到账",
+                    level="success",
+                    title="赠送积分已到账",
+                    body=f"{str(ledger_row.get('description') or '充值赠送积分')}，本次到账 {reward_points} 积分。",
+                    event_type=event_type,
+                    resource_type="credit_ledger_entry",
+                    resource_id=entry_id or None,
+                    action_url="/portal/topup",
+                    occurred_at=ledger_row.get("created_at"),
+                )
+            continue
         if event_type == "referral_invited_reward":
             binding_id = str(ledger_row.get("reference_id") or ledger_row.get("entry_id") or "binding")
             reward_points = int(ledger_row.get("points_delta") or 0)

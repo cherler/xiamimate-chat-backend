@@ -1246,7 +1246,7 @@ def render_portal_html() -> str:
       <div class="card-note">展示充值订单和所有正向入账记录，包括新用户赠送、手工加额和充值到账。</div>
       <div class="subnav-tabs">
         <button type="button" class="sub-tab active" data-topup-view="orders">充值账单</button>
-        <button type="button" class="sub-tab" data-topup-view="records">赠送账单</button>
+        <button type="button" class="sub-tab" data-topup-view="records">积分流水</button>
         <button type="button" class="sub-tab" data-topup-view="invoice">发票管理</button>
       </div>
       <div id="topup-orders-view" class="subview active">
@@ -1264,7 +1264,7 @@ def render_portal_html() -> str:
       </div>
       <div id="topup-records-view" class="subview">
         <div class="table-toolbar">
-          <div><strong>赠送账单</strong>，支持分页查看最近的赠送和到账流水。</div>
+          <div><strong>积分流水</strong>，支持分页查看最近的赠送和到账流水。</div>
           <div id="topup-meta">加载中…</div>
         </div>
         <div class="table-wrap">
