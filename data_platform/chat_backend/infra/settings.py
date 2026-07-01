@@ -117,35 +117,27 @@ OPENWEBUI_DB_PATH = os.environ.get("CHAT_BACKEND_OPENWEBUI_DB_PATH", "").strip()
 # ---------------------------------------------------------------------------
 POINTS_PRICE_VERSION = "v5_report_routing_pricing"
 
-ALLOWED_REPORT_PROFILES = {"quick", "standard", "deep", "research"}
+ALLOWED_REPORT_PROFILES = {"quick", "standard"}
 
 REPORT_PROFILE_TO_BINDING: dict[str, str] = {
     "quick": "selection_report_quick",
     "standard": "selection_report_standard",
-    "deep": "selection_report_deep",
-    "research": "selection_report_research",
 }
 
 REPORT_PROFILE_TO_EVENT_TYPE: dict[str, str] = {
     "quick": "report_quick_run",
     "standard": "report_standard_run",
-    "deep": "report_deep_run",
-    "research": "report_research_run",
 }
 
 REPORT_PROFILE_TO_API_KEY_ENV_VAR: dict[str, str] = {
     "quick": "DIFY_REPORT_QUICK_APP_API_KEY",
     "standard": "DIFY_REPORT_STANDARD_APP_API_KEY",
-    "deep": "DIFY_REPORT_DEEP_APP_API_KEY",
-    "research": "DIFY_REPORT_RESEARCH_APP_API_KEY",
 }
 
 DEFAULT_EVENT_PRICING: list[dict[str, Any]] = [
     {"event_type": "llm_request",      "display_name": "LLM请求",      "points_per_unit": 1, "display_order": 10},
-    {"event_type": "report_quick_run",    "display_name": "快速报告", "points_per_unit": 8,  "display_order": 21},
-    {"event_type": "report_standard_run", "display_name": "标准报告", "points_per_unit": 16, "display_order": 22},
-    {"event_type": "report_deep_run",     "display_name": "深度报告", "points_per_unit": 24, "display_order": 23},
-    {"event_type": "report_research_run", "display_name": "研究报告", "points_per_unit": 32, "display_order": 24},
+    {"event_type": "report_quick_run",    "display_name": "快速排雷", "points_per_unit": 8,  "display_order": 21},
+    {"event_type": "report_standard_run", "display_name": "商品体检报告", "points_per_unit": 16, "display_order": 22},
     {"event_type": "kb_retrieve",      "display_name": "知识库检索",    "points_per_unit": 2, "display_order": 30},
     {"event_type": "product_api_call", "display_name": "商品API检索",  "points_per_unit": 2, "display_order": 40},
     {"event_type": "web_search",       "display_name": "网络搜索",      "points_per_unit": 2, "display_order": 50},

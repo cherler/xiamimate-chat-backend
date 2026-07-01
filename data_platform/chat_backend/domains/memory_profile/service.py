@@ -30,9 +30,9 @@ _TOPIC_SPLIT_PATTERN = re.compile(r"[，,。；;、/\\|\s]+")
 
 
 def _normalize_report_profile(value: str | None) -> str:
-    normalized = str(value or "research").strip().lower() or "research"
+    normalized = str(value or "standard").strip().lower() or "standard"
     if normalized not in ALLOWED_REPORT_PROFILES:
-        return "research"
+        return "standard"
     return normalized
 
 

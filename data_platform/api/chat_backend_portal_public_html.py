@@ -59,9 +59,9 @@ SEO_PUBLIC_PAGES: dict[str, dict[str, Any]] = {
     },
     "tools": {
       "path": "/portal/tools",
-      "title": "虾米选品免费卖家工具 - 利润计算、定价倒推、标题诊断、关键词与卖点生成",
-      "description": "面向跨境电商卖家的 14 个免费小工具：利润/定价/标题/关键词/五点描述/敏感词合规/ACoS 盈亏平衡/体积重/多站点含税到手价/Listing 健康度评分/竞品卖点差异提取/A+ 文案大纲/Review 差评归因/客服回复模板，10 秒出结果，可一键继续做商品方向排雷。",
-      "keywords": ["跨境电商利润计算器", "含税到手价换算", "Listing 健康度评分", "竞品卖点差异", "A+ 文案大纲", "差评归因分析", "客服回复模板", "ACoS 盈亏平衡", "敏感词合规检查", "选品免费工具", "卖家工具集"],
+      "title": "虾米选品排雷前置检查工具 - 利润、履约、合规、差评和竞品风险",
+      "description": "面向跨境电商卖家的免费排雷前置检查工具：先查利润/定价/ACoS、体积重/含税到手价、敏感词合规、Review 差评归因和竞品卖点差异，再把结果带入商品方向排雷。运营优化类标题、关键词、五点、A+ 和客服回复放在后续动作。",
+      "keywords": ["跨境商品排雷工具", "跨境电商利润计算器", "含税到手价换算", "竞品卖点差异", "差评归因分析", "ACoS 盈亏平衡", "敏感词合规检查", "体积重计算器", "Listing 健康度评分", "选品免费工具"],
       "priority": "0.8",
       "changefreq": "weekly",
     },
@@ -1779,7 +1779,7 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
           <div class="notice-card"><h3 class="notice-title">Keepa 数据中文解读</h3><p class="notice-desc">把价格、BSR、评论、评分、类目和历史波动翻译成新手能看懂的判断。</p></div>
           <div class="notice-card"><h3 class="notice-title">竞争与评论壁垒</h3><p class="notice-desc">看头部 ASIN 是否评论太厚、品牌太强、价格太卷，避免一上来就撞进硬仗。</p></div>
           <div class="notice-card"><h3 class="notice-title">趋势与价格带体检</h3><p class="notice-desc">检查趋势是否下滑、季节性是否明显、目标价格带是否还有利润和差异化空间。</p></div>
-          <div class="notice-card"><h3 class="notice-title">低成本先判断</h3><p class="notice-desc">quick 先给方向性结论，不急着做长报告；值得继续看时再升级 standard 或 deep。</p></div>
+          <div class="notice-card"><h3 class="notice-title">低成本先判断</h3><p class="notice-desc">quick 先给方向性结论，不急着做长报告；值得继续看时再升级 standard。</p></div>
           <div class="notice-card"><h3 class="notice-title">风险边界提醒</h3><p class="notice-desc">把数据不足、平台差异、合规、侵权和履约风险说清楚，不把不确定包装成确定机会。</p></div>
         </div>
       </section>
@@ -1789,7 +1789,7 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
           <div class="timeline-item"><div class="timeline-title">1. 输入商品词或 ASIN</div><div class="timeline-desc">比如 humidifier、dog seat cover，或直接粘贴一个 Amazon ASIN。</div></div>
           <div class="timeline-item"><div class="timeline-title">2. 先做 quick 排雷</div><div class="timeline-desc">先看竞争、趋势、价格带、评论壁垒和数据覆盖，判断有没有明显不能继续看的理由。</div></div>
           <div class="timeline-item"><div class="timeline-title">3. 读懂 Keepa 和竞品信号</div><div class="timeline-desc">把价格历史、BSR、评论增长、评分和头部 ASIN 情况转成中文结论。</div></div>
-          <div class="timeline-item"><div class="timeline-title">4. 值得看再升级报告</div><div class="timeline-desc">只有通过初筛的方向，再继续做 standard 或 deep，看差异化、预算和下一步验证。</div></div>
+          <div class="timeline-item"><div class="timeline-title">4. 值得看再升级体检报告</div><div class="timeline-desc">只有通过初筛的方向，再继续做 standard，看差异化、预算和下一步验证。</div></div>
           <div class="timeline-item"><div class="timeline-title">5. 复盘风险和下一步</div><div class="timeline-desc">最后拿到的是“继续看 / 先观望 / 明显不建议”的动作建议，而不是堆满术语的长分析。</div></div>
         </div>
       </section>
@@ -1947,13 +1947,13 @@ def render_llms_txt() -> str:
         "",
         "## What It Helps With",
         "",
-        "- Cross-border ecommerce product research for Amazon, TikTok Shop, Temu, and related marketplaces.",
+        "- Cross-border ecommerce product risk screening for Amazon, TikTok Shop, Temu, and related marketplaces.",
         "- Early product-direction risk screening from product keywords, categories, or ASINs.",
         "- Competitor, price band, review scale, demand signal, and risk analysis.",
         "- Keepa data interpretation in Chinese for beginner sellers.",
-        "- Layered reports with quick, standard, deep, and research-style workflows, starting from low-cost screening.",
+        "- Two report modes: quick risk screening and standard product checkup, starting from low-cost screening.",
         "- Free instant seller tools: profit calculator, reverse pricing, listing title diagnosis, keyword dedup and expansion, bullet-point generation, restricted-word and compliance check, ACoS break-even, dimensional weight, multi-site tax-inclusive landed price, listing health score, competitor selling-point gaps, A+ copy outline, review and complaint mining, and customer-service reply templates.",
-        "- Beginner-friendly prompts and help for sellers who do not yet know how to ask product research questions.",
+        "- Beginner-friendly prompts and help for sellers who do not yet know how to ask product-risk screening questions.",
         "",
         "## Canonical Name",
         "",
@@ -1982,8 +1982,7 @@ def render_portal_products_html(*, indexable: bool = True) -> str:
         for index, (title, desc) in enumerate([
             (f"{event_cost_by_type.get('llm_request', 1)} 积分 / 次", "LLM 单独请求：适合普通问答、规则解释和轻量分析。"),
             (f"{event_cost_by_type.get('kb_retrieve', 2)} 积分 / 次", "工具/检索请求：知识库检索、商品 API 检索、网络搜索等能力按次扣减。"),
-            (f"{event_cost_by_type.get('report_quick_run', 8)} / {event_cost_by_type.get('report_standard_run', 16)} / {event_cost_by_type.get('report_deep_run', 24)} 积分", "报告编排：快速、标准、深度报告按任务深度分档计费。"),
-            (f"{event_cost_by_type.get('report_research_run', 32)} 积分 / 次", "研究报告：包含更完整的外部补证和下钻分析，适合高价值决策。"),
+            (f"{event_cost_by_type.get('report_quick_run', 8)} / {event_cost_by_type.get('report_standard_run', 16)} 积分", "排雷报告：quick 做快速排雷，standard 做商品体检。"),
         ])
     )
 
@@ -2274,7 +2273,7 @@ def render_portal_guide_html(*, indexable: bool = True) -> str:
         <div class="guide-list">
           <div class="guide-item"><div class="guide-title">1. 先从 /help 拿一组可复制提示词</div><div class="guide-desc">如果你是第一次进入产品，不建议先自己硬想问题。直接输入“/help 新手卖家第一次使用虾米选品，给我 5 条可以直接复制的提示词，并说明分别适合什么场景”，先拿一批现成问法。</div></div>
           <div class="guide-item"><div class="guide-title">2. 复制其中 1 条，先跑 /tool 或 /report quick</div><div class="guide-desc">如果你只是想先验证一个点，优先用 /tool；如果你已经有候选方向，先用 /report quick 做第一轮筛选。这样比一上来就跑大任务更稳，也更省积分。</div></div>
-          <div class="guide-item"><div class="guide-title">3. 方向明确后，再升级到 /report standard 并回看消费</div><div class="guide-desc">当 quick 结果值得继续深挖时，再上 /report standard 做完整分析。任务结束后，用 /points、/usage 或账户页回看余额、消费记录和扣减来源，形成第一次完整闭环。</div></div>
+          <div class="guide-item"><div class="guide-title">3. 方向明确后，再升级到 /report standard 并回看消费</div><div class="guide-desc">当 quick 结果值得继续看时，再上 /report standard 做商品体检。任务结束后，用 /points、/usage 或账户页回看余额、消费记录和扣减来源，形成第一次排雷闭环。</div></div>
         </div>
         <div style="height:18px"></div>
         <div class="tip-banner">推荐第一条实操口令：/help 新手卖家第一次使用虾米选品，给我 5 条可以直接复制的提示词，并说明分别适合什么场景。</div>
@@ -2353,7 +2352,7 @@ def render_portal_guide_html(*, indexable: bool = True) -> str:
           <div class="notice-card accent"><h3 class="notice-title">我还不会提问</h3><p class="notice-desc">先用 /help。目标不是马上得到大结论，而是先拿到 3 到 5 条靠谱的可复制问法。</p></div>
           <div class="notice-card"><h3 class="notice-title">我想先试一个点</h3><p class="notice-desc">优先用 /tool。它更适合拆路径、查局部趋势、决定下一步该补哪类证据。</p></div>
           <div class="notice-card"><h3 class="notice-title">我有多个候选方向，想先筛掉一批</h3><p class="notice-desc">优先用 /report quick。先做第一轮漏斗过滤，再把值得继续看的方向升级到 standard。</p></div>
-          <div class="notice-card"><h3 class="notice-title">我已经有明确主题，想一次拿到完整判断</h3><p class="notice-desc">优先用 /report standard；如果任务更重、需要更完整补证，再考虑更深层级。</p></div>
+          <div class="notice-card"><h3 class="notice-title">我已经有明确主题，想做商品体检</h3><p class="notice-desc">优先用 /report standard；如果还需要最新政策或外部风险，再单独用 /web 补证。</p></div>
           <div class="notice-card"><h3 class="notice-title">我需要最新外部变化</h3><p class="notice-desc">优先用 /web。平台政策、行业新闻、近期舆情和外部变化都更适合走联网搜索。</p></div>
           <div class="notice-card"><h3 class="notice-title">我想复盘成本和余额</h3><p class="notice-desc">优先用 /points、/usage，或者直接去账户页看消费记录、使用趋势和扣减来源。</p></div>
         </div>
@@ -2498,7 +2497,7 @@ def render_portal_tools_html(*, indexable: bool = True) -> str:
       <style>''' + _TOOLS_PAGE_CSS + '''</style>
       <section id="intro" class="section-block card">
         <div class="tools-hero">
-          <div class="card-note" style="margin:0">给跨境电商卖家准备的免费小工具：先快速处理利润、定价、标题和差评线索，再继续交给虾米选品做商品方向排雷。</div>
+          <div class="card-note" style="margin:0">给跨境电商卖家准备的免费排雷前置检查：先查利润、履约、合规、差评和竞品风险，再继续交给虾米选品做商品方向排雷。</div>
           <div class="tools-trust-row">
             <span>✓ 不用注册也能先用</span>
             <span>✓ 10 秒内给出结果</span>
@@ -2540,6 +2539,130 @@ def render_portal_tools_html(*, indexable: bool = True) -> str:
           <div class="field-group"><label class="field-label">广告占比(%)</label><input class="text-field" type="number" data-field="ad_rate" placeholder="可空" /></div>
         </div>
         <div class="tool-actions"><button class="offer-cta" data-action="submit">开始倒推</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-acos" class="section-block card" data-tool="acos">
+        <h2>ACoS 盈亏平衡计算器</h2>
+        <div class="card-note">算出盈亏平衡 ACoS / ROAS 和保住目标净利的可承受 ACoS。纯公式计算，可复现、零成本。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">售价</label><input class="text-field" type="number" data-field="price" placeholder="如 29.9" /></div>
+          <div class="field-group"><label class="field-label">产品成本</label><input class="text-field" type="number" data-field="product_cost" placeholder="如 8" /></div>
+          <div class="field-group"><label class="field-label">FBA/履约费</label><input class="text-field" type="number" data-field="fba_fee" placeholder="如 4" /></div>
+          <div class="field-group"><label class="field-label">平台佣金比例(%)</label><input class="text-field" type="number" data-field="referral_rate" placeholder="默认 15" /></div>
+          <div class="field-group"><label class="field-label">其他成本</label><input class="text-field" type="number" data-field="other_cost" placeholder="可空" /></div>
+          <div class="field-group"><label class="field-label">目标净利率(%)</label><input class="text-field" type="number" data-field="target_margin" placeholder="如 15" /></div>
+        </div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始计算</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-dimweight" class="section-block card" data-tool="dimweight">
+        <h2>体积重 / 计费重计算器</h2>
+        <div class="card-note">按长宽高和承运商除数算体积重，取与实重的较大值作为计费重，可选填运费单价估算运费。纯公式计算、可复现。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">长(cm)</label><input class="text-field" type="number" data-field="length" placeholder="如 30" /></div>
+          <div class="field-group"><label class="field-label">宽(cm)</label><input class="text-field" type="number" data-field="width" placeholder="如 20" /></div>
+          <div class="field-group"><label class="field-label">高(cm)</label><input class="text-field" type="number" data-field="height" placeholder="如 15" /></div>
+          <div class="field-group"><label class="field-label">实际重量(kg)</label><input class="text-field" type="number" data-field="actual_weight" placeholder="如 1.2" /></div>
+          <div class="field-group"><label class="field-label">承运商</label>
+            <select class="text-field" data-field="carrier">
+              <option value="international_express">国际快递(除5000)</option>
+              <option value="air">空运(除6000)</option>
+              <option value="amazon">亚马逊(除5000)</option>
+            </select>
+          </div>
+          <div class="field-group"><label class="field-label">运费单价(每kg，可选)</label><input class="text-field" type="number" data-field="rate_per_kg" placeholder="如 45" /></div>
+        </div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始计算</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-landed" class="section-block card" data-tool="landed">
+        <h2>多站点含税到手价换算</h2>
+        <div class="card-note">按汇率折算货值，叠加关税和进口 VAT 算出含税到手成本，再按目标毛利反推建议零售价。纯公式计算、可复现。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">商品成本(源币种)</label><input class="text-field" type="number" data-field="product_cost" placeholder="如 50" /></div>
+          <div class="field-group"><label class="field-label">物流/头程</label><input class="text-field" type="number" data-field="shipping_cost" placeholder="如 8" /></div>
+          <div class="field-group"><label class="field-label">汇率(源→目标)</label><input class="text-field" type="number" data-field="exchange_rate" placeholder="如 0.14" /></div>
+          <div class="field-group"><label class="field-label">关税率(%)</label><input class="text-field" type="number" data-field="duty_rate" placeholder="如 5" /></div>
+          <div class="field-group"><label class="field-label">进口VAT(%)</label><input class="text-field" type="number" data-field="vat_rate" placeholder="如 20" /></div>
+          <div class="field-group"><label class="field-label">其他费用</label><input class="text-field" type="number" data-field="other_fee" placeholder="可空" /></div>
+          <div class="field-group"><label class="field-label">平台佣金比例(%)</label><input class="text-field" type="number" data-field="platform_fee_rate" placeholder="如 15" /></div>
+          <div class="field-group"><label class="field-label">目标毛利率(%)</label><input class="text-field" type="number" data-field="target_margin" placeholder="如 25" /></div>
+        </div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始换算</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-compliance" class="section-block card" data-tool="compliance">
+        <h2>敏感词与合规检查</h2>
+        <div class="card-note">规则先扫描极限词、绝对化/医疗声明、站外导流、侵权等高风险信号，再由 AI 基于平台政策做合规审查并给改写建议。AI 用平台已有额度，对你免费。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">站点</label>
+            <select class="text-field" data-field="site">
+              <option value="amazon">Amazon</option>
+              <option value="tiktok">TikTok Shop</option>
+              <option value="temu">Temu</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">待检查文案（标题/五点/描述）</label><textarea class="text-field" data-field="text" rows="5" style="min-height:110px;padding:10px 14px" placeholder="粘贴需要检查的商品文案"></textarea></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始检查</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-review" class="section-block card" data-tool="review">
+        <h2>Review 关键词 / 差评归因提炼</h2>
+        <div class="card-note">贴一批用户评论，规则先提高频词，再由 AI 归纳高频好评卖点和差评归因（质量/物流/描述不符）及改进建议。AI 用平台已有额度，对你免费。</div>
+        <div class="field-group"><label class="field-label">商品名称（可选）</label><input class="text-field" type="text" data-field="product_name" placeholder="如 Cool Mist Humidifier 4L" /></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">用户评论（每行一条）</label><textarea class="text-field" data-field="reviews" rows="7" style="min-height:150px;padding:10px 14px" placeholder="粘贴一批评论，每行一条"></textarea></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">提炼分析</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-competitor" class="section-block card" data-tool="competitor">
+        <h2>竞品标题/卖点差异提取</h2>
+        <div class="card-note">贴 2-3 个竞品 listing，规则先提共性高频词，再由 AI 找出你缺失的差异化卖点和切入机会。AI 用平台已有额度，对你免费。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">站点</label>
+            <select class="text-field" data-field="site">
+              <option value="amazon">Amazon</option>
+              <option value="tiktok">TikTok Shop</option>
+              <option value="temu">Temu</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">我方 listing（可选）</label><textarea class="text-field" data-field="my_listing" rows="3" style="min-height:80px;padding:10px 14px" placeholder="粘贴你的标题/五点（可选）"></textarea></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">竞品 listing（用空行或 --- 分隔不同竞品）</label><textarea class="text-field" data-field="competitors" rows="6" style="min-height:130px;padding:10px 14px" placeholder="竞品1 标题/五点&#10;&#10;---&#10;&#10;竞品2 标题/五点"></textarea></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">提取差异</button></div>
+        <div class="status-banner" data-role="status"></div>
+        <div class="tool-result" data-role="result"></div>
+      </section>
+
+      <section id="tool-health" class="section-block card" data-tool="health">
+        <h2>Listing 健康度评分</h2>
+        <div class="card-note">聚合标题、五点和关键词覆盖给出综合健康分，并指出短板。复用标题诊断规则，纯本地计算、可复现。</div>
+        <div class="field-grid">
+          <div class="field-group"><label class="field-label">站点</label>
+            <select class="text-field" data-field="site">
+              <option value="amazon">Amazon</option>
+              <option value="tiktok">TikTok Shop</option>
+              <option value="temu">Temu</option>
+            </select>
+          </div>
+          <div class="field-group"><label class="field-label">品牌词（可选）</label><input class="text-field" type="text" data-field="brand" placeholder="如 Aoni" /></div>
+        </div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">商品标题</label><textarea class="text-field" data-field="title" rows="3" style="min-height:80px;padding:10px 14px" placeholder="粘贴你的商品标题"></textarea></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">五点描述（每行一条）</label><textarea class="text-field" data-field="bullets" rows="5" style="min-height:110px;padding:10px 14px" placeholder="每行一条卖点，如&#10;4L large capacity for all-day use&#10;ultra quiet under 28dB"></textarea></div>
+        <div class="field-group" style="margin-top:14px"><label class="field-label">核心关键词（可选，逗号分隔）</label><input class="text-field" type="text" data-field="keywords" placeholder="如 humidifier, cool mist, bedroom" /></div>
+        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始评分</button></div>
         <div class="status-banner" data-role="status"></div>
         <div class="tool-result" data-role="result"></div>
       </section>
@@ -2603,120 +2726,6 @@ def render_portal_tools_html(*, indexable: bool = True) -> str:
         <div class="tool-result" data-role="result"></div>
       </section>
 
-      <section id="tool-compliance" class="section-block card" data-tool="compliance">
-        <h2>敏感词与合规检查</h2>
-        <div class="card-note">规则先扫描极限词、绝对化/医疗声明、站外导流、侵权等高风险信号，再由 AI 基于平台政策做合规审查并给改写建议。AI 用平台已有额度，对你免费。</div>
-        <div class="field-grid">
-          <div class="field-group"><label class="field-label">站点</label>
-            <select class="text-field" data-field="site">
-              <option value="amazon">Amazon</option>
-              <option value="tiktok">TikTok Shop</option>
-              <option value="temu">Temu</option>
-            </select>
-          </div>
-        </div>
-        <div class="field-group" style="margin-top:14px"><label class="field-label">待检查文案（标题/五点/描述）</label><textarea class="text-field" data-field="text" rows="5" style="min-height:110px;padding:10px 14px" placeholder="粘贴需要检查的商品文案"></textarea></div>
-        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始检查</button></div>
-        <div class="status-banner" data-role="status"></div>
-        <div class="tool-result" data-role="result"></div>
-      </section>
-
-      <section id="tool-acos" class="section-block card" data-tool="acos">
-        <h2>ACoS 盈亏平衡计算器</h2>
-        <div class="card-note">算出盈亏平衡 ACoS / ROAS 和保住目标净利的可承受 ACoS。纯公式计算，可复现、零成本。</div>
-        <div class="field-grid">
-          <div class="field-group"><label class="field-label">售价</label><input class="text-field" type="number" data-field="price" placeholder="如 29.9" /></div>
-          <div class="field-group"><label class="field-label">产品成本</label><input class="text-field" type="number" data-field="product_cost" placeholder="如 8" /></div>
-          <div class="field-group"><label class="field-label">FBA/履约费</label><input class="text-field" type="number" data-field="fba_fee" placeholder="如 4" /></div>
-          <div class="field-group"><label class="field-label">平台佣金比例(%)</label><input class="text-field" type="number" data-field="referral_rate" placeholder="默认 15" /></div>
-          <div class="field-group"><label class="field-label">其他成本</label><input class="text-field" type="number" data-field="other_cost" placeholder="可空" /></div>
-          <div class="field-group"><label class="field-label">目标净利率(%)</label><input class="text-field" type="number" data-field="target_margin" placeholder="如 15" /></div>
-        </div>
-        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始计算</button></div>
-        <div class="status-banner" data-role="status"></div>
-        <div class="tool-result" data-role="result"></div>
-      </section>
-
-      <section id="tool-dimweight" class="section-block card" data-tool="dimweight">
-        <h2>体积重 / 计费重计算器</h2>
-        <div class="card-note">按长宽高和承运商除数算体积重，取与实重的较大值作为计费重，可选填运费单价估算运费。纯公式计算、可复现。</div>
-        <div class="field-grid">
-          <div class="field-group"><label class="field-label">长(cm)</label><input class="text-field" type="number" data-field="length" placeholder="如 30" /></div>
-          <div class="field-group"><label class="field-label">宽(cm)</label><input class="text-field" type="number" data-field="width" placeholder="如 20" /></div>
-          <div class="field-group"><label class="field-label">高(cm)</label><input class="text-field" type="number" data-field="height" placeholder="如 15" /></div>
-          <div class="field-group"><label class="field-label">实际重量(kg)</label><input class="text-field" type="number" data-field="actual_weight" placeholder="如 1.2" /></div>
-          <div class="field-group"><label class="field-label">承运商</label>
-            <select class="text-field" data-field="carrier">
-              <option value="international_express">国际快递(除5000)</option>
-              <option value="air">空运(除6000)</option>
-              <option value="amazon">亚马逊(除5000)</option>
-            </select>
-          </div>
-          <div class="field-group"><label class="field-label">运费单价(每kg，可选)</label><input class="text-field" type="number" data-field="rate_per_kg" placeholder="如 45" /></div>
-        </div>
-        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始计算</button></div>
-        <div class="status-banner" data-role="status"></div>
-        <div class="tool-result" data-role="result"></div>
-      </section>
-
-      <section id="tool-landed" class="section-block card" data-tool="landed">
-        <h2>多站点含税到手价换算</h2>
-        <div class="card-note">按汇率折算货值，叠加关税和进口 VAT 算出含税到手成本，再按目标毛利反推建议零售价。纯公式计算、可复现。</div>
-        <div class="field-grid">
-          <div class="field-group"><label class="field-label">商品成本(源币种)</label><input class="text-field" type="number" data-field="product_cost" placeholder="如 50" /></div>
-          <div class="field-group"><label class="field-label">物流/头程</label><input class="text-field" type="number" data-field="shipping_cost" placeholder="如 8" /></div>
-          <div class="field-group"><label class="field-label">汇率(源→目标)</label><input class="text-field" type="number" data-field="exchange_rate" placeholder="如 0.14" /></div>
-          <div class="field-group"><label class="field-label">关税率(%)</label><input class="text-field" type="number" data-field="duty_rate" placeholder="如 5" /></div>
-          <div class="field-group"><label class="field-label">进口VAT(%)</label><input class="text-field" type="number" data-field="vat_rate" placeholder="如 20" /></div>
-          <div class="field-group"><label class="field-label">其他费用</label><input class="text-field" type="number" data-field="other_fee" placeholder="可空" /></div>
-          <div class="field-group"><label class="field-label">平台佣金比例(%)</label><input class="text-field" type="number" data-field="platform_fee_rate" placeholder="如 15" /></div>
-          <div class="field-group"><label class="field-label">目标毛利率(%)</label><input class="text-field" type="number" data-field="target_margin" placeholder="如 25" /></div>
-        </div>
-        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始换算</button></div>
-        <div class="status-banner" data-role="status"></div>
-        <div class="tool-result" data-role="result"></div>
-      </section>
-
-      <section id="tool-health" class="section-block card" data-tool="health">
-        <h2>Listing 健康度评分</h2>
-        <div class="card-note">聚合标题、五点和关键词覆盖给出综合健康分，并指出短板。复用标题诊断规则，纯本地计算、可复现。</div>
-        <div class="field-grid">
-          <div class="field-group"><label class="field-label">站点</label>
-            <select class="text-field" data-field="site">
-              <option value="amazon">Amazon</option>
-              <option value="tiktok">TikTok Shop</option>
-              <option value="temu">Temu</option>
-            </select>
-          </div>
-          <div class="field-group"><label class="field-label">品牌词（可选）</label><input class="text-field" type="text" data-field="brand" placeholder="如 Aoni" /></div>
-        </div>
-        <div class="field-group" style="margin-top:14px"><label class="field-label">商品标题</label><textarea class="text-field" data-field="title" rows="3" style="min-height:80px;padding:10px 14px" placeholder="粘贴你的商品标题"></textarea></div>
-        <div class="field-group" style="margin-top:14px"><label class="field-label">五点描述（每行一条）</label><textarea class="text-field" data-field="bullets" rows="5" style="min-height:110px;padding:10px 14px" placeholder="每行一条卖点，如&#10;4L large capacity for all-day use&#10;ultra quiet under 28dB"></textarea></div>
-        <div class="field-group" style="margin-top:14px"><label class="field-label">核心关键词（可选，逗号分隔）</label><input class="text-field" type="text" data-field="keywords" placeholder="如 humidifier, cool mist, bedroom" /></div>
-        <div class="tool-actions"><button class="offer-cta" data-action="submit">开始评分</button></div>
-        <div class="status-banner" data-role="status"></div>
-        <div class="tool-result" data-role="result"></div>
-      </section>
-
-      <section id="tool-competitor" class="section-block card" data-tool="competitor">
-        <h2>竞品标题/卖点差异提取</h2>
-        <div class="card-note">贴 2-3 个竞品 listing，规则先提共性高频词，再由 AI 找出你缺失的差异化卖点和切入机会。AI 用平台已有额度，对你免费。</div>
-        <div class="field-grid">
-          <div class="field-group"><label class="field-label">站点</label>
-            <select class="text-field" data-field="site">
-              <option value="amazon">Amazon</option>
-              <option value="tiktok">TikTok Shop</option>
-              <option value="temu">Temu</option>
-            </select>
-          </div>
-        </div>
-        <div class="field-group" style="margin-top:14px"><label class="field-label">我方 listing（可选）</label><textarea class="text-field" data-field="my_listing" rows="3" style="min-height:80px;padding:10px 14px" placeholder="粘贴你的标题/五点（可选）"></textarea></div>
-        <div class="field-group" style="margin-top:14px"><label class="field-label">竞品 listing（用空行或 --- 分隔不同竞品）</label><textarea class="text-field" data-field="competitors" rows="6" style="min-height:130px;padding:10px 14px" placeholder="竞品1 标题/五点&#10;&#10;---&#10;&#10;竞品2 标题/五点"></textarea></div>
-        <div class="tool-actions"><button class="offer-cta" data-action="submit">提取差异</button></div>
-        <div class="status-banner" data-role="status"></div>
-        <div class="tool-result" data-role="result"></div>
-      </section>
-
       <section id="tool-aplus" class="section-block card" data-tool="aplus">
         <h2>A+ / 详情页文案大纲生成</h2>
         <div class="card-note">按商品和卖点生成模块化 A+ 详情页大纲（模块名/目标/文案要点/配图建议）。AI 用平台已有额度，对你免费。</div>
@@ -2733,16 +2742,6 @@ def render_portal_tools_html(*, indexable: bool = True) -> str:
         <div class="field-group" style="margin-top:14px"><label class="field-label">商品名称</label><input class="text-field" type="text" data-field="product_name" placeholder="如 Cool Mist Humidifier 4L" /></div>
         <div class="field-group" style="margin-top:14px"><label class="field-label">核心卖点（逗号或换行分隔）</label><textarea class="text-field" data-field="selling_points" rows="4" style="min-height:96px;padding:10px 14px" placeholder="如&#10;4L large capacity&#10;ultra quiet&#10;auto shut-off"></textarea></div>
         <div class="tool-actions"><button class="offer-cta" data-action="submit">生成大纲</button></div>
-        <div class="status-banner" data-role="status"></div>
-        <div class="tool-result" data-role="result"></div>
-      </section>
-
-      <section id="tool-review" class="section-block card" data-tool="review">
-        <h2>Review 关键词 / 差评归因提炼</h2>
-        <div class="card-note">贴一批用户评论，规则先提高频词，再由 AI 归纳高频好评卖点和差评归因（质量/物流/描述不符）及改进建议。AI 用平台已有额度，对你免费。</div>
-        <div class="field-group"><label class="field-label">商品名称（可选）</label><input class="text-field" type="text" data-field="product_name" placeholder="如 Cool Mist Humidifier 4L" /></div>
-        <div class="field-group" style="margin-top:14px"><label class="field-label">用户评论（每行一条）</label><textarea class="text-field" data-field="reviews" rows="7" style="min-height:150px;padding:10px 14px" placeholder="粘贴一批评论，每行一条"></textarea></div>
-        <div class="tool-actions"><button class="offer-cta" data-action="submit">提炼分析</button></div>
         <div class="status-banner" data-role="status"></div>
         <div class="tool-result" data-role="result"></div>
       </section>
@@ -2774,7 +2773,7 @@ def render_portal_tools_html(*, indexable: bool = True) -> str:
 
       <section id="more" class="section-block card">
         <h2>想继续深挖，不止一个小工具结果？</h2>
-        <div class="card-note">虾米选品可以继续帮你做关键词扩展、卖点重写、价格带判断、竞品分析和商品方向排雷报告。</div>
+        <div class="card-note">虾米选品可以继续把这些检查结果带入商品方向排雷，判断继续看 / 谨慎验证 / 暂停，并补充价格带、竞品压力和证据边界。</div>
         <div class="tools-hero-actions">
           <a class="offer-cta" href="/">继续做排雷分析</a>
           <a class="ghost-button" href="/portal/guide">查看新手使用指南</a>
@@ -3211,29 +3210,31 @@ def render_portal_tools_html(*, indexable: bool = True) -> str:
     '''
 
     sidebar_html = _sidebar([
-        ("免费工具", [
+        ("排雷前置检查", [
             ("tool-profit", "利润计算器"),
             ("tool-pricing", "定价倒推器"),
-            ("tool-title", "标题诊断优化器"),
-            ("tool-keyword", "关键词去重+扩词"),
-            ("tool-description", "五点描述生成器"),
-            ("tool-compliance", "敏感词与合规检查"),
             ("tool-acos", "ACoS 盈亏平衡"),
             ("tool-dimweight", "体积重计算器"),
             ("tool-landed", "含税到手价换算"),
-            ("tool-health", "Listing 健康度评分"),
-            ("tool-competitor", "竞品卖点差异提取"),
-            ("tool-aplus", "A+ 文案大纲生成"),
+          ("tool-compliance", "敏感词与合规检查"),
             ("tool-review", "Review 关键词归因"),
+          ("tool-competitor", "竞品卖点差异提取"),
+          ("tool-health", "Listing 健康度评分"),
+        ]),
+        ("排雷后运营优化", [
+          ("tool-title", "标题诊断优化器"),
+          ("tool-keyword", "关键词去重+扩词"),
+          ("tool-description", "五点描述生成器"),
+          ("tool-aplus", "A+ 文案大纲生成"),
             ("tool-service", "客服回复模板"),
             ("more", "继续深挖"),
         ]),
     ])
     return _layout(
         active="tools",
-        kicker="免费工具",
-        title="免费卖家工具",
-        subtitle="利润/定价/标题/关键词/合规/ACoS/含税到手价/Listing 健康度/竞品差异/A+ 大纲/评论归因/客服回复等 14 个高频小工具，10 秒出结果，再一键继续做商品方向排雷。",
+        kicker="排雷前置检查",
+        title="免费排雷工具",
+        subtitle="先查利润、履约、合规、差评、竞品和 Listing 风险；通过前置检查后，再用标题、关键词、五点、A+ 和客服回复做运营优化。",
         sidebar_html=sidebar_html,
         body_html=body_html,
         description=page_meta["description"],
@@ -3282,11 +3283,11 @@ def render_portal_invite_html(*, indexable: bool = True) -> str:
           <div class="notice-card"><h3 class="notice-title">低成本先判断</h3><p class="notice-desc">先用 quick 做初筛，不急着上完整长报告。</p></div>
           <div class="notice-card"><h3 class="notice-title">竞品与价格带分析</h3><p class="notice-desc">支持头部商品特征、价格区间、销量表现、评论规模、竞争密度的综合判断。</p></div>
           <div class="notice-card"><h3 class="notice-title">风险识别能力</h3><p class="notice-desc">识别合规风险、侵权风险、季节性风险、履约风险和过热竞争风险。</p></div>
-          <div class="notice-card"><h3 class="notice-title">分层排雷报告</h3><p class="notice-desc">支持 quick / standard / deep 不同深度，先快速判断，再深入研究值得看的方向。</p></div>
+          <div class="notice-card"><h3 class="notice-title">两档排雷报告</h3><p class="notice-desc">支持 quick / standard 两档：先快速判断，再对值得看的方向做商品体检。</p></div>
         </div>
         <div style="height:18px"></div>
         <h2 style="margin-top:0">核心能力链路</h2>
-        <div class="card-note">它不是单点工具，而是把一次完整分析拆成更容易落地的四个环节，让你从“想到一个方向”走到“知道下一步该怎么做”。</div>
+        <div class="card-note">它不是单点工具，而是把一次商品体检拆成更容易落地的四个环节，让你从“想到一个方向”走到“知道下一步该怎么排雷”。</div>
         <div class="timeline-list">
           <div class="timeline-item"><div class="timeline-title">1. 智能问答：先把问题问清楚</div><div class="timeline-desc">适合先澄清某个市场、某个类目、某个商品方向值不值得继续看，避免一开始就跑大任务。</div></div>
           <div class="timeline-item"><div class="timeline-title">2. /report：把目标变成排雷体检报告</div><div class="timeline-desc">当你已经有明确商品词或 ASIN 时，先输出继续看 / 谨慎 / 暂停的判断，再展开趋势、竞争、价格带、评论壁垒和进入风险；/workflow 当前仍作为兼容入口保留。</div></div>
@@ -3313,7 +3314,7 @@ def render_portal_invite_html(*, indexable: bool = True) -> str:
             <div class="offer-top">
               <div>
                 <div class="offer-name">/report 报告编排</div>
-                <div class="offer-tagline">适合已经有目标商品或市场时，直接拿完整分析结果，并按报告深度选择输出。</div>
+                <div class="offer-tagline">适合已经有目标商品或市场时，直接拿排雷体检结果，并按 quick / standard 选择体检深度。</div>
               </div>
               <div class="offer-badge">完整任务</div>
             </div>

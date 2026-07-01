@@ -93,11 +93,6 @@ def _dify_report_api_key(profile: str) -> str:
     api_key = (os.environ.get(env_var_name) or "").strip()
     if api_key:
         return api_key
-    if normalized == "research":
-        raise HTTPException(
-            status_code=503,
-            detail="report research is not available yet: DIFY_REPORT_RESEARCH_APP_API_KEY is not configured",
-        )
     return _dify_workflow_api_key()
 
 
@@ -251,7 +246,7 @@ def _compact_unique_strings(values: list[Any], *, limit: int | None = None) -> l
 def _normalize_tavily_query_text(value: Any) -> str:
     text = str(value or "").strip()
     text = re.sub(r"^/(?:report|workflow|wf|agent|tool|web)\b", "", text, flags=re.IGNORECASE).strip()
-    text = re.sub(r"^(?:quick|standard|deep|research)\b", "", text, flags=re.IGNORECASE).strip()
+    text = re.sub(r"^(?:quick|standard)\b", "", text, flags=re.IGNORECASE).strip()
     text = re.sub(r"^(?:请|帮我|请帮我|麻烦帮我|我想看|想看|帮忙)", "", text).strip()
     text = re.sub(r"^(?:调研一下|分析一下|分析|调研|看看|评估一下|评估|判断一下|判断)", "", text).strip()
     return text.strip("：:，,。.!?！？；; ")

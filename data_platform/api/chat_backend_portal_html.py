@@ -2166,7 +2166,10 @@ def render_portal_html() -> str:
     // Pricing pills
     var costMap = data.point_cost_by_event || {};
     var displayMap = data.event_pricing_display || {};
-    document.getElementById("pricing-row").innerHTML = Object.keys(costMap).map(function(et) {
+    var hiddenPricingEvents = { report_deep_run: true, report_research_run: true };
+    document.getElementById("pricing-row").innerHTML = Object.keys(costMap).filter(function(et) {
+      return !hiddenPricingEvents[et];
+    }).map(function(et) {
       var label = displayMap[et] || et;
       return '<div class="pricing-pill"><span class="name">' + esc(label) + '</span><span class="cost">' + costMap[et] + ' 积分/次</span></div>';
     }).join("");
@@ -2540,7 +2543,7 @@ def render_portal_html() -> str:
     }
     var priorityText = formatConsumptionPriority(balanceBreakdown.consumption_priority || ["subscription", "recharge", "other"]);
     var policyText = balanceBreakdown.consumption_policy_text || "系统会优先扣减月包积分；月包不足时再扣充值包积分。";
-    var examples = ["report_quick_run", "report_standard_run", "report_deep_run", "report_research_run", "llm_request", "kb_retrieve", "product_api_call", "web_search"].filter(function(eventType) {
+    var examples = ["report_quick_run", "report_standard_run", "llm_request", "kb_retrieve", "product_api_call", "web_search"].filter(function(eventType) {
       return intVal(costMap[eventType]) > 0;
     }).map(function(eventType) {
       return (displayMap[eventType] || localizeLedgerEventType(eventType) || eventType) + '：' + intVal(costMap[eventType]) + ' 积分/次';

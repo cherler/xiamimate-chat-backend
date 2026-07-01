@@ -368,7 +368,7 @@ class InternalMemoryProfileBuildRequest(BaseModel):
     query: str = Field(..., min_length=1)
     target_platform: str | None = None
     target_market: str | None = None
-    report_profile: str = Field(default="research", min_length=1)
+    report_profile: str = Field(default="standard", min_length=1)
 
     @validator("report_profile")
     def _validate_memory_report_profile(cls, value: str) -> str:  # noqa: N805
