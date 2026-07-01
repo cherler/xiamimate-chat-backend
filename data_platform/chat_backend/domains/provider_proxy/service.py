@@ -65,7 +65,7 @@ def _dify_timeout() -> int:
 
 
 def _dify_report_stream_idle_timeout() -> int:
-    return max(15, int(os.environ.get("DIFY_REPORT_STREAM_IDLE_TIMEOUT", "120")))
+    return max(15, int(os.environ.get("DIFY_REPORT_STREAM_IDLE_TIMEOUT", "300")))
 
 
 def _dify_workflow_api_key() -> str:

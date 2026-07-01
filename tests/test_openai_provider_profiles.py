@@ -26,6 +26,10 @@ class FakeResponse:
 
 
 class OpenAIProviderProfileTests(unittest.TestCase):
+    def test_dify_report_stream_idle_timeout_defaults_to_five_minutes(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(service._dify_report_stream_idle_timeout(), 300)
+
     def test_apiyi_profile_uses_profiled_env_and_removes_gpt5_sampling_params(self) -> None:
         observed = {}
 
