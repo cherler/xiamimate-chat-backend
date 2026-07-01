@@ -2281,7 +2281,7 @@ def render_portal_guide_html(*, indexable: bool = True) -> str:
       </section>
       <section id="commands" class="section-block card">
         <h2>新手常用命令</h2>
-        <div class="card-note">下面这些命令已经按新手最常见的使用顺序排好。建议先从 /help 拿提示词，再进入 /tool、/report quick、/report standard 和 /web。</div>
+        <div class="card-note">下面这些命令已经按新手最常见的使用顺序排好。建议先从 /help 拿提示词，再用 /tool 或 /report quick 做排雷体检，确认方向或 ASIN 还值得看之后，再进入 /report standard 和 /web。</div>
         <div class="example-grid">
           <div class="example-card highlight">
             <div class="example-kicker">第一次先用</div>
@@ -2295,32 +2295,32 @@ def render_portal_guide_html(*, indexable: bool = True) -> str:
           </div>
           <div class="example-card">
             <div class="example-kicker">局部验证</div>
-            <h3 class="example-title">/tool：先拆路径，再决定要不要继续放大任务</h3>
-            <p class="example-desc">适合你已经有一个大致品类方向，但还不确定该先看哪些数据和验证步骤。</p>
-            <div class="command-block">/tool 请用原生工具帮我拆解 humidifier 在 Amazon 美国站的选品验证路径：先解析候选池，再说明应该继续看 stats、trends、benchmark、top ASIN 还是补池。</div>
+            <h3 class="example-title">/tool：先做商品方向排雷</h3>
+            <p class="example-desc">适合你已经有一个大致品类方向，但还不确定这个方向有没有明显坑、是否需要补池或换更精准的词。</p>
+            <div class="command-block">/tool 请先给 humidifier 在 Amazon 美国站做商品方向排雷：解析候选池后，优先判断样本覆盖、竞争强度、价格带、评论壁垒和是否需要补池。</div>
             <div class="example-meta">
-              <div class="example-meta-item">适合：快速试水、建立分析路径、减少无效消耗。</div>
-              <div class="example-meta-item">提示：如果你还没有完整目标，先用 /tool，比直接跑完整报告更稳。</div>
+              <div class="example-meta-item">适合：快速试水、先看明显风险、减少无效消耗。</div>
+              <div class="example-meta-item">提示：如果你还没有完整目标，先用 /tool 做低成本排雷，比直接跑长报告更稳。</div>
             </div>
           </div>
           <div class="example-card">
             <div class="example-kicker">快速筛选</div>
-            <h3 class="example-title">/report quick：先判断值不值得继续看</h3>
-            <p class="example-desc">适合你手里有多个候选方向，想先筛掉明显不值得深挖的选项。</p>
-            <div class="command-block">/report quick 请快速判断 pet hair remover 在 Amazon 美国站是否值得继续看，并给出 3 个最关键验证指标。</div>
+            <h3 class="example-title">/report quick：红黄绿快速体检</h3>
+            <p class="example-desc">适合你手里有多个候选方向，想先筛掉不适合新手继续投入的选项。</p>
+            <div class="command-block">/report quick 请给 pet hair remover 在 Amazon 美国站做新手排雷体检，先输出绿灯/黄灯/红灯判断，再列出 3 个最关键风险指标。</div>
             <div class="example-meta">
               <div class="example-meta-item">适合：早期漏斗过滤、快速判断一个方向要不要继续投入。</div>
-              <div class="example-meta-item">提示：quick 更适合第一轮筛选，方向成立后再升级到 standard。</div>
+              <div class="example-meta-item">提示：quick 更适合第一轮排雷，方向没有明显红灯后再升级到 standard。</div>
             </div>
           </div>
           <div class="example-card">
-            <div class="example-kicker">完整分析</div>
-            <h3 class="example-title">/report standard：把值得看的方向做成完整判断</h3>
-            <p class="example-desc">适合你已经确认一个品类值得继续分析，想拿到更完整的市场机会、价格带和切入建议。</p>
-            <div class="command-block">/report standard 请调研 kitchen organizer 在 Amazon 美国市场的机会，并输出适合新卖家的切入建议、目标价格带和差异化方向。</div>
+            <div class="example-kicker">ASIN 体检</div>
+            <h3 class="example-title">/report standard：把明确目标做成体检报告</h3>
+            <p class="example-desc">适合你已经看到一个竞品、ASIN 或明确商品词，想看销量、价格、评论、头部压力和风险边界。</p>
+            <div class="command-block">/report standard 请体检 ASIN B0GG8YFVV1 在 Amazon 美国站是否值得新手跟进，重点看销量/价格/BSR/评论变化、头部压力和主要风险。</div>
             <div class="example-meta">
-              <div class="example-meta-item">适合：立项前深挖、准备做一次更完整的进入判断时。</div>
-              <div class="example-meta-item">提示：问题里尽量带上市场、类目、目标用户和你最关心的输出。</div>
+              <div class="example-meta-item">适合：立项前体检、竞品跟进判断、样品下单前排雷。</div>
+              <div class="example-meta-item">提示：问题里尽量带上市场、ASIN/商品词和你最关心的风险。</div>
             </div>
           </div>
           <div class="example-card">
@@ -2498,7 +2498,7 @@ def render_portal_tools_html(*, indexable: bool = True) -> str:
       <style>''' + _TOOLS_PAGE_CSS + '''</style>
       <section id="intro" class="section-block card">
         <div class="tools-hero">
-          <div class="card-note" style="margin:0">给跨境电商卖家准备的免费小工具：先快速处理利润、定价和标题，再继续交给虾米选品做商品方向排雷。</div>
+          <div class="card-note" style="margin:0">给跨境电商卖家准备的免费小工具：先快速处理利润、定价、标题和差评线索，再继续交给虾米选品做商品方向排雷。</div>
           <div class="tools-trust-row">
             <span>✓ 不用注册也能先用</span>
             <span>✓ 10 秒内给出结果</span>
@@ -3289,7 +3289,7 @@ def render_portal_invite_html(*, indexable: bool = True) -> str:
         <div class="card-note">它不是单点工具，而是把一次完整分析拆成更容易落地的四个环节，让你从“想到一个方向”走到“知道下一步该怎么做”。</div>
         <div class="timeline-list">
           <div class="timeline-item"><div class="timeline-title">1. 智能问答：先把问题问清楚</div><div class="timeline-desc">适合先澄清某个市场、某个类目、某个商品方向值不值得继续看，避免一开始就跑大任务。</div></div>
-          <div class="timeline-item"><div class="timeline-title">2. /report：把目标变成完整报告</div><div class="timeline-desc">当你已经有明确目标时，直接输出趋势、竞争、风险和进入建议，并可按 quick、standard、deep、research 选择报告深度；/workflow 当前仍作为兼容入口保留。</div></div>
+          <div class="timeline-item"><div class="timeline-title">2. /report：把目标变成排雷体检报告</div><div class="timeline-desc">当你已经有明确商品词或 ASIN 时，先输出继续看 / 谨慎 / 暂停的判断，再展开趋势、竞争、价格带、评论壁垒和进入风险；/workflow 当前仍作为兼容入口保留。</div></div>
           <div class="timeline-item"><div class="timeline-title">3. 提示词知识库：先拿可直接复制的问法</div><div class="timeline-desc">如果你还不知道应该怎么提问，可以直接输入“新手卖家提示词”“决策层提示词”等短句，先拿一批系统整理好的示例和使用方式。</div></div>
           <div class="timeline-item"><div class="timeline-title">4. 知识库：补规则和方法依据</div><div class="timeline-desc">需要看平台规则、SOP、产品说明和标准答复时，不再到处翻资料，直接回到统一入口检索。</div></div>
           <div class="timeline-item"><div class="timeline-title">5. 账户页：回看成本和奖励结果</div><div class="timeline-desc">分析完成后，可以回到账户页看积分消耗、账本变化、邀请奖励和整体使用趋势。</div></div>
