@@ -172,11 +172,38 @@ def _openai_api_key() -> str:
     return api_key
 
 
-def _agent_openai_provider():
-    provider = build_llm_provider("AGENT_OPENAI", provider_default="openai_compatible", enabled_default=True)
+ALLOWED_OPENAI_PROVIDER_PROFILES = {"apiyi"}
+
+
+def _normalize_openai_provider_profile(provider_profile: str | None) -> str | None:
+    normalized = str(provider_profile or "").strip().lower()
+    if not normalized or normalized in {"default", "deepseek"}:
+        return None
+    if normalized not in ALLOWED_OPENAI_PROVIDER_PROFILES:
+        raise HTTPException(status_code=400, detail=f"unsupported AGENT_OPENAI provider profile: {provider_profile}")
+    return normalized
+
+
+def _agent_openai_provider(provider_profile: str | None = None):
+    profile_override = _normalize_openai_provider_profile(provider_profile)
+    provider = build_llm_provider(
+        "AGENT_OPENAI",
+        provider_default="openai_compatible",
+        enabled_default=True,
+        profile_override=profile_override,
+    )
     if provider.provider_name != "openai_compatible":
         raise HTTPException(status_code=500, detail=f"AGENT_OPENAI provider mismatch: {provider.provider_name}")
     return provider
+
+
+def _prepare_openai_chat_payload(payload: dict[str, Any], *, model: str) -> dict[str, Any]:
+    prepared = dict(payload or {})
+    if str(model or "").strip().lower().startswith("gpt-5"):
+        prepared.pop("temperature", None)
+        prepared.pop("top_p", None)
+        prepared.setdefault("reasoning_effort", "medium")
+    return prepared
 
 
 def _agent_anthropic_provider():
@@ -1410,18 +1437,19 @@ def _proxy_customer_help_retrieve(query: str, top_k: int) -> str:
 # OpenAI-compatible / Anthropic-compatible LLM proxy
 # ---------------------------------------------------------------------------
 
-def _proxy_openai_chat_completion(payload: dict[str, Any]) -> dict[str, Any]:
-    provider = _agent_openai_provider()
+def _proxy_openai_chat_completion(payload: dict[str, Any], provider_profile: str | None = None) -> dict[str, Any]:
+    provider = _agent_openai_provider(provider_profile=provider_profile)
+    prepared_payload = _prepare_openai_chat_payload(payload, model=provider.model)
     extra_body = {
         key: value
-        for key, value in dict(payload or {}).items()
+        for key, value in prepared_payload.items()
         if key not in {"messages", "temperature", "response_format", "model"}
     }
     try:
         return provider.chat(
-            messages=list(payload.get("messages") or []),
-            temperature=float(payload.get("temperature") or 0),
-            response_format=payload.get("response_format") if isinstance(payload.get("response_format"), dict) else None,
+            messages=list(prepared_payload.get("messages") or []),
+            temperature=float(prepared_payload.get("temperature") or 0) if "temperature" in prepared_payload else None,
+            response_format=prepared_payload.get("response_format") if isinstance(prepared_payload.get("response_format"), dict) else None,
             extra_body=extra_body or None,
         )
     except http_requests.RequestException as exc:
@@ -1431,14 +1459,22 @@ def _proxy_openai_chat_completion(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(exc)[:4000])
 
 
-def _proxy_openai_chat_completion_stream(payload: dict[str, Any]) -> http_requests.Response:
-    config = build_openai_compatible_config("AGENT_OPENAI", enabled_default=True)
+def _proxy_openai_chat_completion_stream(
+    payload: dict[str, Any],
+    provider_profile: str | None = None,
+) -> http_requests.Response:
+    profile_override = _normalize_openai_provider_profile(provider_profile)
+    config = build_openai_compatible_config(
+        "AGENT_OPENAI",
+        enabled_default=True,
+        profile_override=profile_override,
+    )
     if not config.enabled:
         raise HTTPException(status_code=500, detail="AGENT_OPENAI is not enabled")
     if not config.configured:
         raise HTTPException(status_code=500, detail="AGENT_OPENAI requires BASE_URL and MODEL")
 
-    stream_payload = dict(payload or {})
+    stream_payload = _prepare_openai_chat_payload(payload, model=config.model)
     stream_payload["model"] = config.model
     stream_payload["stream"] = True
 

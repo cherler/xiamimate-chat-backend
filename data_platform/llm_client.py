@@ -46,13 +46,18 @@ def env_flag(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _active_profile(prefix: str) -> str | None:
-    profile = os.environ.get(f"{prefix}_PROFILE", "").strip().lower()
+def _active_profile(prefix: str, profile_override: str | None = None) -> str | None:
+    profile = (profile_override or os.environ.get(f"{prefix}_PROFILE", "")).strip().lower()
     return profile or None
 
 
-def _profile_env_value(prefix: str, key: str, default: str | None = None) -> str | None:
-    profile = _active_profile(prefix)
+def _profile_env_value(
+    prefix: str,
+    key: str,
+    default: str | None = None,
+    profile_override: str | None = None,
+) -> str | None:
+    profile = _active_profile(prefix, profile_override=profile_override)
     if profile:
         profiled_key = f"{prefix}_{profile.upper()}_{key}"
         profiled_value = os.environ.get(profiled_key)
@@ -70,8 +75,9 @@ def _profile_env_value_with_aliases(
     key: str,
     default: str | None = None,
     aliases: tuple[str, ...] = (),
+    profile_override: str | None = None,
 ) -> str | None:
-    profile = _active_profile(prefix)
+    profile = _active_profile(prefix, profile_override=profile_override)
     if profile:
         for alias in aliases:
             profiled_value = os.environ.get(f"{prefix}_{profile.upper()}_{alias}")
@@ -81,11 +87,16 @@ def _profile_env_value_with_aliases(
         value = os.environ.get(f"{prefix}_{alias}")
         if value is not None and value.strip() != "":
             return value.strip()
-    return _profile_env_value(prefix, key, default)
+    return _profile_env_value(prefix, key, default, profile_override=profile_override)
 
 
-def _profile_env_flag(prefix: str, key: str, default: bool = False) -> bool:
-    profile = _active_profile(prefix)
+def _profile_env_flag(
+    prefix: str,
+    key: str,
+    default: bool = False,
+    profile_override: str | None = None,
+) -> bool:
+    profile = _active_profile(prefix, profile_override=profile_override)
     if profile:
         profiled_key = f"{prefix}_{profile.upper()}_{key}"
         profiled_value = os.environ.get(profiled_key)
@@ -168,7 +179,7 @@ class LLMProvider(ABC):
         self,
         *,
         messages: list[dict[str, Any]],
-        temperature: float = 0,
+        temperature: float | None = 0,
         response_format: dict[str, Any] | None = None,
         extra_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -278,8 +289,9 @@ class OpenAICompatibleProvider(LLMProvider):
         payload: dict[str, Any] = {
             "model": self.config.model,
             "messages": messages,
-            "temperature": temperature,
         }
+        if temperature is not None:
+            payload["temperature"] = temperature
         if self.config.default_extra_body:
             payload.update(self.config.default_extra_body)
         if response_format is not None:
@@ -291,18 +303,34 @@ class OpenAICompatibleProvider(LLMProvider):
         if self.config.api_key:
             headers["Authorization"] = f"Bearer {self.config.api_key}"
 
-        response = requests.post(
-            build_chat_completions_url(self.config.base_url),
-            headers=headers,
-            json=payload,
-            timeout=self.config.timeout_seconds,
-        )
-        if not response.ok:
-            raise requests.HTTPError(
-                f"{response.status_code} {response.reason} for url: {response.url}\n{response.text}",
-                response=response,
-            )
-        return response.json()
+        last_error: Exception | None = None
+        for attempt in range(2):
+            try:
+                response = requests.post(
+                    build_chat_completions_url(self.config.base_url),
+                    headers=headers,
+                    json=payload,
+                    timeout=self.config.timeout_seconds,
+                )
+                if not response.ok:
+                    raise requests.HTTPError(
+                        f"{response.status_code} {response.reason} for url: {response.url}\n{response.text}",
+                        response=response,
+                    )
+                return response.json()
+            except (
+                requests.exceptions.ChunkedEncodingError,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                json.JSONDecodeError,
+            ) as exc:
+                last_error = exc
+                if attempt == 0:
+                    continue
+                raise
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("OpenAI-compatible provider returned no response")
 
 
 class AnthropicCompatibleProvider(LLMProvider):
@@ -430,14 +458,25 @@ class UnsupportedLLMProvider(LLMProvider):
         raise ValueError(self.config.error)
 
 
-def build_openai_compatible_config(prefix: str, *, enabled_default: bool = False) -> OpenAICompatibleConfig:
+def build_openai_compatible_config(
+    prefix: str,
+    *,
+    enabled_default: bool = False,
+    profile_override: str | None = None,
+) -> OpenAICompatibleConfig:
     load_env_file_if_present(ROOT_ENV_FILE)
-    enabled = _profile_env_flag(prefix, "ENABLED", default=enabled_default)
-    base_url = _profile_env_value(prefix, "BASE_URL", "") or ""
-    model = _profile_env_value(prefix, "MODEL", "") or ""
-    api_key = _profile_env_value(prefix, "API_KEY", "") or ""
+    enabled = _profile_env_flag(prefix, "ENABLED", default=enabled_default, profile_override=profile_override)
+    base_url = _profile_env_value(prefix, "BASE_URL", "", profile_override=profile_override) or ""
+    model = _profile_env_value(prefix, "MODEL", "", profile_override=profile_override) or ""
+    api_key = _profile_env_value(prefix, "API_KEY", "", profile_override=profile_override) or ""
     timeout_seconds = float(
-        _profile_env_value(prefix, "TIMEOUT_SECONDS", _profile_env_value(prefix, "TIMEOUT", "20")) or "20"
+        _profile_env_value(
+            prefix,
+            "TIMEOUT_SECONDS",
+            _profile_env_value(prefix, "TIMEOUT", "20", profile_override=profile_override),
+            profile_override=profile_override,
+        )
+        or "20"
     )
     default_extra_body: dict[str, Any] = {}
     if "api.minimaxi.com" in base_url.lower() and _profile_env_flag(prefix, "REASONING_SPLIT", default=True):
@@ -481,11 +520,25 @@ def build_anthropic_compatible_config(prefix: str, *, enabled_default: bool = Fa
     )
 
 
-def build_llm_provider(prefix: str, *, provider_default: str = "openai_compatible", enabled_default: bool = False) -> LLMProvider:
+def build_llm_provider(
+    prefix: str,
+    *,
+    provider_default: str = "openai_compatible",
+    enabled_default: bool = False,
+    profile_override: str | None = None,
+) -> LLMProvider:
     load_env_file_if_present(ROOT_ENV_FILE)
-    provider_name = (_profile_env_value(prefix, "PROVIDER", provider_default) or provider_default).strip().lower()
+    provider_name = (
+        _profile_env_value(prefix, "PROVIDER", provider_default, profile_override=profile_override) or provider_default
+    ).strip().lower()
     if provider_name in {"openai_compatible", "openai"}:
-        return OpenAICompatibleProvider(build_openai_compatible_config(prefix, enabled_default=enabled_default))
+        return OpenAICompatibleProvider(
+            build_openai_compatible_config(
+                prefix,
+                enabled_default=enabled_default,
+                profile_override=profile_override,
+            )
+        )
     if provider_name in {"anthropic_compatible", "anthropic"}:
         return AnthropicCompatibleProvider(build_anthropic_compatible_config(prefix, enabled_default=enabled_default))
     return UnsupportedLLMProvider(

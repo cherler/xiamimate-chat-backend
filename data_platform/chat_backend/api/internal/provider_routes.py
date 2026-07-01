@@ -353,7 +353,7 @@ def internal_minimax_chat_completion_stream(request: Request, payload: InternalM
 @router.post("/internal/provider/openai/chat-completions")
 def internal_openai_chat_completion(request: Request, payload: InternalLLMRequest) -> dict[str, Any]:
     _require_internal_service(request, request.url.path)
-    provider_response = _proxy_openai_chat_completion(payload=payload.payload)
+    provider_response = _proxy_openai_chat_completion(payload=payload.payload, provider_profile=payload.provider_profile)
     return _success_response(
         "/internal/provider/openai/chat-completions",
         provider_response,
@@ -364,7 +364,10 @@ def internal_openai_chat_completion(request: Request, payload: InternalLLMReques
 @router.post("/internal/provider/openai/chat-completions/stream")
 def internal_openai_chat_completion_stream(request: Request, payload: InternalLLMRequest) -> StreamingResponse:
     _require_internal_service(request, request.url.path)
-    upstream_response = _proxy_openai_chat_completion_stream(payload=payload.payload)
+    upstream_response = _proxy_openai_chat_completion_stream(
+        payload=payload.payload,
+        provider_profile=payload.provider_profile,
+    )
 
     def iterate_stream() -> Any:
         try:

@@ -462,6 +462,7 @@ class InternalOnebound1688SupplierDiscoveryRequest(BaseModel):
 
 class InternalLLMRequest(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
+    provider_profile: str | None = Field(default=None, max_length=40)
 
 
 class InternalMinimaxRequest(InternalLLMRequest):

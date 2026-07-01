@@ -12,3 +12,4 @@ env/
 !.env.example
 logs/
 *.log
+apiyi-apikey
