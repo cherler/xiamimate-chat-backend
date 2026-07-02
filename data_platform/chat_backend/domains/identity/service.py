@@ -1268,6 +1268,58 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
     }
 
 
+def _auto_request_email_verification_if_needed(conn, user_id: str) -> dict[str, Any] | None:
+    if not _portal_email_verification_gate_enabled():
+        return None
+
+    try:
+        user = _fetch_user(conn, user_id)
+        if user.email_verified_at is not None:
+            return None
+
+        email = _validate_email_address(user.email)
+        latest = _fetch_optional_one(
+            conn,
+            """
+            SELECT challenge_id, last_sent_at, expires_at
+            FROM app.email_verification_challenge
+            WHERE user_id = %s
+              AND email = %s
+              AND purpose = %s
+              AND consumed_at IS NULL
+              AND expires_at >= NOW()
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            [user_id, email, _EMAIL_CHALLENGE_PURPOSE_SIGNUP],
+        )
+        if latest is not None and latest.get("last_sent_at") is not None:
+            expires_in_seconds = 0
+            if latest.get("expires_at"):
+                expires_in_seconds = max(0, int((latest["expires_at"] - _utc_now()).total_seconds()))
+            return {
+                "email": email,
+                "email_verified": False,
+                "challenge_id": latest.get("challenge_id"),
+                "expires_in_seconds": expires_in_seconds,
+                "auto_sent": False,
+                "reason": "active_challenge_exists",
+            }
+
+        result = _request_email_verification(conn, user_id)
+    except HTTPException as exc:
+        _LOGGER.info(
+            "auto email verification skipped",
+            extra={"user_id": user_id, "status_code": exc.status_code, "detail": exc.detail},
+        )
+        return None
+    except Exception:
+        _LOGGER.exception("auto email verification failed", extra={"user_id": user_id})
+        return None
+    result["auto_sent"] = True
+    return result
+
+
 def _confirm_email_verification(conn, user_id: str, code: str) -> RequestUser:
     user = _fetch_user(conn, user_id)
     email = _validate_email_address(user.email)

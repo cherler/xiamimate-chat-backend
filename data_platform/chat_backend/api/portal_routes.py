@@ -73,6 +73,7 @@ from data_platform.chat_backend.domains.billing.service import (
     _resolve_signup_gift_points,
 )
 from data_platform.chat_backend.domains.identity.service import (
+    _auto_request_email_verification_if_needed,
     _bind_user_referral,
     _confirm_email_verification,
     _confirm_email_verification_link as _confirm_email_verification_link_token,
@@ -811,7 +812,8 @@ def portal_validate_session(request: Request) -> Response:
     user_id, email, name = resolved_user
     try:
         with _postgres_conn() as conn:
-            _ensure_user_record(conn, user_id=user_id, email=email, display_name=name)
+            user = _ensure_user_record(conn, user_id=user_id, email=email, display_name=name)
+            _auto_request_email_verification_if_needed(conn, user.user_id)
             device_session_state = _evaluate_device_session_request(conn, user_id, request, touch=True)
             if device_session_state["status"] == "invalid":
                 return Response(status_code=409)
@@ -853,7 +855,8 @@ def openwebui_verified_user_check(request: Request) -> Response:
     user_id, email, name = resolved_user
     try:
         with _postgres_conn() as conn:
-            _ensure_user_record(conn, user_id=user_id, email=email, display_name=name)
+            user = _ensure_user_record(conn, user_id=user_id, email=email, display_name=name)
+            _auto_request_email_verification_if_needed(conn, user.user_id)
             device_session_state = _evaluate_device_session_request(conn, user_id, request, touch=True)
             if device_session_state["status"] == "invalid":
                 return Response(status_code=409)
@@ -1105,7 +1108,8 @@ def bootstrap_openwebui_device_session(request: Request, response: Response) -> 
 
     user_id, email, display_name = resolved_user
     with _postgres_conn() as conn:
-        _ensure_user_record(conn, user_id=user_id, email=email, display_name=display_name)
+        user = _ensure_user_record(conn, user_id=user_id, email=email, display_name=display_name)
+        _auto_request_email_verification_if_needed(conn, user.user_id)
         session_row, raw_token, created = _bootstrap_device_session(conn, user_id, request)
         if session_row is None or raw_token is None:
             raise HTTPException(status_code=409, detail="current device session expired")
