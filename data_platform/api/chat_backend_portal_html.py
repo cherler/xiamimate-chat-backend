@@ -1412,6 +1412,7 @@ def render_portal_html() -> str:
   const notificationState = { category: "system", items: [] };
   var currentAccountData = null;
   var verificationGateState = { enforced: false, verified: false };
+  var verificationCountdownTimer = null;
   var inviteAutoBindNoticeKey = "xm_pending_invite_binding_notice";
 
   navItems.forEach(function(item) {
@@ -1487,10 +1488,12 @@ def render_portal_html() -> str:
   if (sendVerificationCodeButton) {
     sendVerificationCodeButton.addEventListener("click", function() {
       verificationRequestMessage.textContent = "发送中…";
+      sendVerificationCodeButton.disabled = true;
       apiPost("/portal/api/account/email-verification/request").then(function(data) {
-        verificationRequestMessage.textContent = "验证码已发送到 " + (data.email || "当前邮箱") + "，请在邮箱中查收。";
+        applyEmailVerificationChallengeState(mergeEmailVerificationRequestState(data));
       }).catch(function(error) {
         verificationRequestMessage.textContent = "发送失败：" + error.message;
+        applyEmailVerificationChallengeState((currentAccountData || {}).identity_verification || {});
       });
     });
   }
@@ -1675,11 +1678,12 @@ def render_portal_html() -> str:
           heroSendBtn._wired = true;
           heroSendBtn.addEventListener("click", function() {
             heroSendMsg.textContent = "发送中…";
+            heroSendBtn.disabled = true;
             apiPost("/portal/api/account/email-verification/request").then(function(data) {
-              heroSendMsg.textContent = "验证邮件已发送到 " + (data.email || "当前邮箱") + "，可点击邮件按钮完成验证，也可输入验证码。";
-              if (verificationRequestMessage) verificationRequestMessage.textContent = heroSendMsg.textContent;
+              applyEmailVerificationChallengeState(mergeEmailVerificationRequestState(data));
             }).catch(function(err) {
               heroSendMsg.textContent = "发送失败：" + err.message;
+              applyEmailVerificationChallengeState((currentAccountData || {}).identity_verification || {});
             });
           });
         }
@@ -1887,6 +1891,113 @@ def render_portal_html() -> str:
     return apiRequest(path, options);
   }
 
+  function formatVerificationCountdown(totalSeconds) {
+    var seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    var minutes = Math.floor(seconds / 60);
+    var remainder = seconds % 60;
+    if (minutes <= 0) {
+      return String(remainder) + " 秒";
+    }
+    return String(minutes) + " 分 " + String(remainder).padStart(2, "0") + " 秒";
+  }
+
+  function mergeEmailVerificationRequestState(data) {
+    var identityVerification = (currentAccountData && currentAccountData.identity_verification) || {};
+    if (currentAccountData && !currentAccountData.identity_verification) {
+      currentAccountData.identity_verification = identityVerification;
+    }
+    if (data && data.email) {
+      identityVerification.email = data.email;
+    }
+    if (data && data.email_verified) {
+      identityVerification.email_verified = true;
+      identityVerification.email_verified_at = data.email_verified_at || identityVerification.email_verified_at;
+      identityVerification.email_verification_challenge = null;
+      return identityVerification;
+    }
+    if (data && data.challenge_id && Number(data.expires_in_seconds || 0) > 0) {
+      identityVerification.email_verified = false;
+      identityVerification.email_verification_challenge = {
+        email: data.email || identityVerification.email,
+        challenge_id: data.challenge_id,
+        expires_in_seconds: Number(data.expires_in_seconds || 0),
+        already_sent: !!data.already_sent,
+      };
+    }
+    return identityVerification;
+  }
+
+  function applyEmailVerificationChallengeState(identityVerification) {
+    if (verificationCountdownTimer) {
+      clearInterval(verificationCountdownTimer);
+      verificationCountdownTimer = null;
+    }
+
+    identityVerification = identityVerification || {};
+    var emailVerified = !!identityVerification.email_verified;
+    var challenge = identityVerification.email_verification_challenge || null;
+    var initialRemaining = challenge ? Math.max(0, Math.floor(Number(challenge.expires_in_seconds) || 0)) : 0;
+    var expiresAtMs = Date.now() + initialRemaining * 1000;
+    var heroSendBtn = document.getElementById("hero-send-code-btn");
+    var heroSendMsg = document.getElementById("hero-send-msg");
+
+    function setSendButtonState(disabled, label) {
+      if (sendVerificationCodeButton) {
+        sendVerificationCodeButton.disabled = disabled;
+        sendVerificationCodeButton.textContent = label;
+      }
+      if (heroSendBtn) {
+        heroSendBtn.disabled = disabled;
+        heroSendBtn.textContent = label;
+      }
+    }
+
+    function setRequestMessage(text) {
+      if (verificationRequestMessage) {
+        verificationRequestMessage.textContent = text;
+      }
+      if (heroSendMsg) {
+        heroSendMsg.textContent = text;
+      }
+    }
+
+    if (emailVerified) {
+      setSendButtonState(true, "已完成验证");
+      return;
+    }
+
+    if (!challenge || initialRemaining <= 0) {
+      setSendButtonState(false, "发送邮箱验证码");
+      return;
+    }
+
+    function tick() {
+      var remaining = Math.max(0, Math.ceil((expiresAtMs - Date.now()) / 1000));
+      if (remaining <= 0) {
+        if (verificationCountdownTimer) {
+          clearInterval(verificationCountdownTimer);
+          verificationCountdownTimer = null;
+        }
+        setSendButtonState(false, "重新发送验证码");
+        setRequestMessage("验证码已失效，可以重新发送。请只保留最新一封邮件中的验证码。");
+        if (currentAccountData && currentAccountData.identity_verification) {
+          currentAccountData.identity_verification.email_verification_challenge = null;
+        }
+        return;
+      }
+
+      setSendButtonState(true, "验证码已发送");
+      setRequestMessage(
+        "验证码已发送到 " + (challenge.email || identityVerification.email || "当前邮箱")
+        + "，有效期还剩 " + formatVerificationCountdown(remaining)
+        + "。未失效前不能重复发送。"
+      );
+    }
+
+    tick();
+    verificationCountdownTimer = setInterval(tick, 1000);
+  }
+
   function consumeInviteAutoBindNotice(identityVerification) {
     if (!inviteAutoBindStatusValue) {
       return;
@@ -2011,7 +2122,7 @@ def render_portal_html() -> str:
       securityConfirmMessage.textContent = "当前浏览器已通过安全验证，可直接执行高风险操作。";
     }
     if (sendVerificationCodeButton) {
-      sendVerificationCodeButton.disabled = emailVerified;
+      applyEmailVerificationChallengeState(identityVerification);
     }
     if (confirmVerificationButton) {
       confirmVerificationButton.disabled = emailVerified;

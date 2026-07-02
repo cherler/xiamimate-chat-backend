@@ -851,6 +851,50 @@ def _request_password_reset(conn, email: str) -> dict[str, Any]:
     }
 
 
+def _fetch_active_email_verification_challenge(conn, user_id: str, email: str) -> dict[str, Any] | None:
+    return _fetch_optional_one(
+        conn,
+        """
+        SELECT challenge_id, user_id, email, expires_at, consumed_at, last_sent_at, created_at,
+               failed_attempt_count, locked_until, last_failed_at
+        FROM app.email_verification_challenge
+        WHERE user_id = %s
+          AND email = %s
+          AND purpose = %s
+          AND consumed_at IS NULL
+          AND expires_at >= NOW()
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        [user_id, email, _EMAIL_CHALLENGE_PURPOSE_SIGNUP],
+    )
+
+
+def _build_email_verification_challenge_status(email: str, challenge: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
+    effective_now = now or _utc_now()
+    expires_in_seconds = 0
+    if challenge.get("expires_at"):
+        expires_in_seconds = max(0, int((challenge["expires_at"] - effective_now).total_seconds()))
+    return {
+        "email": email,
+        "email_verified": False,
+        "email_verified_at": None,
+        "challenge_id": challenge.get("challenge_id"),
+        "expires_in_seconds": expires_in_seconds,
+        "verification_link_available": True,
+        "already_sent": True,
+        "reason": "active_challenge_exists",
+    }
+
+
+def _lock_email_verification_request(conn, user_id: str, email: str) -> None:
+    _run_pg_dict_query(
+        conn,
+        "SELECT pg_advisory_xact_lock(90210702, hashtext(%s))",
+        [f"{user_id}:{email.strip().lower()}"],
+    )
+
+
 def _request_security_verification(conn, user_id: str) -> dict[str, Any]:
     user = _fetch_user(conn, user_id)
     email = _validate_email_address(user.email)
@@ -1166,22 +1210,8 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
             "expires_in_seconds": 0,
         }
 
-    latest = _fetch_optional_one(
-        conn,
-        """
-                SELECT challenge_id, user_id, email, expires_at, consumed_at, last_sent_at, created_at,
-                             failed_attempt_count, locked_until, last_failed_at
-        FROM app.email_verification_challenge
-        WHERE user_id = %s
-          AND email = %s
-                    AND purpose = %s
-          AND consumed_at IS NULL
-          AND expires_at >= NOW()
-        ORDER BY created_at DESC
-        LIMIT 1
-        """,
-                [user_id, email, _EMAIL_CHALLENGE_PURPOSE_SIGNUP],
-    )
+    _lock_email_verification_request(conn, user_id, email)
+    latest = _fetch_active_email_verification_challenge(conn, user_id, email)
     now = _utc_now()
     if latest and latest.get("locked_until") is not None and latest["locked_until"] > now:
         remaining = int((latest["locked_until"] - now).total_seconds())
@@ -1189,12 +1219,9 @@ def _request_email_verification(conn, user_id: str) -> dict[str, Any]:
             status_code=429,
             detail=f"验证码已被锁定，请在{_format_retry_after_seconds(remaining)}后重新获取",
         )
+    if latest is not None:
+        return _build_email_verification_challenge_status(email, latest, now)
     _enforce_email_verification_send_quota(conn, user_id=user_id, email=email, now=now)
-    if latest and latest.get("last_sent_at") is not None:
-        cooldown = (now - latest["last_sent_at"]).total_seconds()
-        if cooldown < EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS:
-            remaining = int(EMAIL_VERIFICATION_RESEND_INTERVAL_SECONDS - cooldown)
-            raise HTTPException(status_code=429, detail=f"请在 {remaining} 秒后再重新发送验证码")
 
     code = _generate_numeric_code(6)
     confirm_token = secrets.token_urlsafe(32)
@@ -1278,33 +1305,11 @@ def _auto_request_email_verification_if_needed(conn, user_id: str) -> dict[str, 
             return None
 
         email = _validate_email_address(user.email)
-        latest = _fetch_optional_one(
-            conn,
-            """
-            SELECT challenge_id, last_sent_at, expires_at
-            FROM app.email_verification_challenge
-            WHERE user_id = %s
-              AND email = %s
-              AND purpose = %s
-              AND consumed_at IS NULL
-              AND expires_at >= NOW()
-            ORDER BY created_at DESC
-            LIMIT 1
-            """,
-            [user_id, email, _EMAIL_CHALLENGE_PURPOSE_SIGNUP],
-        )
-        if latest is not None and latest.get("last_sent_at") is not None:
-            expires_in_seconds = 0
-            if latest.get("expires_at"):
-                expires_in_seconds = max(0, int((latest["expires_at"] - _utc_now()).total_seconds()))
-            return {
-                "email": email,
-                "email_verified": False,
-                "challenge_id": latest.get("challenge_id"),
-                "expires_in_seconds": expires_in_seconds,
-                "auto_sent": False,
-                "reason": "active_challenge_exists",
-            }
+        latest = _fetch_active_email_verification_challenge(conn, user_id, email)
+        if latest is not None:
+            result = _build_email_verification_challenge_status(email, latest)
+            result["auto_sent"] = False
+            return result
 
         result = _request_email_verification(conn, user_id)
     except HTTPException as exc:
@@ -1580,6 +1585,16 @@ def _build_identity_verification_summary(conn, user_id: str) -> dict[str, Any]:
     user = _fetch_user(conn, user_id)
     binding = _fetch_user_referral_binding(conn, user_id)
     email_verified = user.email_verified_at is not None
+    active_challenge = None
+    if not email_verified:
+        try:
+            verification_email = _validate_email_address(user.email)
+        except HTTPException:
+            verification_email = ""
+        if verification_email:
+            latest = _fetch_active_email_verification_challenge(conn, user_id, verification_email)
+            if latest is not None:
+                active_challenge = _build_email_verification_challenge_status(verification_email, latest)
     invite_code = user.invite_code
     invite_link = None
     if invite_code:
@@ -1588,6 +1603,7 @@ def _build_identity_verification_summary(conn, user_id: str) -> dict[str, Any]:
         "email": user.email,
         "email_verified": email_verified,
         "email_verified_at": user.email_verified_at,
+        "email_verification_challenge": active_challenge,
         "email_verification_required_before_portal_use": _portal_email_verification_gate_enabled(),
         "invite_code": invite_code,
         "invite_link": invite_link,
