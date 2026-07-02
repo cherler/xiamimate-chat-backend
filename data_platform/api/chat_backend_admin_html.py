@@ -842,6 +842,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
         <button class="module-nav-button secondary" data-nav-target="section-user-detail">用户详情</button>
         <button class="module-nav-button secondary" data-nav-target="module-grant">人工加积分</button>
         <button class="module-nav-button secondary" data-nav-target="module-broadcast">系统通知广播</button>
+        <button class="module-nav-button secondary" data-nav-target="module-email-campaign">邮件群发</button>
         <button class="module-nav-button secondary" data-nav-target="module-redeem">兑换码运营</button>
         <button class="module-nav-button secondary" data-nav-target="module-pricing">计价管理</button>
         <button class="module-nav-button secondary" data-nav-target="module-site-config">站点联络配置</button>
@@ -1022,6 +1023,82 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
               </div>
             </section>
 
+            <section id="module-email-campaign" data-admin-page="module-email-campaign" class="card panel management-module module-card module-anchor">
+              <div class="module-card-head">
+                <h3>邮件群发</h3>
+                <div class="hint">从注册用户中筛选并勾选收件人，邮件会按用户逐封单独发送，不暴露其他用户邮箱。</div>
+              </div>
+              <div class="module-card-body">
+                <div class="field-grid">
+                  <div class="detail-grid">
+                    <div>
+                      <label for="email-campaign-query">收件人筛选</label>
+                      <input id="email-campaign-query" type="text" placeholder="用户名 / 邮箱 / user_id" />
+                    </div>
+                    <div>
+                      <label for="email-campaign-status-filter">用户状态</label>
+                      <select id="email-campaign-status-filter" style="width:100%; border:1px solid rgba(17, 75, 95, 0.18); border-radius:14px; background:rgba(255,255,255,0.92); padding:12px 14px; color:var(--ink);">
+                        <option value="active">active</option>
+                        <option value="all">全部</option>
+                        <option value="disabled">disabled</option>
+                        <option value="suspended">suspended</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="email-campaign-verified-filter">邮箱验证</label>
+                      <select id="email-campaign-verified-filter" style="width:100%; border:1px solid rgba(17, 75, 95, 0.18); border-radius:14px; background:rgba(255,255,255,0.92); padding:12px 14px; color:var(--ink);">
+                        <option value="">全部</option>
+                        <option value="verified">已验证</option>
+                        <option value="unverified">未验证</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="email-campaign-page-size">每页</label>
+                      <select id="email-campaign-page-size" style="width:100%; border:1px solid rgba(17, 75, 95, 0.18); border-radius:14px; background:rgba(255,255,255,0.92); padding:12px 14px; color:var(--ink);">
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="button-row">
+                    <button id="load-email-campaign-recipients" class="secondary">加载收件人</button>
+                    <button id="select-email-campaign-page" class="secondary">勾选本页</button>
+                    <button id="clear-email-campaign-selection" class="secondary">清空勾选</button>
+                  </div>
+                  <div id="email-campaign-recipient-status" class="status"></div>
+                  <div id="email-campaign-selected-summary" class="hint">已勾选 0 个收件人。</div>
+                  <div id="email-campaign-recipient-list"></div>
+                  <div id="email-campaign-recipient-pager" class="pager-row"></div>
+                  <div>
+                    <label for="email-campaign-name">活动名称</label>
+                    <input id="email-campaign-name" type="text" value="GPT-5.5 上线通知" />
+                  </div>
+                  <div>
+                    <label for="email-campaign-subject">邮件主题</label>
+                    <input id="email-campaign-subject" type="text" value="虾米选品已上线新模型 GPT-5.5，欢迎体验" />
+                  </div>
+                  <div>
+                    <label for="email-campaign-text-body">纯文本正文</label>
+                    <div class="hint">可使用变量：{display_name} 自动填入用户名，{email} 自动填入邮箱。</div>
+                    <textarea id="email-campaign-text-body" rows="12"></textarea>
+                  </div>
+                  <div>
+                    <label for="email-campaign-html-body">HTML 正文（可选）</label>
+                    <div class="hint">HTML 正文同样支持 {display_name} 和 {email}，发送时会逐封替换。</div>
+                    <textarea id="email-campaign-html-body" rows="12"></textarea>
+                  </div>
+                  <div class="button-row">
+                    <button id="create-email-campaign" class="secondary">创建邮件活动</button>
+                    <button id="send-email-campaign" class="warn">确认发送当前活动</button>
+                    <button id="load-email-campaigns" class="secondary">刷新邮件记录</button>
+                  </div>
+                  <div id="email-campaign-status" class="status"></div>
+                  <div id="email-campaign-history"></div>
+                </div>
+              </div>
+            </section>
+
             <section id="module-redeem" data-admin-page="module-redeem" class="card panel management-module module-card module-anchor">
               <div class="module-card-head">
                 <h3>兑换码运营</h3>
@@ -1177,6 +1254,9 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       redeemCodeOffset: 0,
       redeemBatchOffset: 0,
       redeemSelectedBatchOffset: 0,
+      emailCampaignRecipientOffset: 0,
+      emailCampaignSelectedUserIds: new Set(),
+      emailCampaignCurrentId: null,
     };
 
     const getToken = () => document.getElementById('admin-token').value.trim();
@@ -1239,6 +1319,7 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       'section-user-detail',
       'module-grant',
       'module-broadcast',
+      'module-email-campaign',
       'module-redeem',
       'module-pricing',
       'module-site-config',
@@ -1814,6 +1895,211 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
         { label: '覆盖用户数', render: (row) => row.delivered_user_count },
         { label: '跳转链接', render: (row) => row.action_url || '-' },
       ], data.system_notifications || [], { className: 'tall' });
+    };
+
+    const defaultEmailCampaignText = `你好，{display_name}，
+
+虾米选品已上线新模型：GPT-5.5。
+
+新模型会用于选品分析、商品机会判断、风险排查和报告生成等场景，欢迎登录虾米选品体验，也欢迎把你的真实使用感受反馈给我们。
+
+我们也想听听你在选品过程中最需要被解决的问题：
+
+1. 你现在做跨境选品时，最痛的点是什么？
+2. 你最希望虾米选品重点分析商品的哪个方面？例如市场需求、竞争强度、利润空间、供应链风险、合规风险、广告投放、内容热度或其他维度。
+
+你可以直接回复这封邮件告诉我们。你的反馈会帮助我们继续优化产品能力。
+
+虾米选品，跨境卖家的排雷工具。`;
+
+    const defaultEmailCampaignHtml = `<!doctype html>
+<html lang="zh-CN">
+  <body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#17202a;">
+    <div style="max-width:640px;margin:0 auto;padding:28px 18px;">
+      <div style="background:#ffffff;border:1px solid #e6e8ec;border-radius:8px;padding:28px;line-height:1.75;font-size:15px;">
+        <h1 style="margin:0 0 18px;font-size:22px;line-height:1.35;color:#111827;">虾米选品已上线新模型：GPT-5.5</h1>
+        <p style="margin:0 0 14px;">你好，{display_name}，</p>
+        <p style="margin:0 0 14px;">虾米选品已上线新模型：<strong>GPT-5.5</strong>。</p>
+        <p style="margin:0 0 18px;">新模型会用于选品分析、商品机会判断、风险排查和报告生成等场景，欢迎登录虾米选品体验，也欢迎把你的真实使用感受反馈给我们。</p>
+        <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin:18px 0;">
+          <p style="margin:0 0 10px;font-weight:600;color:#111827;">我们也想听听你在选品过程中最需要被解决的问题：</p>
+          <ol style="margin:0;padding-left:20px;">
+            <li style="margin:0 0 8px;">你现在做跨境选品时，最痛的点是什么？</li>
+            <li style="margin:0;">你最希望虾米选品重点分析商品的哪个方面？例如市场需求、竞争强度、利润空间、供应链风险、合规风险、广告投放、内容热度或其他维度。</li>
+          </ol>
+        </div>
+        <p style="margin:0 0 18px;">你可以直接回复这封邮件告诉我们。你的反馈会帮助我们继续优化产品能力。</p>
+        <p style="margin:22px 0 0;font-size:16px;font-weight:700;color:#111827;">虾米选品，跨境卖家的排雷工具。</p>
+      </div>
+    </div>
+  </body>
+</html>`;
+
+    const syncEmailCampaignSelectionSummary = () => {
+      const target = document.getElementById('email-campaign-selected-summary');
+      if (target) {
+        target.textContent = `已勾选 ${state.emailCampaignSelectedUserIds.size} 个收件人。`;
+      }
+      document.querySelectorAll('[data-email-campaign-user-id]').forEach((checkbox) => {
+        checkbox.checked = state.emailCampaignSelectedUserIds.has(checkbox.dataset.emailCampaignUserId);
+      });
+    };
+
+    const renderEmailCampaignRecipients = (recipients, pagination) => {
+      const target = document.getElementById('email-campaign-recipient-list');
+      if (!recipients || recipients.length === 0) {
+        target.innerHTML = '<div class="empty">暂无可选收件人</div>';
+        syncEmailCampaignSelectionSummary();
+        wirePager({ targetId: 'email-campaign-recipient-pager', pagination, onPrev: () => {}, onNext: () => {}, emptyText: '暂无收件人分页' });
+        return;
+      }
+      target.innerHTML = renderTable([
+        {
+          label: '选择',
+          raw: true,
+          render: (row) => `<input type="checkbox" data-email-campaign-user-id="${escapeHtml(row.user_id)}" ${state.emailCampaignSelectedUserIds.has(row.user_id) ? 'checked' : ''} />`,
+        },
+        { label: '用户名', render: (row) => row.display_name || row.user_id },
+        { label: '邮箱', render: (row) => row.email },
+        { label: '状态', render: (row) => `${row.status || '-'} / ${row.email_verified_at ? '已验证' : '未验证'}` },
+        { label: '注册时间', render: (row) => row.created_at || '-' },
+      ], recipients, { className: 'tall' });
+      target.querySelectorAll('[data-email-campaign-user-id]').forEach((checkbox) => {
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) {
+            state.emailCampaignSelectedUserIds.add(checkbox.dataset.emailCampaignUserId);
+          } else {
+            state.emailCampaignSelectedUserIds.delete(checkbox.dataset.emailCampaignUserId);
+          }
+          syncEmailCampaignSelectionSummary();
+        });
+      });
+      syncEmailCampaignSelectionSummary();
+      wirePager({
+        targetId: 'email-campaign-recipient-pager',
+        pagination,
+        onPrev: () => {
+          state.emailCampaignRecipientOffset = Math.max(0, state.emailCampaignRecipientOffset - Number(pagination?.limit || 50));
+          loadEmailCampaignRecipients({ preserveOffset: true });
+        },
+        onNext: () => {
+          state.emailCampaignRecipientOffset += Number(pagination?.limit || 50);
+          loadEmailCampaignRecipients({ preserveOffset: true });
+        },
+      });
+    };
+
+    const renderEmailCampaignHistory = (campaigns) => {
+      document.getElementById('email-campaign-history').innerHTML = renderTable([
+        { label: '创建时间', render: (row) => row.created_at },
+        { label: '活动', render: (row) => row.campaign_name || row.campaign_id },
+        { label: '状态', render: (row) => row.status },
+        { label: '主题', render: (row) => row.subject },
+        { label: '发送', render: (row) => `${row.sent_count || 0}/${row.total_recipient_count || 0}` },
+        { label: '失败', render: (row) => row.failed_count || 0 },
+      ], campaigns || [], { className: 'tall' });
+    };
+
+    const loadEmailCampaignRecipients = async ({ preserveOffset = false } = {}) => {
+      if (!preserveOffset) {
+        state.emailCampaignRecipientOffset = 0;
+      }
+      const params = new URLSearchParams({
+        query: document.getElementById('email-campaign-query').value.trim(),
+        status: document.getElementById('email-campaign-status-filter').value,
+        email_verified: document.getElementById('email-campaign-verified-filter').value,
+        limit: document.getElementById('email-campaign-page-size').value || '50',
+        offset: String(state.emailCampaignRecipientOffset || 0),
+      });
+      setStatus('email-campaign-recipient-status', '正在加载收件人...');
+      try {
+        const data = await fetchJson(`/admin/api/email-campaigns/recipients?${params.toString()}`);
+        renderEmailCampaignRecipients(data.recipients || [], data.page || null);
+        setStatus('email-campaign-recipient-status', `收件人已刷新，本页 ${Number((data.recipients || []).length)} 条 / 共 ${Number(data.page?.total || 0)} 条`, 'ok');
+      } catch (error) {
+        setStatus('email-campaign-recipient-status', error.message, 'error');
+      }
+    };
+
+    const loadEmailCampaigns = async () => {
+      setStatus('email-campaign-status', '正在加载邮件记录...');
+      try {
+        const data = await fetchJson('/admin/api/email-campaigns?limit=20');
+        renderEmailCampaignHistory(data.email_campaigns || []);
+        setStatus('email-campaign-status', '邮件记录已刷新', 'ok');
+      } catch (error) {
+        setStatus('email-campaign-status', error.message, 'error');
+      }
+    };
+
+    const createEmailCampaign = async () => {
+      const selectedUserIds = Array.from(state.emailCampaignSelectedUserIds);
+      const subject = document.getElementById('email-campaign-subject').value.trim();
+      const textBody = document.getElementById('email-campaign-text-body').value.trim();
+      if (!selectedUserIds.length) {
+        setStatus('email-campaign-status', '请先勾选至少 1 个收件人', 'error');
+        return;
+      }
+      if (!subject || !textBody) {
+        setStatus('email-campaign-status', '请先填写邮件主题和纯文本正文', 'error');
+        return;
+      }
+      setStatus('email-campaign-status', '正在创建邮件活动...');
+      try {
+        const data = await fetchJson('/admin/api/email-campaigns', {
+          method: 'POST',
+          body: JSON.stringify({
+            campaign_name: document.getElementById('email-campaign-name').value.trim() || null,
+            subject,
+            text_body: textBody,
+            html_body: document.getElementById('email-campaign-html-body').value.trim() || null,
+            filter_json: {
+              query: document.getElementById('email-campaign-query').value.trim(),
+              status: document.getElementById('email-campaign-status-filter').value,
+              email_verified: document.getElementById('email-campaign-verified-filter').value,
+            },
+            selected_user_ids: selectedUserIds,
+          }),
+        });
+        state.emailCampaignCurrentId = data.campaign?.campaign_id || null;
+        setStatus('email-campaign-status', `邮件活动已创建：${state.emailCampaignCurrentId || '-'}。确认无误后再点击发送。`, 'ok');
+        await loadEmailCampaigns();
+        await loadAuditLogs();
+      } catch (error) {
+        setStatus('email-campaign-status', error.message, 'error');
+      }
+    };
+
+    const sendEmailCampaign = async () => {
+      const campaignId = state.emailCampaignCurrentId;
+      if (!campaignId) {
+        setStatus('email-campaign-status', '请先创建邮件活动，再确认发送', 'error');
+        return;
+      }
+      const selectedCount = state.emailCampaignSelectedUserIds.size;
+      if (!window.confirm(`确认逐封发送当前邮件活动？本次页面已勾选 ${selectedCount} 个收件人。`)) {
+        return;
+      }
+      setStatus('email-campaign-status', '正在逐封发送邮件...');
+      try {
+        const data = await fetchJson(`/admin/api/email-campaigns/${encodeURIComponent(campaignId)}/send`, {
+          method: 'POST',
+          body: JSON.stringify({ confirm: true }),
+        });
+        setStatus('email-campaign-status', `发送完成：成功 ${data.campaign?.sent_count || 0}，失败 ${data.campaign?.failed_count || 0}`, data.campaign?.failed_count ? 'error' : 'ok');
+        state.emailCampaignCurrentId = null;
+        await loadEmailCampaigns();
+        await loadAuditLogs();
+      } catch (error) {
+        setStatus('email-campaign-status', error.message, 'error');
+      }
+    };
+
+    const selectEmailCampaignPage = () => {
+      document.querySelectorAll('[data-email-campaign-user-id]').forEach((checkbox) => {
+        state.emailCampaignSelectedUserIds.add(checkbox.dataset.emailCampaignUserId);
+      });
+      syncEmailCampaignSelectionSummary();
     };
 
     const renderKeepaOperations = (data) => {
@@ -2912,6 +3198,23 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
     document.getElementById('load-site-config').addEventListener('click', loadSiteConfig);
     document.getElementById('load-email-verification-config').addEventListener('click', loadSiteConfig);
     document.getElementById('load-keepa-ops').addEventListener('click', loadKeepaOperations);
+    document.getElementById('load-email-campaign-recipients').addEventListener('click', (event) => {
+      runWithButtonBusy(event.currentTarget, () => loadEmailCampaignRecipients(), '加载中...');
+    });
+    document.getElementById('select-email-campaign-page').addEventListener('click', selectEmailCampaignPage);
+    document.getElementById('clear-email-campaign-selection').addEventListener('click', () => {
+      state.emailCampaignSelectedUserIds.clear();
+      syncEmailCampaignSelectionSummary();
+    });
+    document.getElementById('create-email-campaign').addEventListener('click', (event) => {
+      runWithButtonBusy(event.currentTarget, createEmailCampaign, '创建中...');
+    });
+    document.getElementById('send-email-campaign').addEventListener('click', (event) => {
+      runWithButtonBusy(event.currentTarget, sendEmailCampaign, '发送中...');
+    });
+    document.getElementById('load-email-campaigns').addEventListener('click', (event) => {
+      runWithButtonBusy(event.currentTarget, loadEmailCampaigns, '刷新中...');
+    });
     document.getElementById('search-users').addEventListener('click', (event) => {
       runWithButtonBusy(event.currentTarget, () => searchUsers(document.getElementById('user-query').value.trim()), '搜索中...');
     });
@@ -2955,6 +3258,12 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
         applyRedeemBatchFilter();
       }
     });
+    document.getElementById('email-campaign-query').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        loadEmailCampaignRecipients();
+      }
+    });
     document.querySelectorAll('[data-nav-target]').forEach((button) => {
       button.addEventListener('click', () => openAdminPage(button.dataset.navTarget));
     });
@@ -2968,6 +3277,8 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
     if (savedOperator) {
       document.getElementById('admin-operator').value = savedOperator;
     }
+    document.getElementById('email-campaign-text-body').value = defaultEmailCampaignText;
+    document.getElementById('email-campaign-html-body').value = defaultEmailCampaignHtml;
 
     detectAuthMode().finally(() => {
       openAdminPage(state.currentAdminPage, 'none');
@@ -2976,6 +3287,8 @@ def render_admin_backoffice_html(*, trusted_openwebui_admin: bool = False) -> st
       loadRedeemCodes().catch(() => {});
       loadSiteConfig().catch(() => {});
       loadKeepaOperations().catch(() => {});
+      loadEmailCampaignRecipients().catch(() => {});
+      loadEmailCampaigns().catch(() => {});
       searchUsers('').catch(() => {});
       loadAuditLogs().catch(() => {});
       loadBroadcasts().catch(() => {});

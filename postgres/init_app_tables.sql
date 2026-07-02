@@ -465,6 +465,39 @@ CREATE TABLE IF NOT EXISTS app.system_notification_broadcast (
     updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS app.email_campaign (
+    campaign_id             TEXT PRIMARY KEY,
+    operator_id             TEXT NOT NULL,
+    campaign_name           TEXT,
+    status                  TEXT NOT NULL DEFAULT 'draft',
+    subject                 TEXT NOT NULL,
+    text_body               TEXT NOT NULL,
+    html_body               TEXT,
+    filter_json             JSONB NOT NULL DEFAULT '{}'::JSONB,
+    selected_user_ids_json  JSONB NOT NULL DEFAULT '[]'::JSONB,
+    total_recipient_count   INTEGER NOT NULL DEFAULT 0,
+    sent_count              INTEGER NOT NULL DEFAULT 0,
+    failed_count            INTEGER NOT NULL DEFAULT 0,
+    send_started_at         TIMESTAMPTZ,
+    send_finished_at        TIMESTAMPTZ,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS app.email_campaign_recipient (
+    campaign_recipient_id  TEXT PRIMARY KEY,
+    campaign_id            TEXT NOT NULL REFERENCES app.email_campaign(campaign_id) ON DELETE CASCADE,
+    user_id                TEXT REFERENCES app.app_user(user_id) ON DELETE SET NULL,
+    email                  TEXT NOT NULL,
+    display_name           TEXT NOT NULL,
+    send_status            TEXT NOT NULL DEFAULT 'pending',
+    error_message          TEXT,
+    sent_at                TIMESTAMPTZ,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (campaign_id, email)
+);
+
 CREATE TABLE IF NOT EXISTS app.billing_event_pricing (
     event_type      TEXT PRIMARY KEY,
     display_name    TEXT NOT NULL,
@@ -602,6 +635,10 @@ CREATE INDEX IF NOT EXISTS idx_user_notification_user_occurred ON app.user_notif
 CREATE INDEX IF NOT EXISTS idx_user_notification_user_category_read ON app.user_notification(user_id, category, read_at, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_system_notification_broadcast_created ON app.system_notification_broadcast(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_system_notification_broadcast_operator_created ON app.system_notification_broadcast(operator_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_campaign_created ON app.email_campaign(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_campaign_operator_created ON app.email_campaign(operator_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_campaign_recipient_campaign_status ON app.email_campaign_recipient(campaign_id, send_status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_campaign_recipient_user_created ON app.email_campaign_recipient(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_event_pricing_status ON app.billing_event_pricing(status, display_order ASC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_operator_created ON app.admin_audit_log(operator_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_target_created ON app.admin_audit_log(target_type, target_id, created_at DESC);

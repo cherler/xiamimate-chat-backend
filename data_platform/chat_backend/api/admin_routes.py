@@ -53,6 +53,13 @@ from data_platform.chat_backend.domains.notifications.service import (
     _fanout_system_notification_broadcast,
     _list_system_notification_broadcasts,
 )
+from data_platform.chat_backend.domains.email_campaigns.service import (
+    _create_email_campaign,
+    _list_campaign_recipients,
+    _list_email_campaign_recipients,
+    _list_email_campaigns,
+    _send_email_campaign,
+)
 from data_platform.chat_backend.domains.site_config import (
     _list_site_config,
     _update_site_config,
@@ -64,9 +71,11 @@ from data_platform.chat_backend.api.models import (
     AdminCreateUserNoteRequest,
     AdminCreateUserTagRequest,
     AdminCreateRedeemCodeBatchRequest,
+    AdminCreateEmailCampaignRequest,
     AdminGrantPointsRequest,
     AdminKeepaJobCancelRequest,
     AdminKeepaJobPromoteRequest,
+    AdminSendEmailCampaignRequest,
     CreateSystemNotificationBroadcastRequest,
     UpdateEventPricingRequest,
     UpdateSiteConfigRequest,
@@ -825,6 +834,120 @@ def admin_create_system_notification(
         "/admin/api/system-notifications",
         {"broadcast": broadcast, "audit_log": audit_log},
         "system notification broadcast created",
+    )
+
+
+@router.get("/admin/api/email-campaigns/recipients")
+def admin_list_email_campaign_recipients(request: Request) -> dict[str, Any]:
+    _require_admin_operator(request)
+    raw_limit = (request.query_params.get("limit") or "50").strip()
+    raw_offset = (request.query_params.get("offset") or "0").strip()
+    try:
+        limit = max(1, min(int(raw_limit), 200))
+        offset = max(0, int(raw_offset))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="limit and offset must be integers")
+
+    with _postgres_conn() as conn:
+        result = _list_email_campaign_recipients(
+            conn,
+            query=(request.query_params.get("query") or "").strip(),
+            status=(request.query_params.get("status") or "active").strip() or "active",
+            email_verified=(request.query_params.get("email_verified") or "").strip() or None,
+            limit=limit,
+            offset=offset,
+        )
+    return _success_response(
+        "/admin/api/email-campaigns/recipients",
+        result,
+        "email campaign recipients loaded",
+    )
+
+
+@router.get("/admin/api/email-campaigns")
+def admin_list_email_campaigns(request: Request) -> dict[str, Any]:
+    _require_admin_operator(request)
+    raw_limit = (request.query_params.get("limit") or "50").strip()
+    try:
+        limit = max(1, min(int(raw_limit), 100))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="limit must be an integer")
+
+    with _postgres_conn() as conn:
+        campaigns = _list_email_campaigns(conn, limit=limit)
+    return _success_response(
+        "/admin/api/email-campaigns",
+        {"email_campaigns": campaigns},
+        "email campaigns loaded",
+    )
+
+
+@router.post("/admin/api/email-campaigns")
+def admin_create_email_campaign(
+    request: Request,
+    payload: AdminCreateEmailCampaignRequest,
+) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    selected_user_ids = [str(user_id or "").strip() for user_id in payload.selected_user_ids if str(user_id or "").strip()]
+    if not selected_user_ids:
+        raise HTTPException(status_code=400, detail="selected_user_ids is required")
+
+    with _postgres_conn() as conn:
+        campaign = _create_email_campaign(
+            conn,
+            operator_id=operator_id,
+            campaign_name=payload.campaign_name,
+            subject=payload.subject,
+            text_body=payload.text_body,
+            html_body=payload.html_body,
+            filter_json=payload.filter_json,
+            selected_user_ids=selected_user_ids,
+        )
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="create_email_campaign",
+            target_type="email_campaign",
+            target_id=str(campaign.get("campaign_id") or "") or None,
+            request_json=jsonable_encoder(payload),
+            result_json=campaign,
+        )
+    return _success_response(
+        "/admin/api/email-campaigns",
+        {"campaign": campaign, "audit_log": audit_log},
+        "email campaign created",
+    )
+
+
+@router.post("/admin/api/email-campaigns/{campaign_id}/send")
+def admin_send_email_campaign(
+    campaign_id: str,
+    request: Request,
+    payload: AdminSendEmailCampaignRequest,
+) -> dict[str, Any]:
+    operator_id = _require_admin_operator(request)
+    if not payload.confirm:
+        raise HTTPException(status_code=400, detail="confirm=true is required to send an email campaign")
+
+    with _postgres_conn() as conn:
+        try:
+            campaign = _send_email_campaign(conn, campaign_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        recipients = _list_campaign_recipients(conn, campaign_id, limit=500)
+        audit_log = _audit_admin_action(
+            conn,
+            operator_id=operator_id,
+            action="send_email_campaign",
+            target_type="email_campaign",
+            target_id=campaign_id,
+            request_json=jsonable_encoder(payload),
+            result_json={"campaign": campaign, "recipient_count": len(recipients)},
+        )
+    return _success_response(
+        f"/admin/api/email-campaigns/{campaign_id}/send",
+        {"campaign": campaign, "recipients": recipients, "audit_log": audit_log},
+        "email campaign sent",
     )
 
 

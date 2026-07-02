@@ -126,6 +126,19 @@ class CreateSystemNotificationBroadcastRequest(BaseModel):
         return normalized
 
 
+class AdminCreateEmailCampaignRequest(BaseModel):
+    campaign_name: str | None = Field(default=None, max_length=120)
+    subject: str = Field(..., min_length=1, max_length=160)
+    text_body: str = Field(..., min_length=1, max_length=12000)
+    html_body: str | None = Field(default=None, max_length=30000)
+    filter_json: dict[str, Any] = Field(default_factory=dict)
+    selected_user_ids: list[str] = Field(default_factory=list, max_length=1000)
+
+
+class AdminSendEmailCampaignRequest(BaseModel):
+    confirm: bool = False
+
+
 class IdentityExchangeRequest(BaseModel):
     user_id: str = Field(..., min_length=1)
     email: str | None = None

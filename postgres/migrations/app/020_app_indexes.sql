@@ -78,6 +78,10 @@ CREATE INDEX IF NOT EXISTS idx_user_notification_user_occurred ON app.user_notif
 CREATE INDEX IF NOT EXISTS idx_user_notification_user_category_read ON app.user_notification(user_id, category, read_at, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_system_notification_broadcast_created ON app.system_notification_broadcast(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_system_notification_broadcast_operator_created ON app.system_notification_broadcast(operator_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_campaign_created ON app.email_campaign(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_campaign_operator_created ON app.email_campaign(operator_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_campaign_recipient_campaign_status ON app.email_campaign_recipient(campaign_id, send_status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_email_campaign_recipient_user_created ON app.email_campaign_recipient(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_billing_event_pricing_status ON app.billing_event_pricing(status, display_order ASC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_operator_created ON app.admin_audit_log(operator_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_admin_audit_target_created ON app.admin_audit_log(target_type, target_id, created_at DESC);
