@@ -1870,7 +1870,7 @@ def render_portal_html() -> str:
   }
 
   function renderMarkdown(markdown) {
-    var lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+    var lines = String(markdown || "").replace(/\\r\\n/g, "\\n").split("\\n");
     var html = [];
     var listType = "";
     function closeList() {
