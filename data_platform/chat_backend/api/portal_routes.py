@@ -742,6 +742,50 @@ def _public_window_summary_text(payload: dict[str, Any]) -> str:
     return "；".join(parts) if parts else "暂缺"
 
 
+def _public_asin_quick_risk_assessment(payload: dict[str, Any]) -> dict[str, Any]:
+    price = _public_number_value(payload, {"effective_price", "price", "current_price"})
+    review_count = _public_number_value(payload, {"review_count", "reviews"})
+    bsr = _public_number_value(payload, {"bsr", "current_bsr", "best_sellers_rank"})
+    daily_sales = _public_number_value(payload, {"estimated_daily_sales", "sales_daily_avg"})
+    offer_count = _public_number_value(payload, {"offer_count", "offer_count_avg_window"})
+
+    flags: list[str] = []
+    red_signals = 0
+    if price is not None and price <= 12:
+        flags.append(f"低价利润压力：当前价格 {_public_format_number(price)}，新手容易被履约、广告和退货成本吃掉利润")
+        red_signals += 1
+    elif price is not None and price <= 18:
+        flags.append(f"价格带偏低：当前价格 {_public_format_number(price)}，需要先核算 FBA/头程/广告后再判断")
+
+    if review_count is not None and review_count >= 30000:
+        flags.append(f"评论壁垒极高：评论数 {_public_format_number(review_count)}，新链接很难直接对抗转化信任")
+        red_signals += 1
+    elif review_count is not None and review_count >= 5000:
+        flags.append(f"评论壁垒较高：评论数 {_public_format_number(review_count)}，新品切入需要明显差异化")
+
+    if bsr is not None and bsr <= 100:
+        sales_text = f"，预估日销 {_public_format_number(daily_sales)}" if daily_sales is not None else ""
+        flags.append(f"头部爆款竞争：BSR {_public_format_number(bsr)}{sales_text}，说明需求强但正面竞争门槛也高")
+        if daily_sales is not None and daily_sales >= 500:
+            red_signals += 1
+    elif bsr is not None and bsr <= 1000:
+        flags.append(f"排名靠前：BSR {_public_format_number(bsr)}，需要验证是否被头部卖家锁定")
+
+    if offer_count is not None and offer_count <= 3 and daily_sales is not None and daily_sales >= 300:
+        flags.append(f"少数卖家控制：Offer 数约 {_public_format_number(offer_count)}，不应简单理解为竞争轻")
+
+    if red_signals >= 2 or (price is not None and price <= 12 and review_count is not None and review_count >= 10000):
+        conclusion = "红灯：不适合新手直接跟卖/仿款切入"
+        action = "不建议直接跟卖或做同款仿款；它更适合作为类目需求验证样本，下一步应找更高客单价、更低评论壁垒或更明确差异化的中腰部 ASIN。"
+    elif flags:
+        conclusion = "黄灯：谨慎验证"
+        action = "可以作为竞品观察样本，但不要只看销量；先验证利润空间、评论壁垒、差异化和广告试错成本。"
+    else:
+        conclusion = "绿灯：值得继续研究"
+        action = "可以继续作为候选样本研究，但仍要补利润、合规、供应链和广告成本验证。"
+    return {"conclusion": conclusion, "flags": flags or ["暂未从价格、评论、BSR、销量中识别到明显硬阻断项"], "action": action}
+
+
 def _call_public_asin_tool(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         raw_result = _proxy_theme_api(operation=operation, payload=payload)
@@ -814,15 +858,10 @@ def _run_public_asin_quick_analysis(asin: str, marketplace: str, marketplace_lab
         f"**价格/BSR/销量**：{_public_window_summary_text(selected_payload)}",
         f"**数据来源**：{source_label}",
     ])
-    unavailable_count = 0 if selected_result.get("ok") else 1
-    conclusion = _public_analysis_light(unavailable_count, review_barrier, volatility_text)
-
-    if conclusion.startswith("绿灯"):
-        research_action = "可以作为竞品、跟卖参考或选品样本继续研究，但仍要补利润、合规和供应链验证。"
-    elif conclusion.startswith("黄灯"):
-        research_action = "可以作为竞品观察样本，但不建议直接跟卖；先验证利润空间、评论壁垒和销量稳定性。"
-    else:
-        research_action = "暂时不建议作为跟卖参考或选品样本投入预算；除非后续补到更稳定的销量、评论和利润证据。"
+    risk_assessment = _public_asin_quick_risk_assessment(selected_payload)
+    conclusion = str(risk_assessment["conclusion"])
+    risk_text = "\n".join(f"- {flag}" for flag in risk_assessment["flags"])
+    research_action = str(risk_assessment["action"])
 
     answer = "\n".join([
         f"# ASIN 快速排雷：{asin}",
@@ -840,6 +879,9 @@ def _run_public_asin_quick_analysis(asin: str, marketplace: str, marketplace_lab
         "",
         "## 价格 / BSR / 销量波动",
         volatility_text,
+        "",
+        "## 核心排雷风险",
+        risk_text,
         "",
         "## 是否值得继续研究",
         research_action,
