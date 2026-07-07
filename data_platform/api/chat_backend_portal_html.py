@@ -379,6 +379,46 @@ def render_portal_html() -> str:
       font-size: 0.86rem;
       margin: -6px 0 14px;
     }
+    .trial-claim-card {
+      border-color: rgba(15, 118, 110, 0.24);
+      background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(255, 255, 255, 0.98));
+    }
+    .trial-claim-meta {
+      color: var(--muted);
+      font-size: 0.86rem;
+      margin-bottom: 10px;
+    }
+    .trial-claim-output {
+      width: 100%;
+      max-height: 320px;
+      overflow: auto;
+      word-break: break-word;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.84);
+      padding: 14px;
+      margin: 0 0 14px;
+      color: var(--ink);
+      font: 0.9rem/1.7 "IBM Plex Sans", "Helvetica Neue", "PingFang SC", sans-serif;
+    }
+    .trial-claim-output h1,
+    .trial-claim-output h2,
+    .trial-claim-output h3 { margin: 14px 0 8px; line-height: 1.35; }
+    .trial-claim-output h1 { font-size: 1.08rem; }
+    .trial-claim-output h2 { font-size: 0.98rem; }
+    .trial-claim-output h3 { font-size: 0.92rem; }
+    .trial-claim-output p { margin: 8px 0; }
+    .trial-claim-output ul,
+    .trial-claim-output ol { margin: 8px 0 8px 20px; padding: 0; }
+    .trial-claim-output li { margin: 4px 0; }
+    .trial-claim-output hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+    .trial-claim-output code { padding: 1px 5px; border-radius: 6px; background: rgba(23, 32, 51, 0.06); }
+    .trial-claim-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
     .hero-card {
       background: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(255, 255, 255, 0.98));
     }
@@ -1038,6 +1078,17 @@ def render_portal_html() -> str:
   <div class="main-stack">
   <div id="error-panel" style="display:none;" class="error-msg"></div>
   <div id="verification-gate-banner" class="gate-banner"></div>
+  <div id="pending-trial-card" class="card trial-claim-card" style="display:none;">
+    <h2>刚才的免费排雷结果</h2>
+    <div class="card-note">这份结果暂存在当前浏览器。你可以继续追问，或生成完整版商品体检。</div>
+    <div class="trial-claim-meta" id="pending-trial-meta"></div>
+    <div class="trial-claim-output" id="pending-trial-output"></div>
+    <div class="trial-claim-actions">
+      <a class="hero-route-button primary" id="pending-trial-chat-link" href="__OPENWEBUI_HOME_URL__">继续追问</a>
+      <a class="hero-route-button secondary" id="pending-trial-full-link" href="/portal/products">生成完整版</a>
+      <button type="button" class="top-secondary-link" id="pending-trial-clear-button">不再显示</button>
+    </div>
+  </div>
 
   <!-- 账户信息 -->
   <div id="page-account" class="page active">
@@ -1362,6 +1413,8 @@ def render_portal_html() -> str:
 <script>
 (function() {
   var portalToken = new URLSearchParams(location.search).get("t") || "";
+  var claimTrialRequested = new URLSearchParams(location.search).get("claim_trial") === "1";
+  var pendingTrialKey = "xm_pending_trial_report";
   var allowedPages = ["account", "notifications", "balance", "topup", "billing", "usage", "plan"];
 
   // ── Navigation ──
@@ -1379,6 +1432,12 @@ def render_portal_html() -> str:
   const sendVerificationCodeButton = document.getElementById("send-verification-code-button");
   const confirmVerificationButton = document.getElementById("confirm-verification-button");
   const verificationCodeInput = document.getElementById("verification-code-input");
+  const pendingTrialCard = document.getElementById("pending-trial-card");
+  const pendingTrialMeta = document.getElementById("pending-trial-meta");
+  const pendingTrialOutput = document.getElementById("pending-trial-output");
+  const pendingTrialChatLink = document.getElementById("pending-trial-chat-link");
+  const pendingTrialFullLink = document.getElementById("pending-trial-full-link");
+  const pendingTrialClearButton = document.getElementById("pending-trial-clear-button");
   const verificationStatusValue = document.getElementById("email-verification-status");
   const verificationEmailValue = document.getElementById("verification-email");
   const verificationRequestMessage = document.getElementById("verification-request-message");
@@ -1803,6 +1862,113 @@ def render_portal_html() -> str:
   function intVal(v) { return parseInt(v, 10) || 0; }
   function esc(s) { var el = document.createElement("span"); el.textContent = s; return el.innerHTML; }
 
+  function renderInlineMarkdown(value) {
+    var html = esc(value);
+    html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+    html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    return html;
+  }
+
+  function renderMarkdown(markdown) {
+    var lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+    var html = [];
+    var listType = "";
+    function closeList() {
+      if (listType) {
+        html.push("</" + listType + ">");
+        listType = "";
+      }
+    }
+    lines.forEach(function(line) {
+      var trimmed = String(line || "").trim();
+      if (!trimmed) {
+        closeList();
+        return;
+      }
+      if (/^---+$/.test(trimmed)) {
+        closeList();
+        html.push("<hr />");
+        return;
+      }
+      var heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
+      if (heading) {
+        closeList();
+        var level = heading[1].length;
+        html.push("<h" + level + ">" + renderInlineMarkdown(heading[2]) + "</h" + level + ">");
+        return;
+      }
+      var ordered = /^\d+[.)]\s+(.+)$/.exec(trimmed);
+      if (ordered) {
+        if (listType !== "ol") {
+          closeList();
+          listType = "ol";
+          html.push("<ol>");
+        }
+        html.push("<li>" + renderInlineMarkdown(ordered[1]) + "</li>");
+        return;
+      }
+      var unordered = /^[-*]\s+(.+)$/.exec(trimmed);
+      if (unordered) {
+        if (listType !== "ul") {
+          closeList();
+          listType = "ul";
+          html.push("<ul>");
+        }
+        html.push("<li>" + renderInlineMarkdown(unordered[1]) + "</li>");
+        return;
+      }
+      closeList();
+      html.push("<p>" + renderInlineMarkdown(trimmed) + "</p>");
+    });
+    closeList();
+    return html.join("");
+  }
+
+  function readPendingTrialReport() {
+    var raw = "";
+    try {
+      raw = localStorage.getItem(pendingTrialKey) || "";
+    } catch (error) {
+      return null;
+    }
+    if (!raw) return null;
+    try {
+      var parsed = JSON.parse(raw);
+      if (!parsed || !parsed.answer) return null;
+      return parsed;
+    } catch (error) {
+      try { localStorage.removeItem(pendingTrialKey); } catch (e) {}
+      return null;
+    }
+  }
+
+  function renderPendingTrialReport() {
+    if (!pendingTrialCard || !pendingTrialMeta || !pendingTrialOutput) return;
+    var report = readPendingTrialReport();
+    if (!report) {
+      pendingTrialCard.style.display = "none";
+      return;
+    }
+    var inputLabel = report.input_type === "asin" ? "ASIN" : "商品词";
+    var generatedAt = report.generated_at ? fmtTimeFull(report.generated_at) : "刚刚";
+    pendingTrialMeta.textContent = inputLabel + "：" + (report.input || report.query || "-") + " · 生成时间：" + generatedAt;
+    pendingTrialOutput.innerHTML = renderMarkdown(report.answer || "");
+    if (pendingTrialChatLink) {
+      pendingTrialChatLink.href = "__OPENWEBUI_HOME_URL__";
+    }
+    if (pendingTrialFullLink) {
+      pendingTrialFullLink.href = withPortalToken("/portal/products?claim_trial=1");
+    }
+    pendingTrialCard.style.display = "block";
+  }
+
+  if (pendingTrialClearButton) {
+    pendingTrialClearButton.addEventListener("click", function() {
+      try { localStorage.removeItem(pendingTrialKey); } catch (error) {}
+      if (pendingTrialCard) pendingTrialCard.style.display = "none";
+    });
+  }
+
   function withPortalToken(path) {
     if (!portalToken) return path;
     var hashIndex = path.indexOf("#");
@@ -2059,6 +2225,9 @@ def render_portal_html() -> str:
     var securityVerified = !!securityVerification.current_device_verified;
     var invitedBy = identityVerification.invited_by || null;
     applyVerificationGate(identityVerification);
+    if (claimTrialRequested || readPendingTrialReport()) {
+      renderPendingTrialReport();
+    }
     syncNotificationItems(data.notifications || []);
     var pa = data.points_account || {};
     var balanceBreakdown = data.balance_breakdown || {};

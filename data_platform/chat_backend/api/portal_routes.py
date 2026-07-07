@@ -1,6 +1,7 @@
 """Portal API routes — /portal/*."""
 from __future__ import annotations
 
+import json
 import threading
 import time
 from collections import defaultdict, deque
@@ -116,6 +117,7 @@ from data_platform.chat_backend.domains.payments.wechat_pay import (
     query_wechat_order_by_out_trade_no,
     wechat_trade_state_to_session_status,
 )
+from data_platform.chat_backend.domains.provider_proxy.service import _proxy_report_blocking, _proxy_theme_api
 from data_platform.chat_backend.domains.site_config import (
     _get_contact_config,
     _get_email_verification_security_config,
@@ -174,6 +176,13 @@ _PORTAL_LEDGER_FILTER_CLAUSES = {
 
 _EMAIL_VERIFICATION_IP_GUARD_LOCK = threading.Lock()
 _EMAIL_VERIFICATION_IP_GUARD_BUCKETS: dict[str, deque[float]] = defaultdict(deque)
+
+_PUBLIC_QUICK_TRIAL_COOKIE_NAME = "xm_quick_trial_device"
+_PUBLIC_QUICK_TRIAL_LIMIT = 10
+_PUBLIC_QUICK_TRIAL_IP_ABUSE_LIMIT = 200
+_PUBLIC_QUICK_TRIAL_LOCK = threading.Lock()
+_PUBLIC_QUICK_TRIAL_USED_COUNTS: dict[str, int] = defaultdict(int)
+_PUBLIC_QUICK_TRIAL_IN_FLIGHT_COUNTS: dict[str, int] = defaultdict(int)
 
 
 def _public_page_is_indexable(request: Request) -> bool:
@@ -428,6 +437,450 @@ def _build_portal_guard_rate_limited_response(retry_after_seconds: int) -> Respo
             "X-Portal-Guard-Retry-After": str(max(1, int(retry_after_seconds))),
         },
     )
+
+
+def _public_quick_trial_device_id(request: Request, response: Response) -> str:
+    existing = str(request.cookies.get(_PUBLIC_QUICK_TRIAL_COOKIE_NAME) or "").strip()
+    if existing:
+        return existing[:120]
+    created = _generate_id("trial_device")
+    response.set_cookie(
+        _PUBLIC_QUICK_TRIAL_COOKIE_NAME,
+        created,
+        max_age=60 * 60 * 24 * 365,
+        httponly=True,
+        samesite="lax",
+    )
+    return created
+
+
+def _public_quick_trial_keys(request: Request, response: Response) -> tuple[str, str]:
+    client_ip = _request_client_ip(request)
+    device_id = _public_quick_trial_device_id(request, response)
+    return f"ip:{client_ip}", f"device:{device_id}"
+
+
+def _public_quick_trial_remaining(ip_key: str, device_key: str) -> int:
+    return max(0, _PUBLIC_QUICK_TRIAL_LIMIT - int(_PUBLIC_QUICK_TRIAL_USED_COUNTS.get(device_key, 0) or 0))
+
+
+def _reserve_public_quick_trial(ip_key: str, device_key: str) -> None:
+    with _PUBLIC_QUICK_TRIAL_LOCK:
+        device_total = int(_PUBLIC_QUICK_TRIAL_USED_COUNTS.get(device_key, 0) or 0) + int(_PUBLIC_QUICK_TRIAL_IN_FLIGHT_COUNTS.get(device_key, 0) or 0)
+        if device_total >= _PUBLIC_QUICK_TRIAL_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail=f"免费排雷体验每台设备限 {_PUBLIC_QUICK_TRIAL_LIMIT} 次；注册后可以保存报告、继续追问并生成完整版。",
+            )
+        ip_total = int(_PUBLIC_QUICK_TRIAL_USED_COUNTS.get(ip_key, 0) or 0) + int(_PUBLIC_QUICK_TRIAL_IN_FLIGHT_COUNTS.get(ip_key, 0) or 0)
+        if ip_total >= _PUBLIC_QUICK_TRIAL_IP_ABUSE_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail="当前网络下免费排雷请求过多，请稍后再试或注册后继续使用。",
+            )
+        keys = {ip_key, device_key}
+        for key in keys:
+            _PUBLIC_QUICK_TRIAL_IN_FLIGHT_COUNTS[key] += 1
+
+
+def _finish_public_quick_trial(ip_key: str, device_key: str, *, consumed: bool) -> None:
+    with _PUBLIC_QUICK_TRIAL_LOCK:
+        keys = {ip_key, device_key}
+        for key in keys:
+            current = int(_PUBLIC_QUICK_TRIAL_IN_FLIGHT_COUNTS.get(key, 0) or 0)
+            if current <= 1:
+                _PUBLIC_QUICK_TRIAL_IN_FLIGHT_COUNTS.pop(key, None)
+            else:
+                _PUBLIC_QUICK_TRIAL_IN_FLIGHT_COUNTS[key] = current - 1
+            if consumed:
+                _PUBLIC_QUICK_TRIAL_USED_COUNTS[key] += 1
+
+
+def _normalize_public_quick_input(payload: dict[str, Any]) -> dict[str, str]:
+    raw_query = str(payload.get("query") or payload.get("product_query") or "").strip()
+    asin = str(payload.get("asin") or "").strip().upper()
+    marketplace_raw = str(payload.get("marketplace") or "US").strip() or "US"
+    marketplace_upper = marketplace_raw.upper()
+    marketplace_code = "US" if marketplace_raw in {"Amazon 美国站", "美国站", "美国", "US", "USA"} or marketplace_upper in {"US", "USA"} else marketplace_raw
+    marketplace_label = "Amazon 美国站" if str(marketplace_code).upper() == "US" else marketplace_raw
+    if not asin and len(raw_query) == 10 and raw_query.replace(" ", "").isalnum():
+        asin = raw_query.upper()
+        raw_query = ""
+    if asin:
+        if len(asin) != 10 or not asin.isalnum():
+            raise HTTPException(status_code=400, detail="请输入 10 位 Amazon ASIN")
+        return {"input_type": "asin", "asin": asin, "marketplace": marketplace_code, "marketplace_label": marketplace_label, "query": asin}
+    if not raw_query:
+        raise HTTPException(status_code=400, detail="请输入商品词或 ASIN")
+    if len(raw_query) > 120:
+        raise HTTPException(status_code=400, detail="商品词过长，请控制在 120 个字符以内")
+    query = f"请排雷 {raw_query} 在 {marketplace_label} 是否适合新手卖家。直接给出继续看、谨慎看或暂时放弃的结论，并根据市场需求、竞争强度、价格带、评论壁垒、趋势和主要风险列出关键证据，最后告诉我下一步最值得验证什么。"
+    return {"input_type": "query", "product_query": raw_query, "marketplace": marketplace_code, "marketplace_label": marketplace_label, "query": query}
+
+
+def _decode_public_theme_tool_result(raw_result: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(raw_result)
+    except Exception:
+        return {"raw_result": str(raw_result or "")[:2000]}
+    return parsed if isinstance(parsed, dict) else {"raw_result": parsed}
+
+
+def _find_public_value(payload: Any, keys: set[str]) -> Any:
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if str(key) in keys and value not in (None, "", [], {}):
+                return value
+        for value in payload.values():
+            found = _find_public_value(value, keys)
+            if found not in (None, "", [], {}):
+                return found
+    if isinstance(payload, list):
+        for item in payload:
+            found = _find_public_value(item, keys)
+            if found not in (None, "", [], {}):
+                return found
+    return None
+
+
+def _public_theme_tool_status(payload: dict[str, Any]) -> str:
+    status = str(_find_public_value(payload, {"status", "degradation_status"}) or "").strip().lower()
+    if status in {"provider_required", "skipped", "error", "failed"}:
+        return status
+    if _find_public_value(payload, {"missing_capability", "required_provider"}):
+        return "provider_required"
+    return "ok"
+
+
+def _compact_public_asin_tool_summary(operation: str, payload: dict[str, Any]) -> str:
+    if payload.get("error"):
+        return f"暂缺：{str(payload.get('error'))[:180]}"
+    status = _public_theme_tool_status(payload)
+    if status == "provider_required":
+        missing = _find_public_value(payload, {"missing_capability", "required_provider"}) or "provider"
+        return f"暂缺：需要 {missing} 数据源"
+    if status in {"skipped", "error", "failed"}:
+        reason = _find_public_value(payload, {"reason", "message", "detail"}) or status
+        return f"暂缺：{str(reason)[:180]}"
+
+    key_groups: list[tuple[str, set[str]]] = [
+        ("标题", {"product_title", "title"}),
+        ("品牌", {"brand", "brand_name"}),
+        ("类目", {"leaf_category_name", "l3_category_name", "category_path"}),
+        ("价格", {"effective_price", "price", "current_price"}),
+        ("BSR", {"bsr", "current_bsr"}),
+        ("评论", {"review_count", "reviews", "rating"}),
+        ("销量", {"estimated_daily_sales", "sales_daily_avg", "sales_window_sum"}),
+        ("趋势", {"window_summary", "review_growth_window", "trend_summary"}),
+        ("预测", {"driver_summary_text", "primary_driver_label", "forecast_summary"}),
+        ("风险", {"risk_summary", "risk_flags", "diagnostics"}),
+    ]
+    parts: list[str] = []
+    for label, keys in key_groups:
+        value = _find_public_value(payload, keys)
+        if value in (None, "", [], {}):
+            continue
+        if isinstance(value, (dict, list)):
+            value_text = json.dumps(value, ensure_ascii=False)[:220]
+        else:
+            value_text = str(value)[:220]
+        parts.append(f"{label}：{value_text}")
+        if len(parts) >= 4:
+            break
+    if parts:
+        return "；".join(parts)
+    return "已返回结构化证据，需结合完整数据继续判断。"
+
+
+def _public_metric_text(payload: dict[str, Any], keys: set[str], default: str = "暂缺") -> str:
+    value = _find_public_value(payload, keys)
+    if value in (None, "", [], {}):
+        return default
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)[:260]
+    return str(value)[:260]
+
+
+def _public_metric_pair(payload: dict[str, Any], label: str, keys: set[str]) -> str:
+    return f"**{label}**：{_public_metric_text(payload, keys)}"
+
+
+def _public_analysis_light(unavailable_count: int, risk_text: str, volatility_text: str) -> str:
+    risk_blob = f"{risk_text} {volatility_text}".lower()
+    high_risk_markers = ["high", "red", "下降", "下滑", "异常", "风险", "暂缺", "provider_required", "insufficient"]
+    if unavailable_count >= 3 or sum(1 for marker in high_risk_markers if marker in risk_blob) >= 3:
+        return "红灯：暂时放弃"
+    if unavailable_count >= 1 or any(marker in risk_blob for marker in ["异常", "风险", "暂缺", "下降", "下滑"]):
+        return "黄灯：谨慎验证"
+    return "绿灯：值得继续研究"
+
+
+def _public_asin_payload_has_evidence(payload: dict[str, Any]) -> bool:
+    evidence_keys = {
+        "product_title",
+        "title",
+        "brand",
+        "brand_name",
+        "leaf_category_name",
+        "l3_category_name",
+        "category_path",
+        "effective_price",
+        "price",
+        "current_price",
+        "bsr",
+        "current_bsr",
+        "best_sellers_rank",
+        "rating",
+        "review_rating",
+        "average_rating",
+        "review_count",
+        "reviews",
+        "estimated_daily_sales",
+        "sales_daily_avg",
+        "sales_window_sum",
+        "window_summary",
+        "review_growth_window",
+        "change_30d",
+        "change_90d",
+        "series",
+        "latest_snapshot",
+        "keepa_snapshot",
+    }
+    return _find_public_value(payload, evidence_keys) not in (None, "", [], {})
+
+
+def _public_asin_payload_has_history_evidence(payload: dict[str, Any]) -> bool:
+    series = _find_public_value(payload, {"series"})
+    if isinstance(series, list) and len(series) >= 2:
+        return True
+    window_summary = _find_public_value(payload, {"window_summary"})
+    if isinstance(window_summary, dict) and window_summary:
+        return True
+    return _find_public_value(payload, {"change_30d", "change_90d", "review_growth_window", "sales_window_sum"}) not in (None, "", [], {})
+
+
+def _public_asin_series(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    series = _find_public_value(payload, {"series"})
+    if not isinstance(series, list):
+        return []
+    return [item for item in series if isinstance(item, dict)]
+
+
+def _public_number_value(payload: dict[str, Any], keys: set[str]) -> float | None:
+    value = _find_public_value(payload, keys)
+    if isinstance(value, bool) or value in (None, "", [], {}):
+        return None
+    try:
+        return float(str(value).replace(",", ""))
+    except Exception:
+        return None
+
+
+def _public_format_number(value: Any, *, suffix: str = "") -> str:
+    if value in (None, "", [], {}):
+        return "暂缺"
+    try:
+        number = float(str(value).replace(",", ""))
+        if number.is_integer():
+            text = str(int(number))
+        else:
+            text = f"{number:.2f}".rstrip("0").rstrip(".")
+        return f"{text}{suffix}"
+    except Exception:
+        return str(value)
+
+
+def _public_series_delta_text(payload: dict[str, Any], days: int) -> str:
+    series = _public_asin_series(payload)
+    if len(series) < 2:
+        return "暂缺"
+    window = series[-days:] if len(series) > days else series
+    first = window[0]
+    last = window[-1]
+    parts: list[str] = []
+    review_first = _public_number_value(first, {"review_count", "reviews"})
+    review_last = _public_number_value(last, {"review_count", "reviews"})
+    if review_first is not None and review_last is not None:
+        parts.append(f"评论 +{_public_format_number(review_last - review_first)}")
+    sales_first = _public_number_value(first, {"estimated_daily_sales", "sales_daily_avg"})
+    sales_last = _public_number_value(last, {"estimated_daily_sales", "sales_daily_avg"})
+    if sales_first is not None and sales_last is not None:
+        parts.append(f"日销 {_public_format_number(sales_first)} -> {_public_format_number(sales_last)}")
+    price_values = [_public_number_value(item, {"effective_price", "price", "current_price"}) for item in window]
+    price_values = [value for value in price_values if value is not None]
+    if price_values:
+        parts.append(f"价格 {_public_format_number(min(price_values))}-{_public_format_number(max(price_values))}")
+    bsr_first = _public_number_value(first, {"bsr", "current_bsr", "best_sellers_rank"})
+    bsr_last = _public_number_value(last, {"bsr", "current_bsr", "best_sellers_rank"})
+    if bsr_first is not None and bsr_last is not None:
+        parts.append(f"BSR {_public_format_number(bsr_first)} -> {_public_format_number(bsr_last)}")
+    if not parts:
+        return "暂缺"
+    return "；".join(parts)
+
+
+def _public_window_summary_text(payload: dict[str, Any]) -> str:
+    summary = _find_public_value(payload, {"window_summary"})
+    if not isinstance(summary, dict):
+        summary = {}
+    parts: list[str] = []
+    if summary.get("sales_daily_avg") not in (None, "", [], {}):
+        parts.append(f"90天日销均值 {_public_format_number(summary.get('sales_daily_avg'))}")
+    if summary.get("sales_window_sum") not in (None, "", [], {}):
+        parts.append(f"窗口销量 {_public_format_number(summary.get('sales_window_sum'))}")
+    if summary.get("price_min_window") not in (None, "", [], {}) or summary.get("price_max_window") not in (None, "", [], {}):
+        parts.append(f"价格区间 {_public_format_number(summary.get('price_min_window'))}-{_public_format_number(summary.get('price_max_window'))}")
+    if summary.get("review_growth_window") not in (None, "", [], {}):
+        parts.append(f"评论增长 +{_public_format_number(summary.get('review_growth_window'))}")
+    if summary.get("bsr_avg_window") not in (None, "", [], {}):
+        parts.append(f"BSR均值 {_public_format_number(summary.get('bsr_avg_window'))}")
+    if summary.get("coverage_ratio") not in (None, "", [], {}):
+        parts.append(f"覆盖率 {_public_format_number(float(summary.get('coverage_ratio')) * 100, suffix='%')}")
+    row_count = summary.get("series_row_count") or len(_public_asin_series(payload))
+    if row_count:
+        parts.append(f"历史点 {row_count} 条")
+    return "；".join(parts) if parts else "暂缺"
+
+
+def _call_public_asin_tool(operation: str, payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        raw_result = _proxy_theme_api(operation=operation, payload=payload)
+        decoded = _decode_public_theme_tool_result(raw_result)
+        return {"operation": operation, "ok": True, "payload": decoded, "summary": _compact_public_asin_tool_summary(operation, decoded)}
+    except HTTPException as exc:
+        return {"operation": operation, "ok": False, "payload": {}, "summary": f"暂缺：{str(exc.detail)[:180]}", "error": str(exc.detail)}
+
+
+def _run_public_asin_quick_analysis(asin: str, marketplace: str, marketplace_label: str) -> dict[str, Any]:
+    history_result = _call_public_asin_tool(
+        "asin_history_timeseries",
+        {
+            "asins": [asin],
+            "marketplace": marketplace,
+            "window_days": 90,
+            "interval": "day",
+            "metrics": ["estimated_daily_sales", "effective_price", "bsr", "review_count", "offer_count"],
+        },
+    )
+    tool_results = [history_result]
+    history_payload = dict(history_result.get("payload") or {})
+    selected_result = history_result if history_result.get("ok") and _public_asin_payload_has_evidence(history_payload) else None
+    if not (history_result.get("ok") and _public_asin_payload_has_history_evidence(history_payload)):
+        keepa_result = _call_public_asin_tool(
+            "keepa_asin_lookup",
+            {
+                "asins": [asin],
+                "marketplace": marketplace,
+                "include_history": True,
+                "window_days": 90,
+                "interval": "day",
+                "metrics": ["estimated_daily_sales", "effective_price", "bsr", "review_count", "offer_count"],
+            },
+        )
+        tool_results.append(keepa_result)
+        keepa_payload = dict(keepa_result.get("payload") or {})
+        if keepa_result.get("ok") and (_public_asin_payload_has_history_evidence(keepa_payload) or selected_result is None and _public_asin_payload_has_evidence(keepa_payload)):
+            selected_result = keepa_result
+
+    if selected_result is None:
+        first_error = next((result.get("error") for result in tool_results if result.get("error")), "ASIN 历史/Keepa 查询暂未返回可用数据")
+        raise HTTPException(status_code=502, detail=str(first_error)[:4000])
+
+    selected_operation = str(selected_result.get("operation") or "")
+    selected_payload = dict(selected_result.get("payload") or {})
+    source_label = "本地 ASIN 历史时序" if selected_operation == "asin_history_timeseries" else "Keepa 历史补充（include_history=true）"
+
+    current_snapshot = "；".join([
+        _public_metric_pair(selected_payload, "标题", {"product_title", "title"}),
+        _public_metric_pair(selected_payload, "品牌", {"brand", "brand_name"}),
+        _public_metric_pair(selected_payload, "类目", {"category", "leaf_category_name", "l3_category_name", "category_path"}),
+        _public_metric_pair(selected_payload, "当前价格", {"effective_price", "price", "current_price"}),
+        _public_metric_pair(selected_payload, "预估日销", {"estimated_daily_sales", "sales_daily_avg"}),
+        _public_metric_pair(selected_payload, "BSR", {"bsr", "current_bsr", "best_sellers_rank"}),
+        _public_metric_pair(selected_payload, "评分", {"rating", "review_rating", "average_rating"}),
+        _public_metric_pair(selected_payload, "评论数", {"review_count", "reviews"}),
+    ])
+    change_30_90 = "；".join([
+        f"**近 30 天**：{_public_series_delta_text(selected_payload, 30)}",
+        f"**近 90 天**：{_public_series_delta_text(selected_payload, 90)}",
+        f"**窗口摘要**：{_public_window_summary_text(selected_payload)}",
+    ])
+    review_barrier = "；".join([
+        _public_metric_pair(selected_payload, "当前评分", {"rating", "review_rating", "average_rating"}),
+        _public_metric_pair(selected_payload, "评论总数", {"review_count", "reviews"}),
+        _public_metric_pair(selected_payload, "90天评论增长", {"review_growth", "review_growth_window", "review_growth_90d", "review_count_change"}),
+    ])
+    volatility_text = "；".join([
+        f"**价格/BSR/销量**：{_public_window_summary_text(selected_payload)}",
+        f"**数据来源**：{source_label}",
+    ])
+    unavailable_count = 0 if selected_result.get("ok") else 1
+    conclusion = _public_analysis_light(unavailable_count, review_barrier, volatility_text)
+
+    if conclusion.startswith("绿灯"):
+        research_action = "可以作为竞品、跟卖参考或选品样本继续研究，但仍要补利润、合规和供应链验证。"
+    elif conclusion.startswith("黄灯"):
+        research_action = "可以作为竞品观察样本，但不建议直接跟卖；先验证利润空间、评论壁垒和销量稳定性。"
+    else:
+        research_action = "暂时不建议作为跟卖参考或选品样本投入预算；除非后续补到更稳定的销量、评论和利润证据。"
+
+    answer = "\n".join([
+        f"# ASIN 快速排雷：{asin}",
+        "",
+        f"**最终结论：{conclusion}**",
+        "",
+        "## 当前盘面",
+        current_snapshot,
+        "",
+        "## 近 30/90 天变化",
+        change_30_90,
+        "",
+        "## 评论增长与壁垒",
+        review_barrier,
+        "",
+        "## 价格 / BSR / 销量波动",
+        volatility_text,
+        "",
+        "## 是否值得继续研究",
+        research_action,
+        "",
+        "---",
+        "注册后可以保存这份报告、继续追问竞品差异，或生成完整版商品体检。",
+    ])
+    return {
+        "profile": "asin_quick_analysis",
+        "input_type": "asin",
+        "asin": asin,
+        "marketplace": marketplace,
+        "marketplace_label": marketplace_label,
+        "answer": answer,
+        "tool_chain": [result.get("operation") for result in tool_results],
+        "selected_tool": selected_operation,
+        "tool_results": tool_results,
+    }
+
+
+def _extract_public_report_answer(payload: dict[str, Any]) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    for key in ("answer", "text", "content"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    for key in ("answer", "text", "content"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    outputs = data.get("outputs") if isinstance(data.get("outputs"), dict) else {}
+    for key in ("answer", "text", "result", "output"):
+        value = outputs.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for value in outputs.values():
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def _enforce_email_verification_ip_guard(conn, request: Request, action: str) -> Response | None:
@@ -907,6 +1360,59 @@ def portal_tools_page(request: Request) -> HTMLResponse:
         render_portal_tools_html(indexable=_public_page_is_indexable(request)),
         headers=_public_page_cache_headers(request),
     )
+
+
+@router.post("/portal/api/public/report/quick")
+async def portal_public_quick_report(request: Request, response: Response) -> dict[str, Any]:
+    payload = await _read_tool_payload(request)
+    trial_input = _normalize_public_quick_input(payload)
+    ip_key, device_key = _public_quick_trial_keys(request, response)
+    _reserve_public_quick_trial(ip_key, device_key)
+    consumed = False
+    try:
+        if trial_input["input_type"] == "asin":
+            result_data = _run_public_asin_quick_analysis(
+                asin=trial_input["asin"],
+                marketplace=trial_input["marketplace"],
+                marketplace_label=trial_input["marketplace_label"],
+            )
+            answer = str(result_data.get("answer") or "").strip()
+            message = "ASIN quick analysis generated"
+        else:
+            provider_response = _proxy_report_blocking(
+                query=trial_input["query"],
+                user=device_key.replace(":", "_"),
+                profile="quick",
+            )
+            answer = _extract_public_report_answer(provider_response)
+            if not answer:
+                raise HTTPException(status_code=502, detail="quick 排雷上游暂未返回报告内容，请稍后重试")
+            result_data = {
+                "profile": "quick",
+                "input_type": "query",
+                "product_query": trial_input["product_query"],
+                "marketplace": trial_input["marketplace"],
+                "marketplace_label": trial_input["marketplace_label"],
+                "query": trial_input["query"],
+                "answer": answer,
+            }
+            message = "quick report generated"
+        consumed = True
+        remaining = _public_quick_trial_remaining(ip_key, device_key) - 1
+        result_data.update({
+            "answer": answer,
+            "trial_limit": _PUBLIC_QUICK_TRIAL_LIMIT,
+            "trial_remaining": max(0, remaining),
+            "requires_registration_for": ["save_report", "follow_up", "standard_report", "full_report"],
+            "next_action": "注册后可保存本次报告、继续追问，或升级生成完整版商品体检报告。",
+        })
+        return _success_response(
+            "/portal/api/public/report/quick",
+            result_data,
+            message,
+        )
+    finally:
+        _finish_public_quick_trial(ip_key, device_key, consumed=consumed)
 
 
 @router.post("/portal/api/public/tools/profit-calculator")

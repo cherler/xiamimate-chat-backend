@@ -501,6 +501,128 @@ _BASE_CSS = """
     border: 1px solid rgba(220, 38, 38, 0.14);
     color: #b91c1c;
   }
+  .quick-trial-form {
+    display: grid;
+    gap: 14px;
+  }
+  .quick-trial-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+  }
+  .quick-trial-input {
+    width: 100%;
+    min-height: 48px;
+    border-radius: 14px;
+    border: 1px solid var(--line);
+    background: #fff;
+    padding: 0 16px;
+    color: var(--ink);
+    font: inherit;
+  }
+  .quick-trial-input:focus {
+    outline: none;
+    border-color: rgba(37, 99, 235, 0.36);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+  }
+  .quick-trial-button {
+    min-height: 48px;
+    border: 1px solid var(--accent);
+    border-radius: 14px;
+    background: var(--accent);
+    color: #fff;
+    padding: 0 18px;
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .quick-trial-button:hover:not(:disabled) {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+  }
+  .quick-trial-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+  }
+  .quick-trial-result {
+    display: none;
+    border-radius: 16px;
+    border: 1px solid rgba(15, 118, 110, 0.18);
+    background: linear-gradient(180deg, rgba(15, 118, 110, 0.08), rgba(255, 255, 255, 0.96));
+    padding: 16px;
+  }
+  .quick-trial-result[data-visible="true"] {
+    display: block;
+  }
+  .quick-trial-result-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: var(--accent-2);
+  }
+  .quick-trial-output {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 0.88rem;
+    line-height: 1.72;
+  }
+  .quick-trial-output h1,
+  .quick-trial-output h2,
+  .quick-trial-output h3 {
+    margin: 14px 0 8px;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+  .quick-trial-output h1 { font-size: 1.08rem; }
+  .quick-trial-output h2 { font-size: 0.98rem; }
+  .quick-trial-output h3 { font-size: 0.92rem; }
+  .quick-trial-output p { margin: 8px 0; }
+  .quick-trial-output ul,
+  .quick-trial-output ol { margin: 8px 0 8px 20px; padding: 0; }
+  .quick-trial-output li { margin: 4px 0; }
+  .quick-trial-output hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+  .quick-trial-output blockquote {
+    margin: 10px 0;
+    padding: 8px 12px;
+    border-left: 3px solid rgba(15, 118, 110, 0.28);
+    background: rgba(15, 118, 110, 0.06);
+    color: #334155;
+  }
+  .quick-trial-output code {
+    padding: 1px 5px;
+    border-radius: 6px;
+    background: rgba(23, 32, 51, 0.06);
+  }
+  .quick-trial-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+  .quick-trial-secondary {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    border: 1px solid rgba(37, 99, 235, 0.18);
+    background: #fff;
+    color: var(--accent);
+    padding: 0 14px;
+    text-decoration: none;
+    font-size: 0.84rem;
+    font-weight: 700;
+  }
+  .quick-trial-meta {
+    color: var(--muted);
+    font-size: 0.78rem;
+    line-height: 1.6;
+  }
   .support-inline-link {
     color: var(--accent);
     text-decoration: none;
@@ -1123,6 +1245,8 @@ _BASE_CSS = """
     .page-title-row h1 { font-size: 1.5rem; }
     .main { margin: 16px auto 28px; }
     .section-block { scroll-margin-top: 96px; }
+    .quick-trial-row { grid-template-columns: 1fr; }
+    .quick-trial-button { width: 100%; }
   }
 """
 
@@ -1581,9 +1705,10 @@ def _layout(
   canonical_path: str = "",
   indexable: bool = False,
   structured_data: Optional[list[dict[str, Any]]] = None,
+  include_chatbot: bool = True,
 ) -> str:
     openwebui_home_url = escape(_portal_public_base_url())
-    chatbot_snippet = _render_portal_chatbot_snippet()
+    chatbot_snippet = _render_portal_chatbot_snippet() if include_chatbot else ""
     subtitle_html = f'<div class="subtitle">{escape(subtitle)}</div>' if subtitle else ""
     page_title = f"虾米选品 - {title}"
     meta_description = description or subtitle or _SITE_TAGLINE
@@ -1678,7 +1803,8 @@ def _layout(
     }});
   }}
   function markActiveSection() {{
-    var current = location.hash || (sectionLinks[0] ? sectionLinks[0].getAttribute("href") : "");
+    var params = new URLSearchParams(location.search || "");
+    var current = location.hash || (params.get("trial") === "1" ? "#try" : "") || (sectionLinks[0] ? sectionLinks[0].getAttribute("href") : "");
     sectionLinks.forEach(function(link) {{
       var on = link.getAttribute("href") === current;
       link.classList.toggle("active", on);
@@ -1742,6 +1868,12 @@ def _layout(
       setTimeout(markActiveSection, 0);
     }});
   }});
+  if (!location.hash && new URLSearchParams(location.search || "").get("trial") === "1") {{
+    setTimeout(function() {{
+      scrollToSection(document.getElementById("try"));
+      markActiveSection();
+    }}, 0);
+  }}
   markActiveSection();
 }})();
 </script>
@@ -1764,6 +1896,26 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
           <div class="mini-kpi"><div class="mini-kpi-value">新手选品体检</div><div class="mini-kpi-label">少踩竞争、价格和评论坑</div></div>
         </div>
       </section>
+      <section id="try" class="section-block card">
+        <h2>免费排雷 10 次</h2>
+        <div class="card-note">不需要注册或验证码。输入商品词或 ASIN，最多可免费生成 10 次快速排雷结论；保存报告、继续追问和完整版报告在注册后开放。</div>
+        <form id="quick-trial-form" class="quick-trial-form">
+          <div class="quick-trial-row">
+            <input id="quick-trial-input" class="quick-trial-input" type="text" maxlength="120" autocomplete="off" placeholder="例如 pet hair remover 或 B0CFGYFCYL" />
+            <button id="quick-trial-submit" class="quick-trial-button" type="submit">开始排雷</button>
+          </div>
+          <div id="quick-trial-status" class="status-banner"></div>
+          <div id="quick-trial-result" class="quick-trial-result">
+            <div class="quick-trial-result-title">排雷结果</div>
+            <div id="quick-trial-output" class="quick-trial-output"></div>
+            <div class="quick-trial-actions">
+              <a class="quick-trial-secondary" id="quick-trial-save-link" href="/auth?redirect=%2Fportal%2Faccount%3Fclaim_trial%3D1">注册并保存报告</a>
+              <a class="quick-trial-secondary" id="quick-trial-full-link" href="/auth?redirect=%2Fportal%2Fproducts%3Fclaim_trial%3D1">生成完整版</a>
+            </div>
+            <div class="quick-trial-meta">免费体验每台设备限 10 次。</div>
+          </div>
+        </form>
+      </section>
       <section id="who" class="section-block card">
         <h2>适合谁使用</h2>
         <div class="notice-grid">
@@ -1779,7 +1931,7 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
           <div class="notice-card"><h3 class="notice-title">Keepa 数据中文解读</h3><p class="notice-desc">把价格、BSR、评论、评分、类目和历史波动翻译成新手能看懂的判断。</p></div>
           <div class="notice-card"><h3 class="notice-title">竞争与评论壁垒</h3><p class="notice-desc">看头部 ASIN 是否评论太厚、品牌太强、价格太卷，避免一上来就撞进硬仗。</p></div>
           <div class="notice-card"><h3 class="notice-title">趋势与价格带体检</h3><p class="notice-desc">检查趋势是否下滑、季节性是否明显、目标价格带是否还有利润和差异化空间。</p></div>
-          <div class="notice-card"><h3 class="notice-title">低成本先判断</h3><p class="notice-desc">quick 先给方向性结论，不急着做长报告；值得继续看时再升级 standard。</p></div>
+          <div class="notice-card"><h3 class="notice-title">低成本先判断</h3><p class="notice-desc">快速排雷先给方向性结论，不急着做长报告；值得继续看时再升级完整版体检。</p></div>
           <div class="notice-card"><h3 class="notice-title">风险边界提醒</h3><p class="notice-desc">把数据不足、平台差异、合规、侵权和履约风险说清楚，不把不确定包装成确定机会。</p></div>
         </div>
       </section>
@@ -1787,9 +1939,9 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
         <h2>一次典型选品分析流程</h2>
         <div class="timeline-list">
           <div class="timeline-item"><div class="timeline-title">1. 输入商品词或 ASIN</div><div class="timeline-desc">比如 humidifier、dog seat cover，或直接粘贴一个 Amazon ASIN。</div></div>
-          <div class="timeline-item"><div class="timeline-title">2. 先做 quick 排雷</div><div class="timeline-desc">先看竞争、趋势、价格带、评论壁垒和数据覆盖，判断有没有明显不能继续看的理由。</div></div>
+          <div class="timeline-item"><div class="timeline-title">2. 先做快速排雷</div><div class="timeline-desc">先看竞争、趋势、价格带、评论壁垒和数据覆盖，判断有没有明显不能继续看的理由。</div></div>
           <div class="timeline-item"><div class="timeline-title">3. 读懂 Keepa 和竞品信号</div><div class="timeline-desc">把价格历史、BSR、评论增长、评分和头部 ASIN 情况转成中文结论。</div></div>
-          <div class="timeline-item"><div class="timeline-title">4. 值得看再升级体检报告</div><div class="timeline-desc">只有通过初筛的方向，再继续做 standard，看差异化、预算和下一步验证。</div></div>
+          <div class="timeline-item"><div class="timeline-title">4. 值得看再升级体检报告</div><div class="timeline-desc">只有通过初筛的方向，再继续看差异化、预算和下一步验证。</div></div>
           <div class="timeline-item"><div class="timeline-title">5. 复盘风险和下一步</div><div class="timeline-desc">最后拿到的是“继续看 / 先观望 / 明显不建议”的动作建议，而不是堆满术语的长分析。</div></div>
         </div>
       </section>
@@ -1797,13 +1949,161 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
         <h2>常见问题</h2>
         <div class="guide-list">
           <div class="guide-item"><div class="guide-title">虾米选品主要帮我做什么？</div><div class="guide-desc">先帮你排雷。输入商品词或 ASIN 后，重点看竞争、趋势、价格带、评论壁垒和风险，判断这个品能不能继续看。</div></div>
-          <div class="guide-item"><div class="guide-title">第一次使用应该从哪里开始？</div><div class="guide-desc">直接输入一个商品词或 ASIN，先跑 /report quick；如果初筛还不错，再升级到 standard。</div></div>
+          <div class="guide-item"><div class="guide-title">第一次使用应该从哪里开始？</div><div class="guide-desc">直接输入一个商品词或 ASIN，先做快速排雷；如果初筛还不错，再升级到完整版体检。</div></div>
           <div class="guide-item"><div class="guide-title">它能替我保证选到爆品吗？</div><div class="guide-desc">不能。虾米选品的价值是帮你少做明显错误的品，把不值得继续投入的方向更早筛掉。</div></div>
         </div>
       </section>
+      <script>
+      (function() {
+        var form = document.getElementById("quick-trial-form");
+        var input = document.getElementById("quick-trial-input");
+        var button = document.getElementById("quick-trial-submit");
+        var status = document.getElementById("quick-trial-status");
+        var result = document.getElementById("quick-trial-result");
+        var output = document.getElementById("quick-trial-output");
+        var pendingTrialKey = "xm_pending_trial_report";
+        if (!form || !input || !button || !status || !result || !output) return;
+        function setStatus(state, message) {
+          status.dataset.state = state || "";
+          status.textContent = message || "";
+        }
+        function normalizeValue(value) {
+          return String(value || "").replace(/\s+/g, " ").trim();
+        }
+        function looksLikeAsin(value) {
+          return /^[A-Z0-9]{10}$/.test(String(value || "").trim().toUpperCase());
+        }
+        function escapeHtml(value) {
+          return String(value || "").replace(/[&<>\"]/g, function(ch) {
+            return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[ch] || ch;
+          });
+        }
+        function renderInlineMarkdown(value) {
+          var html = escapeHtml(value);
+          html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+          html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+          return html;
+        }
+        function renderMarkdown(markdown) {
+          var lines = String(markdown || "").replace(/\\r\\n/g, "\\n").split("\\n");
+          var html = [];
+          var listType = "";
+          function closeList() {
+            if (listType) {
+              html.push("</" + listType + ">");
+              listType = "";
+            }
+          }
+          lines.forEach(function(line) {
+            var raw = String(line || "");
+            var trimmed = raw.trim();
+            if (!trimmed) {
+              closeList();
+              return;
+            }
+            if (/^---+$/.test(trimmed)) {
+              closeList();
+              html.push("<hr />");
+              return;
+            }
+            var heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
+            if (heading) {
+              closeList();
+              var level = heading[1].length;
+              html.push("<h" + level + ">" + renderInlineMarkdown(heading[2]) + "</h" + level + ">");
+              return;
+            }
+            var quote = /^>\s?(.+)$/.exec(trimmed);
+            if (quote) {
+              closeList();
+              html.push("<blockquote>" + renderInlineMarkdown(quote[1]) + "</blockquote>");
+              return;
+            }
+            var ordered = /^\d+[.)]\s+(.+)$/.exec(trimmed);
+            if (ordered) {
+              if (listType !== "ol") {
+                closeList();
+                listType = "ol";
+                html.push("<ol>");
+              }
+              html.push("<li>" + renderInlineMarkdown(ordered[1]) + "</li>");
+              return;
+            }
+            var unordered = /^[-*]\s+(.+)$/.exec(trimmed);
+            if (unordered) {
+              if (listType !== "ul") {
+                closeList();
+                listType = "ul";
+                html.push("<ul>");
+              }
+              html.push("<li>" + renderInlineMarkdown(unordered[1]) + "</li>");
+              return;
+            }
+            closeList();
+            html.push("<p>" + renderInlineMarkdown(trimmed) + "</p>");
+          });
+          closeList();
+          return html.join("");
+        }
+        function savePendingTrialReport(value, body, data, answer) {
+          try {
+            var payload = data && data.data ? data.data : {};
+            localStorage.setItem(pendingTrialKey, JSON.stringify({
+              source: "public_quick_trial",
+              input: value,
+              input_type: body.asin ? "asin" : "query",
+              profile: payload.profile || "quick",
+              query: payload.query || value,
+              answer: answer,
+              next_action: payload.next_action || "注册后可保存本次报告、继续追问，或升级生成完整版商品体检报告。",
+              generated_at: new Date().toISOString()
+            }));
+          } catch (error) {}
+        }
+        form.addEventListener("submit", function(event) {
+          event.preventDefault();
+          var value = normalizeValue(input.value);
+          if (!value) {
+            setStatus("error", "请输入商品词或 ASIN。");
+            input.focus();
+            return;
+          }
+          button.disabled = true;
+          setStatus("info", "正在排雷，通常需要几十秒。");
+          result.dataset.visible = "false";
+          output.innerHTML = "";
+          var body = looksLikeAsin(value) ? { asin: value } : { query: value };
+          fetch("/portal/api/public/report/quick", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          }).then(function(resp) {
+            return resp.json().catch(function() { return {}; }).then(function(data) {
+              if (!resp.ok || data.success === false) {
+                var message = data.detail || data.message || "快速排雷暂时失败，请稍后重试。";
+                throw new Error(message);
+              }
+              return data;
+            });
+          }).then(function(data) {
+            var answer = data && data.data ? String(data.data.answer || "") : "";
+            if (!answer) throw new Error("快速排雷暂未返回内容，请稍后重试。");
+            output.innerHTML = renderMarkdown(answer);
+            result.dataset.visible = "true";
+            savePendingTrialReport(value, body, data, answer);
+            setStatus("success", "已生成一次排雷结果。注册后可以保存报告、继续追问或升级完整版。");
+          }).catch(function(error) {
+            setStatus("error", error && error.message ? error.message : "快速排雷暂时失败，请稍后重试。");
+          }).finally(function() {
+            button.disabled = false;
+          });
+        });
+      })();
+      </script>
     '''
     sidebar_html = _sidebar([
-        ("产品介绍", [("overview", "产品定位"), ("who", "适合人群"), ("capabilities", "核心能力"), ("workflow", "分析流程"), ("faq", "常见问题")]),
+        ("产品介绍", [("overview", "产品定位"), ("try", "免费体验"), ("who", "适合人群"), ("capabilities", "核心能力"), ("workflow", "分析流程"), ("faq", "常见问题")]),
     ])
     structured_data = [
         {
@@ -1843,7 +2143,7 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
                 {
                     "@type": "Question",
                     "name": "第一次使用虾米选品应该从哪里开始？",
-                  "acceptedAnswer": {"@type": "Answer", "text": "直接输入一个商品词或 ASIN，先跑 /report quick 做新手选品体检；如果初筛还不错，再升级到 standard。"},
+                  "acceptedAnswer": {"@type": "Answer", "text": "直接输入一个商品词或 ASIN，先做快速排雷；如果初筛还不错，再升级到完整版商品体检。"},
                 },
                 {
                     "@type": "Question",
@@ -1864,6 +2164,7 @@ def render_portal_product_html(*, indexable: bool = True) -> str:
         canonical_path=page_meta["path"],
         indexable=indexable,
         structured_data=structured_data,
+        include_chatbot=False,
     )
 
 
