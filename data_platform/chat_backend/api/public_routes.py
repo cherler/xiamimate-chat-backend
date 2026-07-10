@@ -53,6 +53,15 @@ router = APIRouter()
 
 @router.get("/health")
 def health() -> dict[str, Any]:
+    return _success_response(
+        "/health",
+        {"status": "ok", "pricing_version": POINTS_PRICE_VERSION},
+        "healthy",
+    )
+
+
+@router.get("/ready")
+def ready() -> dict[str, Any]:
     with _postgres_conn() as conn:
         _ensure_app_schema(conn)
         _seed_billing_packages(conn)
@@ -60,9 +69,9 @@ def health() -> dict[str, Any]:
         _seed_billing_event_pricing(conn)
         _run_pg_dict_query(conn, "SELECT 1 AS ok")
     return _success_response(
-        "/health",
+        "/ready",
         {"status": "ok", "pricing_version": POINTS_PRICE_VERSION},
-        "healthy",
+        "ready",
     )
 
 

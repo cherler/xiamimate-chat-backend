@@ -13,6 +13,7 @@ from typing import Any
 
 import requests as http_requests
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
 try:
@@ -1413,7 +1414,8 @@ async def portal_public_quick_report(request: Request, response: Response) -> di
     consumed = False
     try:
         if trial_input["input_type"] == "asin":
-            result_data = _run_public_asin_quick_analysis(
+            result_data = await run_in_threadpool(
+                _run_public_asin_quick_analysis,
                 asin=trial_input["asin"],
                 marketplace=trial_input["marketplace"],
                 marketplace_label=trial_input["marketplace_label"],
@@ -1421,7 +1423,8 @@ async def portal_public_quick_report(request: Request, response: Response) -> di
             answer = str(result_data.get("answer") or "").strip()
             message = "ASIN quick analysis generated"
         else:
-            provider_response = _proxy_report_blocking(
+            provider_response = await run_in_threadpool(
+                _proxy_report_blocking,
                 query=trial_input["query"],
                 user=device_key.replace(":", "_"),
                 profile="quick",
